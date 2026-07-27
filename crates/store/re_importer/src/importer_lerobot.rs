@@ -67,6 +67,8 @@ impl LeRobotDatasetImporter {
 
         let loader_name = Self.name();
 
+        let filepath_for_log = filepath.clone();
+
         // NOTE(1): `spawn` is fine, this whole function is native-only.
         // NOTE(2): this must spawned on a dedicated thread to avoid a deadlock!
         // `load` will spawn a bunch of importers on the common rayon thread pool and wait for
@@ -76,8 +78,7 @@ impl LeRobotDatasetImporter {
             .name(format!("load_and_stream_v2({filepath:?})"))
             .spawn(move || {
                 re_log::info!(
-                    "Loading LeRobot v2 dataset from {:?}, with {} episode(s)",
-                    dataset.path,
+                    "Loading LeRobot v2 dataset from {filepath_for_log:?}, with {} episode(s)",
                     dataset.metadata.episode_count(),
                 );
                 datasetv2::load_and_stream(&dataset, &application_id, &tx, &loader_name);
@@ -105,6 +106,8 @@ impl LeRobotDatasetImporter {
 
         let loader_name = Self.name();
 
+        let filepath_for_log = filepath.clone();
+
         // NOTE(1): `spawn` is fine, this whole function is native-only.
         // NOTE(2): this must spawned on a dedicated thread to avoid a deadlock!
         // `load` will spawn a bunch of importers on the common rayon thread pool and wait for
@@ -114,8 +117,7 @@ impl LeRobotDatasetImporter {
             .name(format!("load_and_stream_v3({filepath:?})"))
             .spawn(move || {
                 re_log::info!(
-                    "Loading LeRobot v3 dataset from {:?}, with {} episode(s)",
-                    dataset.path,
+                    "Loading LeRobot v3 dataset from {filepath_for_log:?}, with {} episode(s)",
                     dataset.metadata.episode_count(),
                 );
                 datasetv3::load_and_stream(&dataset, &application_id, &tx, &loader_name);

@@ -15,10 +15,10 @@ mod importer_directory;
 mod importer_rrd;
 mod importer_urdf;
 
-#[cfg(not(target_arch = "wasm32"))]
 pub mod lerobot;
 
-// This importer currently only works when loading the entire dataset directory, and we cannot do that on web yet.
+// This importer only works when loading the entire dataset directory from a local path.
+// On web, LeRobot datasets are instead loaded remotely via `lerobot::datasetv3` + `lerobot::vfs`.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod importer_lerobot;
 
@@ -48,6 +48,7 @@ pub use self::{
 };
 
 pub mod external {
+    pub use re_video;
     pub use urdf_rs;
 }
 

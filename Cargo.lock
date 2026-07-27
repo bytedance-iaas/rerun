@@ -9199,6 +9199,7 @@ dependencies = [
  "ahash",
  "anyhow",
  "arrow",
+ "bytes",
  "crossbeam",
  "image",
  "indexmap 2.14.0",
