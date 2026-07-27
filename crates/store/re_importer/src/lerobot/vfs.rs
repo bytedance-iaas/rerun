@@ -292,3 +292,232 @@ impl LeRobotFs for MemFs {
         self.files.read().contains_key(rel_path)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn b(s: &[u8]) -> Bytes {
+        Bytes::copy_from_slice(s)
+    }
+
+    // ---- SparseBlob ----------------------------------------------------------------------------
+
+    #[test]
+    fn sparse_empty_reads_nothing() {
+        let sparse = SparseBlob::new(100);
+        assert_eq!(sparse.total_len(), 100);
+        assert_eq!(sparse.get(0, 1), None);
+        assert!(!sparse.contains(0, 1));
+        assert!(sparse.segments().is_empty());
+    }
+
+    #[test]
+    fn sparse_single_segment_containment() {
+        let mut sparse = SparseBlob::new(100);
+        sparse.insert(10, b(b"ABCDEF")); // covers [10, 16)
+
+        assert_eq!(sparse.get(10, 6), Some(&b"ABCDEF"[..]));
+        assert_eq!(sparse.get(12, 2), Some(&b"CD"[..])); // strictly inside
+        assert_eq!(sparse.get(10, 0), Some(&b""[..])); // empty read at a present offset
+        assert_eq!(sparse.get(9, 2), None); // starts before the segment
+        assert_eq!(sparse.get(14, 4), None); // runs past the segment
+        assert_eq!(sparse.get(0, 1), None); // wholly outside
+    }
+
+    #[test]
+    fn sparse_read_may_not_span_a_gap() {
+        let mut sparse = SparseBlob::new(100);
+        sparse.insert(0, b(b"0000")); // [0, 4)
+        sparse.insert(8, b(b"8888")); // [8, 12)
+
+        assert_eq!(sparse.segments().len(), 2);
+        assert_eq!(sparse.get(0, 4), Some(&b"0000"[..]));
+        assert_eq!(sparse.get(8, 4), Some(&b"8888"[..]));
+        assert_eq!(sparse.get(2, 8), None); // spans the [4, 8) gap
+    }
+
+    #[test]
+    fn sparse_out_of_order_inserts_are_sorted() {
+        let mut sparse = SparseBlob::new(100);
+        sparse.insert(8, b(b"8888"));
+        sparse.insert(0, b(b"0000"));
+
+        let offsets: Vec<u64> = sparse.segments().iter().map(|(off, _)| *off).collect();
+        assert_eq!(offsets, vec![0, 8]);
+    }
+
+    #[test]
+    fn sparse_adjacent_segments_coalesce() {
+        let mut sparse = SparseBlob::new(100);
+        sparse.insert(0, b(b"AAAA")); // [0, 4)
+        sparse.insert(4, b(b"BBBB")); // [4, 8), touches the first
+
+        assert_eq!(sparse.segments().len(), 1);
+        // A read straddling the old boundary now succeeds.
+        assert_eq!(sparse.get(2, 4), Some(&b"AABB"[..]));
+        assert_eq!(sparse.get(0, 8), Some(&b"AAAABBBB"[..]));
+    }
+
+    #[test]
+    fn sparse_overlapping_segments_keep_existing_bytes() {
+        let mut sparse = SparseBlob::new(100);
+        sparse.insert(0, b(b"AAAA")); // [0, 4)
+        sparse.insert(2, b(b"BBBB")); // [2, 6), overlaps [2, 4)
+
+        assert_eq!(sparse.segments().len(), 1);
+        // The overlap region keeps the first insert's bytes; only the new tail is appended.
+        assert_eq!(sparse.get(0, 6), Some(&b"AAAABB"[..]));
+    }
+
+    #[test]
+    fn sparse_fully_contained_insert_is_dropped() {
+        let mut sparse = SparseBlob::new(100);
+        sparse.insert(0, b(b"0123456789")); // [0, 10)
+        sparse.insert(2, b(b"XXXX")); // fully inside [0, 10)
+
+        assert_eq!(sparse.segments().len(), 1);
+        assert_eq!(sparse.get(2, 4), Some(&b"2345"[..])); // unchanged
+    }
+
+    // ---- Blob ----------------------------------------------------------------------------------
+
+    #[test]
+    fn blob_full_basics() {
+        let blob = Blob::Full(b(b"hello"));
+        assert_eq!(blob.len(), 5);
+        assert!(!blob.is_empty());
+        assert_eq!(blob.get(1, 3), Some(&b"ell"[..]));
+        assert_eq!(blob.get(3, 5), None); // past the end
+
+        assert!(Blob::Full(Bytes::new()).is_empty());
+    }
+
+    #[test]
+    fn blob_sparse_reports_total_len_regardless_of_presence() {
+        let mut sparse = SparseBlob::new(100);
+        sparse.insert(10, b(b"ABCD"));
+        let blob = Blob::Sparse(Arc::new(sparse));
+
+        assert_eq!(blob.len(), 100);
+        assert!(!blob.is_empty());
+        assert_eq!(blob.get(10, 4), Some(&b"ABCD"[..]));
+        assert_eq!(blob.get(0, 4), None); // present length, but not fetched
+    }
+
+    // ---- BlobReader ----------------------------------------------------------------------------
+
+    #[test]
+    fn blob_reader_reads_full_blob() {
+        let blob = Blob::Full(b(b"hello world"));
+        let mut out = Vec::new();
+        blob.reader().read_to_end(&mut out).unwrap();
+        assert_eq!(out, b"hello world");
+    }
+
+    #[test]
+    fn blob_reader_seeks() {
+        let blob = Blob::Full(b(b"0123456789"));
+        let mut reader = blob.reader();
+
+        reader.seek(SeekFrom::Start(4)).unwrap();
+        let mut buf = [0u8; 3];
+        reader.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"456");
+
+        reader.seek(SeekFrom::End(-2)).unwrap();
+        let mut tail = Vec::new();
+        reader.read_to_end(&mut tail).unwrap();
+        assert_eq!(tail, b"89");
+
+        assert!(reader.seek(SeekFrom::Current(-100)).is_err()); // underflow
+    }
+
+    #[test]
+    fn blob_reader_errors_on_missing_sparse_range() {
+        let sparse = SparseBlob::new(10); // total size known, nothing fetched
+        let blob = Blob::Sparse(Arc::new(sparse));
+        let mut buf = [0u8; 4];
+        assert!(blob.reader().read(&mut buf).is_err());
+    }
+
+    // ---- MemFs ---------------------------------------------------------------------------------
+
+    #[test]
+    fn memfs_insert_get_exists_remove() {
+        let fs = MemFs::default();
+        assert!(!fs.exists("meta/info.json"));
+        assert!(fs.read("meta/info.json").is_err());
+
+        fs.insert("meta/info.json", Blob::Full(b(b"{}")));
+        assert!(fs.exists("meta/info.json"));
+        assert_eq!(
+            fs.read("meta/info.json").unwrap().get(0, 2),
+            Some(&b"{}"[..])
+        );
+
+        fs.remove("meta/info.json");
+        assert!(!fs.exists("meta/info.json"));
+        assert!(fs.get("meta/info.json").is_none());
+    }
+
+    #[test]
+    fn memfs_list_files_is_prefix_scoped_and_sorted() {
+        let fs = MemFs::default();
+        fs.insert("meta/info.json", Blob::Full(Bytes::new()));
+        fs.insert(
+            "meta/episodes/chunk-000/file-000.parquet",
+            Blob::Full(Bytes::new()),
+        );
+        fs.insert("metadata/other.json", Blob::Full(Bytes::new())); // must NOT match "meta"
+        fs.insert("data/chunk-000/file.parquet", Blob::Full(Bytes::new()));
+
+        assert_eq!(
+            fs.list_files("meta").unwrap(),
+            vec![
+                "meta/episodes/chunk-000/file-000.parquet".to_owned(),
+                "meta/info.json".to_owned(),
+            ],
+        );
+        // A trailing slash on the query is handled the same way.
+        assert_eq!(
+            fs.list_files("meta/").unwrap(),
+            fs.list_files("meta").unwrap()
+        );
+    }
+
+    // ---- LocalFs -------------------------------------------------------------------------------
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn localfs_reads_lists_and_probes_a_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("meta/episodes")).unwrap();
+        std::fs::write(root.join("meta/info.json"), b"{\"v\":3}").unwrap();
+        std::fs::write(root.join("meta/episodes/e0.parquet"), b"parquet").unwrap();
+
+        let fs = LocalFs {
+            root: root.to_path_buf(),
+        };
+
+        assert!(fs.exists("meta/info.json"));
+        assert!(!fs.exists("meta")); // a directory is not a file
+        assert!(!fs.exists("missing"));
+
+        assert_eq!(
+            fs.read("meta/info.json").unwrap().get(0, 7),
+            Some(&b"{\"v\":3}"[..])
+        );
+        assert!(fs.read("missing").is_err());
+
+        // Recursive, root-relative, forward-slash, sorted.
+        assert_eq!(
+            fs.list_files("meta").unwrap(),
+            vec![
+                "meta/episodes/e0.parquet".to_owned(),
+                "meta/info.json".to_owned()
+            ],
+        );
+    }
+}
