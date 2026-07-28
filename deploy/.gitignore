@@ -1,0 +1,4 @@
+# Local-only deployment files — never commit credentials or machine-specific certs.
+secrets/
+.env
+ca-bundle.pem
