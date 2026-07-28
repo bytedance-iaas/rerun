@@ -8,7 +8,9 @@
 
 mod data_source;
 pub(crate) mod fetch_file_from_http;
+pub mod lerobot_remote;
 mod stream_rrd_from_http;
+pub mod tos;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod load_stdin;

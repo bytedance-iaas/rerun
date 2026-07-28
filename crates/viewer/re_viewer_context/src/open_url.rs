@@ -212,6 +212,14 @@ impl ViewerOpenUrl {
                 } => Ok(Self::RedapDatasetSegment(uri)),
 
                 LogDataSource::RedapProxy(proxy_uri) => Ok(Self::RedapProxy(proxy_uri)),
+
+                LogDataSource::TosDataset(_) => {
+                    // TOS datasets carry credentials, which don't belong in a shareable URL;
+                    // they are opened via the dedicated dialog instead.
+                    Err(anyhow::anyhow!(
+                        "TOS datasets are opened via the 'Open from Volcengine TOS' dialog"
+                    ))
+                }
             }
         } else if let Ok(url) = parse_webviewer_url(url) {
             // Web viewer URL with `url` parameters.
