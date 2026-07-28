@@ -1740,7 +1740,11 @@ impl ReceiversFromUrlParams {
                         }
                     }
 
-                    LogDataSource::FileContents(..) | LogDataSource::Stdin => {
+                    // Not producible by `from_uri` (they carry credentials and only come from
+                    // the viewer's dialogs), but harmless to forward as data sources.
+                    LogDataSource::FileContents(..)
+                    | LogDataSource::Stdin
+                    | LogDataSource::TosDataset(..) => {
                         data_sources.push(data_source);
                     }
                 }

@@ -52,6 +52,10 @@ pub enum LogDataSource {
 
     /// A `rerun+http://` URI pointing to a proxy.
     RedapProxy(re_uri::ProxyUri),
+
+    /// A `LeRobot` dataset stored in Volcengine TOS (or any S3-compatible object store),
+    /// streamed episode by episode.
+    TosDataset(crate::tos::TosDatasetSource),
 }
 
 /// Options for [`LogDataSource::from_uri`].
@@ -351,6 +355,8 @@ impl LogDataSource {
             }
 
             Self::RedapProxy(uri) => Ok(re_grpc_client::stream(uri)),
+
+            Self::TosDataset(source) => Ok(crate::tos::stream_lerobot_dataset(source)),
         }
     }
 
@@ -415,6 +421,12 @@ impl LogDataSource {
                 file_extension: None,
                 file_source: None,
             },
+
+            Self::TosDataset(_) => LogDataSourceAnalytics {
+                source_type: "tos_dataset",
+                file_extension: None,
+                file_source: None,
+            },
         }
     }
 
@@ -440,6 +452,7 @@ impl LogDataSource {
             Self::Stdin => Some("-".to_owned()),
             Self::RedapDatasetSegment { uri, .. } => Some(uri.to_string()),
             Self::RedapProxy(uri) => Some(uri.to_string()),
+            Self::TosDataset(source) => Some(source.location.to_string()),
         }
     }
 }
@@ -465,7 +478,7 @@ pub struct LogDataSourceAnalytics {
 // - Make sure that all callers of `DataSource::stream` have access to an `AsyncRuntimeHandle`
 //   (maybe it should be in `AppContext`?).
 #[cfg(target_arch = "wasm32")]
-fn spawn_future<F>(future: F)
+pub(crate) fn spawn_future<F>(future: F)
 where
     F: std::future::Future<Output = ()> + 'static,
 {
@@ -473,7 +486,7 @@ where
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn spawn_future<F>(future: F)
+pub(crate) fn spawn_future<F>(future: F)
 where
     F: std::future::Future<Output = ()> + 'static + Send,
 {
