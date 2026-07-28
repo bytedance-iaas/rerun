@@ -1744,7 +1744,8 @@ impl ReceiversFromUrlParams {
                     // the viewer's dialogs), but harmless to forward as data sources.
                     LogDataSource::FileContents(..)
                     | LogDataSource::Stdin
-                    | LogDataSource::TosDataset(..) => {
+                    | LogDataSource::TosDataset(..)
+                    | LogDataSource::HfDataset(..) => {
                         data_sources.push(data_source);
                     }
                 }
