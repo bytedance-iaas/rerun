@@ -82,3 +82,74 @@ impl std::fmt::Display for TosLocation {
         write!(f, "tos://{}/{}", self.bucket, self.prefix)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(url: &str) -> (String, String) {
+        let loc = TosLocation::parse(url).unwrap();
+        (loc.bucket, loc.prefix)
+    }
+
+    #[test]
+    fn parse_directory_locations() {
+        assert_eq!(parse("tos://bucket/a/b/"), ("bucket".into(), "a/b/".into()));
+        // `s3://` is accepted too.
+        assert_eq!(parse("s3://bucket/a/b/"), ("bucket".into(), "a/b/".into()));
+        // A directory without a trailing slash gets one.
+        assert_eq!(parse("tos://bucket/dir"), ("bucket".into(), "dir/".into()));
+        assert_eq!(parse("tos://bucket/a/b"), ("bucket".into(), "a/b/".into()));
+        // Bucket-only: empty prefix.
+        assert_eq!(parse("tos://bucket"), ("bucket".into(), String::new()));
+        assert_eq!(parse("tos://bucket/"), ("bucket".into(), String::new()));
+        // Leading slashes in the prefix are trimmed.
+        assert_eq!(parse("tos://bucket//a/"), ("bucket".into(), "a/".into()));
+    }
+
+    #[test]
+    fn parse_keeps_single_file_locations_verbatim() {
+        // A last segment with an extension is treated as a file — no trailing slash added.
+        assert_eq!(
+            parse("tos://bucket/path/file.parquet"),
+            ("bucket".into(), "path/file.parquet".into())
+        );
+    }
+
+    #[test]
+    fn parse_rejects_bad_input() {
+        assert_eq!(TosLocation::parse("http://x/y"), None);
+        assert_eq!(TosLocation::parse("bucket/prefix"), None);
+        assert_eq!(TosLocation::parse("tos://"), None); // empty bucket
+        assert_eq!(TosLocation::parse("tos:///prefix"), None); // empty bucket
+    }
+
+    #[test]
+    fn display_prepends_scheme() {
+        let loc = TosLocation {
+            bucket: "b".into(),
+            prefix: "a/".into(),
+        };
+        assert_eq!(loc.to_string(), "tos://b/a/");
+        assert_eq!(
+            TosLocation {
+                bucket: "b".into(),
+                prefix: String::new(),
+            }
+            .to_string(),
+            "tos://b/"
+        );
+    }
+
+    #[test]
+    fn split_off_file_name_splits_only_files() {
+        let mut loc = TosLocation::parse("tos://bucket/path/file.parquet").unwrap();
+        assert_eq!(loc.split_off_file_name().as_deref(), Some("file.parquet"));
+        assert_eq!(loc.prefix, "path/");
+
+        // A directory location has nothing to split off.
+        let mut dir = TosLocation::parse("tos://bucket/path/").unwrap();
+        assert_eq!(dir.split_off_file_name(), None);
+        assert_eq!(dir.prefix, "path/");
+    }
+}

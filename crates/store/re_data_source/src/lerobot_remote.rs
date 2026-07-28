@@ -1691,3 +1691,23 @@ async fn fetch_video_index<S: DatasetStore>(
         video,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_index_from_recording_id_parses_known_prefixes() {
+        assert_eq!(queue_index_from_recording_id("episode_7"), Some(7));
+        assert_eq!(queue_index_from_recording_id("file_3"), Some(3));
+        assert_eq!(queue_index_from_recording_id("episode_007"), Some(7));
+    }
+
+    #[test]
+    fn queue_index_from_recording_id_rejects_the_rest() {
+        assert_eq!(queue_index_from_recording_id("episode_"), None);
+        assert_eq!(queue_index_from_recording_id("foo_1"), None);
+        assert_eq!(queue_index_from_recording_id("episode_-1"), None);
+        assert_eq!(queue_index_from_recording_id("episode_x"), None);
+    }
+}
