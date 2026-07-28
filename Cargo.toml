@@ -349,6 +349,9 @@ opentelemetry-otlp = { version = "0.32.0", default-features = false, features = 
 ] }
 opentelemetry-proto = { version = "0.32.0", default-features = false }
 opentelemetry_sdk = { version = "0.32.1", features = ["rt-tokio"] }
+object_store = { version = "0.13", default-features = false, features = [
+  "aws",
+] }
 ordered-float = "5.3"
 parking_lot = { version = "0.12.5", features = ["serde"] }
 parquet = { version = "58.3", default-features = false }
@@ -392,6 +395,8 @@ rexif = "0.7.5"
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
 rmcp = { version = "1.8", features = ["macros", "schemars", "server", "transport-io"] }
 ron = { version = "0.12.2", features = ["integer128"] }
+# `bundled` compiles sqlite in, so the docker runtime image needs no sqlite package.
+rusqlite = { version = "0.37", features = ["bundled"] }
 roxmltree = "0.20.0" # 0.21 would duplicate the 0.20 that `resvg` (via egui_extras) requires. Bump once egui_extras/resvg move to roxmltree 0.21.
 ring = "0.17.14"
 rustls = { version = "0.23.43", default-features = false }

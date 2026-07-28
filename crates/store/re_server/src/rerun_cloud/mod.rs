@@ -52,7 +52,8 @@ use re_tuid::Tuid;
 use re_types_core::LayerName;
 
 mod register_with_dataset;
-use self::register_with_dataset::{RegisterWithDatasetResult, do_register_with_dataset};
+use self::register_with_dataset::RegisterWithDatasetResult;
+pub(crate) use self::register_with_dataset::do_register_with_dataset;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::NamedPath;
@@ -120,11 +121,29 @@ fn apply_segment_id_filter(
 pub struct RerunCloudHandlerBuilder {
     settings: RerunCloudHandlerSettings,
     store: InMemoryStore,
+    #[cfg(not(target_arch = "wasm32"))]
+    ledger: Option<std::sync::Arc<crate::persistence::Ledger>>,
 }
 
 impl RerunCloudHandlerBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Enable catalog persistence: open (or create) the database in `data_dir`, replay the
+    /// recorded catalog mutations into the store, and record future mutations.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn with_persistence(mut self, data_dir: &std::path::Path) -> anyhow::Result<Self> {
+        let ledger = crate::persistence::open_and_replay(data_dir, &mut self.store).await?;
+        self.ledger = Some(std::sync::Arc::new(ledger));
+        Ok(self)
+    }
+
+    /// The persistence database opened by [`Self::with_persistence`], if any
+    /// (e.g. for HTTP routes that read it).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn ledger(&self) -> Option<std::sync::Arc<crate::persistence::Ledger>> {
+        self.ledger.clone()
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -200,7 +219,13 @@ impl RerunCloudHandlerBuilder {
     }
 
     pub fn build(self) -> RerunCloudHandler {
-        RerunCloudHandler::new(self.settings, self.store)
+        #[cfg_attr(target_arch = "wasm32", expect(unused_mut))] // mut only used on native
+        let mut handler = RerunCloudHandler::new(self.settings, self.store);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            handler.ledger = self.ledger;
+        }
+        handler
     }
 }
 
@@ -212,6 +237,10 @@ pub struct RerunCloudHandler {
     eager_chunk_store_config: re_chunk_store::ChunkStoreConfig,
     store: tokio::sync::RwLock<InMemoryStore>,
     events_tx: tokio::sync::broadcast::Sender<WatchEventsResponse>,
+
+    /// When set, successful catalog mutations are recorded and replayed on the next boot.
+    #[cfg(not(target_arch = "wasm32"))]
+    ledger: Option<std::sync::Arc<crate::persistence::Ledger>>,
 }
 
 impl RerunCloudHandler {
@@ -226,6 +255,16 @@ impl RerunCloudHandler {
             eager_chunk_store_config,
             store: tokio::sync::RwLock::new(store),
             events_tx,
+            #[cfg(not(target_arch = "wasm32"))]
+            ledger: None,
+        }
+    }
+
+    /// Record a catalog mutation for replay on the next boot (no-op without persistence).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn record(&self, op: &crate::persistence::LedgerOp) {
+        if let Some(ledger) = &self.ledger {
+            ledger.append(op);
         }
     }
 
@@ -283,6 +322,27 @@ impl RerunCloudHandler {
                                 "memory:// URLs cannot be used as prefix data sources",
                             ));
                         }
+
+                        // Remote object-store prefixes (tos://, s3://): list the bucket prefix
+                        // instead of walking a local directory.
+                        if crate::cloud_storage::is_remote_scheme(source.storage_url.scheme()) {
+                            let urls = crate::cloud_storage::list_rrds(&source.storage_url).await?;
+                            if urls.is_empty() {
+                                return Err(tonic::Status::invalid_argument(format!(
+                                    "no rrd files found under {}",
+                                    source.storage_url
+                                )));
+                            }
+                            for url in urls {
+                                resolved.push(DataSource {
+                                    storage_url: url,
+                                    is_prefix: false,
+                                    ..source.clone()
+                                });
+                            }
+                            continue;
+                        }
+
                         let path = source.storage_url.to_file_path().map_err(|_err| {
                             tonic::Status::invalid_argument(format!(
                                 "getting file path from {:?}",
@@ -765,8 +825,14 @@ impl RerunCloudService for RerunCloudHandler {
         } = request.into_inner().try_into()?;
 
         let mut store = self.store.write().await;
-        let dataset_id = store.create_dataset(dataset_name, dataset_id)?;
+        let dataset_id = store.create_dataset(dataset_name.clone(), dataset_id)?;
         let dataset = store.dataset(dataset_id)?;
+
+        #[cfg(not(target_arch = "wasm32"))]
+        self.record(&crate::persistence::LedgerOp::CreateDataset {
+            id: dataset_id.to_string(),
+            name: dataset_name.to_string(),
+        });
 
         self.notify(watch_events_response::Kind::EntryCreated(
             EntryCreatedEvent {
@@ -925,6 +991,11 @@ impl RerunCloudService for RerunCloudHandler {
 
         self.store.write().await.delete_entry(entry_id)?;
 
+        #[cfg(not(target_arch = "wasm32"))]
+        self.record(&crate::persistence::LedgerOp::DeleteEntry {
+            id: entry_id.to_string(),
+        });
+
         self.notify(watch_events_response::Kind::EntryDeleted(
             EntryDeletedEvent {
                 id: Some(entry_id.into()),
@@ -979,6 +1050,17 @@ impl RerunCloudService for RerunCloudHandler {
             ));
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.ledger.is_some()
+            && data_sources
+                .iter()
+                .any(|source| source.storage_url.scheme() == "memory")
+        {
+            re_log::warn_once!(
+                "memory:// data sources are not persisted and will be gone after a server restart"
+            );
+        }
+
         let RegisterWithDatasetResult {
             segment_ids,
             segment_layers,
@@ -986,6 +1068,36 @@ impl RerunCloudService for RerunCloudHandler {
             storage_urls,
             task_ids,
         } = do_register_with_dataset(&mut store, dataset_id, data_sources, on_duplicate).await?;
+
+        // Persistence record, built from the registration *result*: exactly the sources that
+        // actually registered (per segment), so both boot replay and the `/catalog/sources`
+        // endpoint restore precisely this. `memory://` sources reference in-process stores and
+        // cannot be replayed — skipped (warned above).
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let recorded_sources: Vec<crate::persistence::LedgerSource> =
+                itertools::izip!(&segment_ids, &segment_layers, &storage_urls, &task_ids)
+                    .filter(|(segment_id, _, url, task_id)| {
+                        task_id.id == TASK_ID_SUCCESS
+                            && !segment_id.as_str().is_empty()
+                            && url.scheme() != "memory"
+                    })
+                    .map(
+                        |(segment_id, layer, url, _)| crate::persistence::LedgerSource {
+                            url: url.to_string(),
+                            layer: layer.to_string(),
+                            segment: segment_id.to_string(),
+                        },
+                    )
+                    .collect();
+            if !recorded_sources.is_empty() {
+                self.record(&crate::persistence::LedgerOp::Register {
+                    dataset_id: dataset_id.to_string(),
+                    on_duplicate: crate::persistence::if_duplicate_to_str(on_duplicate).to_owned(),
+                    sources: recorded_sources,
+                });
+            }
+        }
 
         let record_batch = RegisterWithDatasetDataframe {
             rerun_segment_id: segment_ids.into(),
@@ -1022,6 +1134,13 @@ impl RerunCloudService for RerunCloudHandler {
             force: _, // OSS doesn't even have statuses
         } = request.into_inner().try_into()?;
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let recorded_op = crate::persistence::LedgerOp::Unregister {
+            dataset_id: entry_id.to_string(),
+            segment_ids: segments_to_drop.iter().map(ToString::to_string).collect(),
+            layers: layers_to_drop.iter().map(ToString::to_string).collect(),
+        };
+
         // As per our proto conventions, an empty list means "all":
         let segments_to_drop: Option<HashSet<&SegmentId>> =
             (!segments_to_drop.is_empty()).then(|| segments_to_drop.iter().collect());
@@ -1033,6 +1152,9 @@ impl RerunCloudService for RerunCloudHandler {
             .await?;
 
         store.cleanup_store_pool();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        self.record(&recorded_op);
 
         let stream = futures::stream::once(async move {
             Ok(re_protos::cloud::v1alpha1::UnregisterFromDatasetResponse {

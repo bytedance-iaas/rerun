@@ -59,6 +59,14 @@ pub struct Args {
     /// using glob-style matching where `*` matches any sequence of characters.
     #[clap(long = "cors-allow-origin")]
     pub cors_allow_origin: Vec<String>,
+
+    /// Directory for server persistence: the catalog database and the cache of remote
+    /// (`tos://`, `s3://`) files.
+    ///
+    /// When set, the catalog survives server restarts: registered datasets are restored
+    /// under their original ids at startup. Without it, the catalog is in-memory only.
+    #[clap(long = "data-dir", env = "RERUN_SERVER_DATA_DIR")]
+    pub data_dir: Option<std::path::PathBuf>,
 }
 
 fn parse_bandwidth_limit(s: &str) -> Result<u64, String> {
@@ -78,6 +86,7 @@ impl Default for Args {
             latency_ms: 0,
             bandwidth_limit: None,
             cors_allow_origin: Vec::new(),
+            data_dir: None,
         }
     }
 }
@@ -96,10 +105,17 @@ impl Args {
             latency_ms,
             bandwidth_limit,
             cors_allow_origin,
+            data_dir,
         } = self;
 
         let handler = {
             let mut builder = crate::RerunCloudHandlerBuilder::new();
+
+            // First: restore the previous catalog, so the -d/-t preload flags below behave
+            // the same as on a fresh server (duplicates error out).
+            if let Some(data_dir) = &data_dir {
+                builder = builder.with_persistence(data_dir).await?;
+            }
 
             for NamedPathCollection { name, paths } in datasets {
                 builder = builder
@@ -140,8 +156,10 @@ impl Args {
                 }
             }
 
-            builder.build()
+            builder
         };
+        let ledger = handler.ledger();
+        let handler = handler.build();
 
         let rerun_cloud_server =
             re_protos::cloud::v1alpha1::rerun_cloud_service_server::RerunCloudServiceServer::new(
@@ -159,6 +177,54 @@ impl Args {
             .with_http_route(
                 "/version",
                 axum::routing::get(async move || re_build_info::build_info!().to_string()),
+            )
+            // Read-only source listing of a dataset (original tos://s3://file:// URLs).
+            // Lets training-side tooling mirror the data straight from the object store
+            // instead of streaming every batch through this server.
+            .with_http_route(
+                "/catalog/sources",
+                axum::routing::get({
+                    let ledger = ledger.clone();
+                    move |query: axum::extract::Query<std::collections::HashMap<String, String>>| {
+                        let ledger = ledger.clone();
+                        async move {
+                            use axum::http::StatusCode;
+                            let Some(ledger) = ledger else {
+                                return (
+                                    StatusCode::NOT_IMPLEMENTED,
+                                    axum::Json(serde_json::json!({
+                                        "error": "catalog persistence is not enabled \
+                                                  (start the server with --data-dir)",
+                                    })),
+                                );
+                            };
+                            let Some(name) = query.0.get("dataset") else {
+                                return (
+                                    StatusCode::BAD_REQUEST,
+                                    axum::Json(
+                                        serde_json::json!({"error": "missing ?dataset=<name>"}),
+                                    ),
+                                );
+                            };
+                            match ledger.dataset_sources(name) {
+                                Some((dataset_id, sources)) => (
+                                    StatusCode::OK,
+                                    axum::Json(serde_json::json!({
+                                        "dataset": name,
+                                        "dataset_id": dataset_id,
+                                        "sources": sources,
+                                    })),
+                                ),
+                                None => (
+                                    StatusCode::NOT_FOUND,
+                                    axum::Json(serde_json::json!({
+                                        "error": format!("unknown dataset: {name}"),
+                                    })),
+                                ),
+                            }
+                        }
+                    }
+                }),
             )
             .with_artificial_latency(std::time::Duration::from_millis(latency_ms as _))
             .with_bandwidth_limit(bandwidth_limit)
