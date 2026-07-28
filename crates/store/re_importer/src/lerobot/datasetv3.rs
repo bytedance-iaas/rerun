@@ -187,6 +187,9 @@ impl LeRobotDatasetV3 {
         self.cache_episode_file(&episode_data, &episodes_in_file)
     }
 
+    // Only reachable from `load_from_directory` (native-only), so gate it the same way to
+    // avoid a `dead_code` warning in the wasm build.
+    #[cfg(not(target_arch = "wasm32"))]
     fn load_all_episode_data_files(&self) -> Result<(), LeRobotError> {
         re_tracing::profile_scope!("load_all_episode_data_files");
 
@@ -213,6 +216,9 @@ impl LeRobotDatasetV3 {
     }
 
     /// Precompute reference counts for all video files across episodes.
+    // Only reachable from `load_from_directory` (native-only), so gate it the same way to
+    // avoid a `dead_code` warning in the wasm build.
+    #[cfg(not(target_arch = "wasm32"))]
     fn init_video_ref_counts(&self) {
         let video_features: Vec<&str> = self
             .metadata
