@@ -13,8 +13,11 @@
 pub mod common;
 pub mod datasetv2;
 pub mod datasetv3;
+pub mod vfs;
 
-use std::{fmt, path::Path};
+use std::fmt;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::Path;
 
 use serde::{
     Deserialize, Deserializer, Serialize,
@@ -28,6 +31,7 @@ pub enum LeRobotDatasetVersion {
     V3,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl LeRobotDatasetVersion {
     pub fn find_version(path: impl AsRef<Path>) -> Option<Self> {
         let path = path.as_ref();
@@ -45,6 +49,7 @@ impl LeRobotDatasetVersion {
 }
 
 /// Check whether the provided path contains a `LeRobot` dataset.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn is_lerobot_dataset(path: impl AsRef<Path>) -> bool {
     is_v1_lerobot_dataset(path.as_ref())
         || is_v2_lerobot_dataset(path.as_ref())
@@ -52,6 +57,7 @@ pub fn is_lerobot_dataset(path: impl AsRef<Path>) -> bool {
 }
 
 /// Check whether the provided path contains a v3 `LeRobot` dataset.
+#[cfg(not(target_arch = "wasm32"))]
 fn is_v3_lerobot_dataset(_path: impl AsRef<Path>) -> bool {
     let path = _path.as_ref();
 
@@ -64,6 +70,7 @@ fn is_v3_lerobot_dataset(_path: impl AsRef<Path>) -> bool {
 }
 
 /// Check whether the provided path contains a v2 `LeRobot` dataset.
+#[cfg(not(target_arch = "wasm32"))]
 fn is_v2_lerobot_dataset(path: impl AsRef<Path>) -> bool {
     let path = path.as_ref();
 
@@ -77,6 +84,7 @@ fn is_v2_lerobot_dataset(path: impl AsRef<Path>) -> bool {
 }
 
 /// Check whether the provided path contains a v1 `LeRobot` dataset.
+#[cfg(not(target_arch = "wasm32"))]
 fn is_v1_lerobot_dataset(path: impl AsRef<Path>) -> bool {
     let path = path.as_ref();
 
@@ -89,6 +97,7 @@ fn is_v1_lerobot_dataset(path: impl AsRef<Path>) -> bool {
     has_sub_directories(&["meta_data", "data"], path)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn has_sub_directories(directories: &[&str], path: impl AsRef<Path>) -> bool {
     directories.iter().all(|subdir| {
         let subpath = path.as_ref().join(subdir);

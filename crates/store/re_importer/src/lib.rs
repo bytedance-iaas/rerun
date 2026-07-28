@@ -17,7 +17,12 @@ mod importer_directory;
 mod importer_rrd;
 mod importer_urdf;
 
-// This importer currently only works when loading the entire dataset directory, and we cannot do that on web yet.
+/// Glue between `re_lerobot` datasets and the importer's message types,
+/// shared with remote streaming drivers (usable on web too).
+pub mod lerobot_glue;
+
+// This importer only works when loading the entire dataset directory from a local path.
+// On web, LeRobot datasets are instead loaded remotely via `re_lerobot::datasetv3` + `re_lerobot::vfs`.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod importer_lerobot;
 
