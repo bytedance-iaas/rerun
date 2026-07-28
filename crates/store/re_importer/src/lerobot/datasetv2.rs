@@ -2,17 +2,16 @@ use crate::lerobot::common::{
     LEROBOT_DATASET_IGNORED_COLUMNS, LeRobotDataset, load_and_stream_versioned,
     load_episode_depth_images, load_episode_images, load_scalar,
 };
+use crate::lerobot::vfs::{Blob, LeRobotFs};
 use crate::lerobot::{DType, EpisodeIndex, Feature, LeRobotDatasetTask, LeRobotError, TaskIndex};
 
-use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use ahash::HashMap;
 use anyhow::{Context as _, anyhow};
 use arrow::array::{Float64Array, Int64Array, RecordBatch};
+use bytes::Bytes;
 use crossbeam::channel::Sender;
 use itertools::{Either, Itertools as _};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -69,9 +68,8 @@ use crate::{ImportedData, ImporterError};
 ///
 /// Each episode is identified by a unique index and mapped to its corresponding chunk, based on the number of episodes
 /// per chunk (which can be found in `meta/info.json`).
-#[derive(Debug, Clone)]
 pub struct LeRobotDatasetV2 {
-    pub path: PathBuf,
+    pub fs: Arc<dyn LeRobotFs>,
     pub metadata: LeRobotDatasetMetadata,
 }
 
@@ -79,15 +77,18 @@ impl LeRobotDatasetV2 {
     /// Loads a `LeRobotDataset` from a directory.
     ///
     /// This method initializes a dataset by reading its metadata from the `meta/` directory.
-    pub fn load_from_directory(path: impl AsRef<Path>) -> Result<Self, LeRobotError> {
-        let path = path.as_ref();
-        let metadatapath = path.join("meta");
-        let metadata = LeRobotDatasetMetadata::load_from_directory(&metadatapath)?;
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_from_directory(path: impl AsRef<std::path::Path>) -> Result<Self, LeRobotError> {
+        let fs = Arc::new(crate::lerobot::vfs::LocalFs {
+            root: path.as_ref().to_path_buf(),
+        });
+        Self::from_fs(fs)
+    }
 
-        Ok(Self {
-            path: path.to_path_buf(),
-            metadata,
-        })
+    /// Initializes a dataset from a [`LeRobotFs`], reading only the metadata files.
+    pub fn from_fs(fs: Arc<dyn LeRobotFs>) -> Result<Self, LeRobotError> {
+        let metadata = LeRobotDatasetMetadata::load_from_fs(fs.as_ref())?;
+        Ok(Self { fs, metadata })
     }
 
     /// Read the Parquet data file for the provided episode.
@@ -97,11 +98,9 @@ impl LeRobotDatasetV2 {
         }
 
         let episode_data_path = self.metadata.info.episode_data_path(episode)?;
-        let episode_parquet_file = self.path.join(episode_data_path);
+        let contents = read_full(self.fs.as_ref(), &episode_data_path)?;
 
-        let file = File::open(&episode_parquet_file)
-            .map_err(|err| LeRobotError::io(err, episode_parquet_file))?;
-        let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
+        let mut reader = ParquetRecordBatchReaderBuilder::try_new(contents)?.build()?;
 
         reader
             .next()
@@ -115,17 +114,9 @@ impl LeRobotDatasetV2 {
         &self,
         observation_key: &str,
         episode: EpisodeIndex,
-    ) -> Result<Cow<'_, [u8]>, LeRobotError> {
+    ) -> Result<Bytes, LeRobotError> {
         let video_file = self.metadata.info.video_path(observation_key, episode)?;
-
-        let videopath = self.path.join(video_file);
-
-        let contents = {
-            re_tracing::profile_scope!("fs::read");
-            std::fs::read(&videopath).map_err(|err| LeRobotError::io(err, videopath))?
-        };
-
-        Ok(Cow::Owned(contents))
+        read_full(self.fs.as_ref(), &video_file)
     }
 
     /// Retrieve the task using the provided task index.
@@ -161,17 +152,15 @@ impl LeRobotDatasetMetadata {
         self.episodes.keys().copied()
     }
 
-    /// Loads all metadata files from the provided directory.
+    /// Loads all metadata files of the dataset through the provided [`LeRobotFs`].
     ///
     /// This method reads dataset metadata from JSON and JSONL files stored in the `meta/` directory.
     /// It retrieves general dataset information, a list of recorded episodes, and defined tasks.
-    pub fn load_from_directory(metadir: impl AsRef<Path>) -> Result<Self, LeRobotError> {
-        let metadir = metadir.as_ref();
-
-        let info = LeRobotDatasetInfo::load_from_json_file(metadir.join("info.json"))?;
+    pub fn load_from_fs(fs: &dyn LeRobotFs) -> Result<Self, LeRobotError> {
+        let info = LeRobotDatasetInfo::load_from_json_bytes(&read_full(fs, "meta/info.json")?)?;
         let mut episodes_vec: Vec<LeRobotDatasetEpisode> =
-            load_jsonl_file(metadir.join("episodes.jsonl"))?;
-        let mut tasks = load_jsonl_file(metadir.join("tasks.jsonl"))?;
+            load_jsonl_bytes(&read_full(fs, "meta/episodes.jsonl")?)?;
+        let mut tasks = load_jsonl_bytes(&read_full(fs, "meta/tasks.jsonl")?)?;
 
         // Sort episodes by index to ensure consistent ordering when loading
         episodes_vec.sort_by_key(|e: &LeRobotDatasetEpisode| e.index);
@@ -240,15 +229,11 @@ pub struct LeRobotDatasetInfo {
 }
 
 impl LeRobotDatasetInfo {
-    /// Loads `LeRobotDatasetInfo` from a JSON file.
+    /// Loads `LeRobotDatasetInfo` from the contents of a JSON file.
     ///
     /// The `LeRobot` dataset info file is typically stored under `meta/info.json`.
-    pub fn load_from_json_file(filepath: impl AsRef<Path>) -> Result<Self, LeRobotError> {
-        let info_file = File::open(filepath.as_ref())
-            .map_err(|err| LeRobotError::io(err, filepath.as_ref()))?;
-        let reader = BufReader::new(info_file);
-
-        serde_json::from_reader(reader).map_err(|err| err.into())
+    pub fn load_from_json_bytes(contents: &[u8]) -> Result<Self, LeRobotError> {
+        serde_json::from_slice(contents).map_err(|err| err.into())
     }
 
     /// Retrieve the metadata for a specific feature.
@@ -274,24 +259,23 @@ impl LeRobotDatasetInfo {
         }
     }
 
-    /// Generates the file path for a given episode's Parquet data.
-    pub fn episode_data_path(&self, episode: EpisodeIndex) -> Result<PathBuf, LeRobotError> {
+    /// Generates the dataset-relative file path for a given episode's Parquet data.
+    pub fn episode_data_path(&self, episode: EpisodeIndex) -> Result<String, LeRobotError> {
         let chunk = self.chunk_index(episode)?;
 
         // TODO(gijsd): Need a better way to handle this, as this only supports the default.
         Ok(self
             .data_path
             .replace("{episode_chunk:03d}", &format!("{chunk:03}"))
-            .replace("{episode_index:06d}", &format!("{:06}", episode.0))
-            .into())
+            .replace("{episode_index:06d}", &format!("{:06}", episode.0)))
     }
 
-    /// Generates the file path for a video observation of a given episode.
+    /// Generates the dataset-relative file path for a video observation of a given episode.
     pub fn video_path(
         &self,
         feature_key: &str,
         episode: EpisodeIndex,
-    ) -> Result<PathBuf, LeRobotError> {
+    ) -> Result<String, LeRobotError> {
         let chunk = self.chunk_index(episode)?;
         let feature = self
             .feature(feature_key)
@@ -313,22 +297,30 @@ impl LeRobotDatasetInfo {
                 path.replace("{episode_chunk:03d}", &format!("{chunk:03}"))
                     .replace("{episode_index:06d}", &format!("{:06}", episode.0))
                     .replace("{video_key}", feature_key)
-                    .into()
             })
     }
 }
 
+/// Read a file that must be fully present.
+fn read_full(fs: &dyn LeRobotFs, rel_path: &str) -> Result<Bytes, LeRobotError> {
+    match fs.read(rel_path)? {
+        Blob::Full(bytes) => Ok(bytes),
+        Blob::Sparse(_) => Err(LeRobotError::io(
+            std::io::Error::other("expected a fully-fetched file, found a sparse blob"),
+            rel_path,
+        )),
+    }
+}
+
 // TODO(gijsd): Do we want to stream in episodes or tasks?
-#[cfg(not(target_arch = "wasm32"))]
-fn load_jsonl_file<D>(filepath: impl AsRef<Path>) -> Result<Vec<D>, LeRobotError>
+fn load_jsonl_bytes<D>(contents: &[u8]) -> Result<Vec<D>, LeRobotError>
 where
     D: DeserializeOwned,
 {
-    use crate::lerobot::LeRobotError;
-
-    let entries = std::fs::read_to_string(filepath.as_ref())
-        .map_err(|err| LeRobotError::io(err, filepath.as_ref()))?
+    let contents = String::from_utf8_lossy(contents);
+    let entries = contents
         .lines()
+        .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line))
         .try_collect()?;
 
@@ -509,7 +501,7 @@ fn load_episode_video(
         .read_episode_video_contents(observation, episode)
         .with_context(|| format!("Reading video contents for episode {episode:?} failed!"))?;
 
-    let video_asset = AssetVideo::new(contents.into_owned());
+    let video_asset = AssetVideo::new(contents.to_vec());
     let entity_path = observation;
 
     let video_frame_reference_chunk = match video_asset.read_frame_timestamps_nanos() {
@@ -567,7 +559,8 @@ fn load_episode_video(
 mod tests {
     use super::*;
 
-    use std::sync::Arc;
+    use std::fs::File;
+    use std::path::Path;
 
     use arrow::array::RecordBatchOptions;
     use arrow::datatypes::{DataType, Field as ArrowField, Schema};
@@ -634,7 +627,9 @@ mod tests {
         .collect();
 
         LeRobotDatasetV2 {
-            path: dir.to_path_buf(),
+            fs: Arc::new(crate::lerobot::vfs::LocalFs {
+                root: dir.to_path_buf(),
+            }),
             metadata: LeRobotDatasetMetadata {
                 info,
                 episodes,
