@@ -378,3 +378,61 @@ fn xml_unescape(s: &str) -> String {
         .replace("&apos;", "'")
         .replace("&amp;", "&")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uri_encode_leaves_unreserved_chars() {
+        let unreserved = "AZaz09-_.~";
+        assert_eq!(uri_encode(unreserved, true), unreserved);
+    }
+
+    #[test]
+    fn uri_encode_percent_encodes_the_rest() {
+        assert_eq!(uri_encode("a b", true), "a%20b");
+        // Multi-byte UTF-8 is encoded byte by byte.
+        assert_eq!(uri_encode("é", true), "%C3%A9");
+    }
+
+    #[test]
+    fn uri_encode_slash_is_conditional() {
+        // Object keys keep their `/`; the canonical query encodes it.
+        assert_eq!(uri_encode("a/b c", false), "a/b%20c");
+        assert_eq!(uri_encode("a/b c", true), "a%2Fb%20c");
+    }
+
+    #[test]
+    fn xml_unescape_handles_the_five_entities_without_double_unescaping() {
+        assert_eq!(
+            xml_unescape("&lt;a&gt; &quot;b&quot; &apos;c&apos; d&amp;e"),
+            "<a> \"b\" 'c' d&e"
+        );
+        // `&amp;` is unescaped last, so an escaped ampersand-entity is not double-decoded.
+        assert_eq!(xml_unescape("&amp;lt;"), "&lt;");
+    }
+
+    #[test]
+    fn parse_list_objects_pulls_key_and_size() {
+        let xml = "\
+<?xml version=\"1.0\"?>
+<ListBucketResult>
+  <Contents><Key>meta/info.json</Key><Size>123</Size></Contents>
+  <Contents><Key>data/a&amp;b.parquet</Key><Size>4567</Size></Contents>
+</ListBucketResult>";
+
+        let objects = parse_list_objects(xml);
+        assert_eq!(objects.len(), 2);
+        assert_eq!(objects[0].key, "meta/info.json");
+        assert_eq!(objects[0].size, 123);
+        // The key is XML-unescaped.
+        assert_eq!(objects[1].key, "data/a&b.parquet");
+        assert_eq!(objects[1].size, 4567);
+    }
+
+    #[test]
+    fn parse_list_objects_on_empty_result() {
+        assert!(parse_list_objects("<ListBucketResult></ListBucketResult>").is_empty());
+    }
+}
