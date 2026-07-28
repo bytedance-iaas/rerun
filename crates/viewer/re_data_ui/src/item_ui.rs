@@ -648,7 +648,7 @@ pub fn entity_db_button_ui(
     .unwrap_or_else(|| "<unknown>".to_owned());
 
     let size = re_format::format_bytes(entity_db.byte_size_of_physical_chunks() as _);
-    let title = format!("{app_id_prefix}{recording_name} - {size}");
+    let mut title = format!("{app_id_prefix}{recording_name} - {size}");
 
     let store_id = entity_db.store_id().clone();
     let item = re_viewer_context::Item::StoreId(store_id.clone());
@@ -658,10 +658,92 @@ pub fn entity_db_button_ui(
         re_log_types::StoreKind::Blueprint => &icons::BLUEPRINT,
     };
 
-    let mut item_content = list_item::LabelContent::new(title).with_icon(icon);
+    let episode_loading = re_data_source::lerobot_remote::is_episode_loading(&store_id);
+    let episode_failure = re_data_source::lerobot_remote::episode_failure(&store_id);
+    let download_progress = if episode_loading {
+        re_data_source::lerobot_remote::episode_download_progress(&store_id)
+    } else {
+        None
+    };
+
+    // Live progress in the row itself: big downloads are agony without a sense of how far
+    // along they are. The full name would push the numbers past the panel's truncation, so
+    // while downloading the row shows a compact "<name> · 43% · ~12s left" instead (the
+    // full name returns when the download finishes).
+    if let Some(progress) = &download_progress {
+        use std::fmt::Write as _;
+        let short_name = recording_name
+            .split(" · ")
+            .next()
+            .unwrap_or(recording_name.as_str());
+        title = format!("{app_id_prefix}{short_name}");
+        if let Some(total) = progress.bytes_total {
+            let pct = (progress.bytes_done as f64 / total.max(1) as f64 * 100.0).min(100.0);
+            write!(title, " · {pct:.0}%").ok();
+        } else {
+            write!(
+                title,
+                " · {}",
+                re_format::format_bytes(progress.bytes_done as _)
+            )
+            .ok();
+        }
+        if let Some(eta) = progress.eta_secs {
+            if eta >= 90.0 {
+                write!(title, " · ~{:.0}min left", (eta / 60.0).ceil()).ok();
+            } else {
+                write!(title, " · ~{eta:.0}s left").ok();
+            }
+        }
+    }
+
+    let mut item_content = if episode_failure.is_some() {
+        // Upstream convention for failed entries: red text, reason on hover
+        // (see `failed_entry_ui` in the recording panel).
+        list_item::LabelContent::new(egui::RichText::new(title).color(ui.visuals().error_fg_color))
+            .with_icon(icon)
+    } else if episode_loading
+        && re_data_source::lerobot_remote::is_dataset_paused(store_id.application_id().as_str())
+    {
+        // Mid-download, but the whole dataset is paused: the download is frozen in place
+        // (it continues from here on resume). An animated indicator would wrongly suggest
+        // it is still running.
+        list_item::LabelContent::new(title).with_icon(&icons::PAUSE)
+    } else if episode_loading {
+        // This episode is being downloaded right now — animate instead of the static icon.
+        list_item::LabelContent::new(title).with_icon_fn(|ui, rect, _visuals| {
+            re_ui::loading_indicator::paint_loading_indicator_inside(
+                ui,
+                egui::Align2::CENTER_CENTER,
+                rect,
+                1.0,
+                None,
+                "downloading episode",
+            );
+        })
+    } else {
+        list_item::LabelContent::new(title).with_icon(icon)
+    };
 
     if ui_layout.is_selection_panel() {
-        item_content = item_content.with_buttons(|ui| {
+        // Per-item download controls of remote dataset streams (TOS / Hugging Face).
+        let streaming = re_data_source::lerobot_remote::is_dataset_streaming(
+            store_id.application_id().as_str(),
+        );
+        let dataset_paused = streaming
+            && re_data_source::lerobot_remote::is_dataset_paused(
+                store_id.application_id().as_str(),
+            );
+        let episode_parked =
+            streaming && re_data_source::lerobot_remote::is_episode_parked(&store_id);
+        let episode_failed =
+            streaming && re_data_source::lerobot_remote::is_episode_failed(&store_id);
+        // Announced-but-not-downloaded items already hold a small properties chunk (~1 KB),
+        // so "has downloaded data" needs a threshold, not just > 0.
+        let has_data = entity_db.byte_size_of_physical_chunks() > 16 * 1024;
+
+        let store_id = store_id.clone();
+        item_content = item_content.with_buttons(move |ui| {
             // Close-button:
             let resp = ui
                 .small_icon_button(&icons::CLOSE_SMALL, "Close recording")
@@ -679,6 +761,52 @@ pub fn entity_db_button_ui(
                         store_id.clone().into(),
                     ));
             }
+
+            if streaming {
+                // While the whole dataset is paused, the stream is parked and cannot react
+                // to per-episode requests — a re-download would drop the old data and then
+                // sit in the queue until resume, looking like the episode was deleted.
+                // Keep the state simple: grey the per-episode download controls out.
+                ui.add_enabled_ui(!dataset_paused, |ui| {
+                    if episode_loading {
+                    if ui
+                        .small_icon_button(&icons::PAUSE, "Pause downloading this episode")
+                        .on_hover_text(
+                            "Pause downloading this episode. \
+                             Click the episode (or its resume button) to restart it.",
+                        )
+                        .clicked()
+                    {
+                        re_data_source::lerobot_remote::pause_current_item(
+                            store_id.application_id().as_str(),
+                        );
+                    }
+                } else if episode_parked {
+                    if ui
+                        .small_icon_button(&icons::PLAY, "Resume downloading this episode")
+                        .clicked()
+                    {
+                        re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);
+                    }
+                } else if (has_data || episode_failed)
+                    && ui
+                        .small_icon_button(&icons::RESET, "Re-download this episode")
+                        .on_hover_text(
+                            "Discard this episode's data and download it again from the source.",
+                        )
+                        .clicked()
+                {
+                    // Arm the re-download marker, then close the recording to drop the old
+                    // data; the close hook completes the hand-off once the store is gone
+                    // (fetching before the close is processed would lose the race).
+                    re_data_source::lerobot_remote::redownload_episode_for_store(&store_id);
+                    ctx.command_sender
+                        .send_system(SystemCommand::CloseRecordingOrTable(
+                            store_id.clone().into(),
+                        ));
+                }
+                });
+            }
         });
     }
 
@@ -694,7 +822,7 @@ pub fn entity_db_button_ui(
         list_item = list_item.force_hovered(true);
     }
 
-    let response = list_item::list_item_scope(ui, "entity db button", |ui| {
+    let mut response = list_item::list_item_scope(ui, "entity db button", |ui| {
         list_item
             .show_hierarchical(ui, item_content)
             .on_hover_ui(|ui| {
@@ -702,6 +830,23 @@ pub fn entity_db_button_ui(
             })
     })
     .inner;
+
+    if let Some(reason) = &episode_failure {
+        response = response.on_hover_text(reason.clone());
+    }
+
+    if let Some(progress) = &download_progress {
+        let total = progress.bytes_total.map_or_else(
+            || "unknown size".to_owned(),
+            |total| re_format::format_bytes(total as _),
+        );
+        response = response.on_hover_text(format!(
+            "Downloading: {} of {} · {}/s",
+            re_format::format_bytes(progress.bytes_done as _),
+            total,
+            re_format::format_bytes(progress.bytes_per_sec),
+        ));
+    }
 
     if response.hovered() {
         ctx.selection_state().set_hovered(item.clone());
