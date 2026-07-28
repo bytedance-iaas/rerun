@@ -1,0 +1,66 @@
+services:
+  # The always-on web viewer: one deployment serves every user.
+  viewer:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: rerun-viewer-unified
+    environment:
+      MODE: web
+    ports:
+      - "9091:80"
+    env_file: .env
+    secrets:
+      - tos_access_key
+      - tos_secret_key
+      - hf_token
+    volumes:
+      # Converted .rrd files land here (phase 2: browser PUTs them back for reuse).
+      - rrd-cache:/rrd-cache
+    restart: unless-stopped
+
+  # One native-viewer session from the SAME image (MODE=native), streamed to the browser
+  # at :9092. In the cloud, users start pods like this themselves; how many can run is
+  # bounded by platform quota, not by this software.
+  native-session:
+    image: rerun-viewer-unified
+    environment:
+      MODE: native
+    ports:
+      - "9092:8080"
+    env_file: .env
+    secrets:
+      - tos_access_key
+      - tos_secret_key
+      - hf_token
+    shm_size: "1gb"
+    restart: unless-stopped
+
+  # The rerun catalog server (same image, MODE=server): users connect with
+  # `rr.catalog.CatalogClient("rerun+http://<host>:9094")`, register tos:// rrds, and the
+  # catalog survives restarts via the server-data volume.
+  server:
+    image: rerun-viewer-unified
+    environment:
+      MODE: server
+    ports:
+      - "9094:51234"
+    env_file: .env
+    secrets:
+      - tos_access_key
+      - tos_secret_key
+    volumes:
+      - server-data:/server-data
+    restart: unless-stopped
+
+secrets:
+  tos_access_key:
+    file: ./secrets/tos_access_key
+  tos_secret_key:
+    file: ./secrets/tos_secret_key
+  hf_token:
+    file: ./secrets/hf_token
+
+volumes:
+  rrd-cache:
+  server-data:

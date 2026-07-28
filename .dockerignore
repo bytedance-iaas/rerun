@@ -1,5 +1,16 @@
 venv/
+.venv/
+# The pixi conda env is ~2 GB and useless in the image — a major build-cache bloater.
+.pixi/
+.git/
 **/*.so
-examples/
+# `examples/rust/*` are cargo workspace members, so they must stay in the build context.
+examples/*
+!examples/rust/
+# examples/rust/objectron/proto is a symlink into examples/python/objectron; a dangling
+# symlink breaks `COPY --exclude` checksum computation (92K, cheap to keep).
+!examples/python/objectron/
 target
 target*
+deploy/secrets/
+deploy/.env
