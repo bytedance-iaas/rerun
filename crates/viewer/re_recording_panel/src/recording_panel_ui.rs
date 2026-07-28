@@ -132,6 +132,18 @@ fn add_button_ui(
                 {
                     ui.close();
                 }
+                if re_ui::UICommand::OpenTosDataset
+                    .menu_button_ui(ui, ctx.command_sender())
+                    .clicked()
+                {
+                    ui.close();
+                }
+                if re_ui::UICommand::OpenHfDataset
+                    .menu_button_ui(ui, ctx.command_sender())
+                    .clicked()
+                {
+                    ui.close();
+                }
                 if re_ui::UICommand::AddRedapServer
                     .menu_button_ui(ui, ctx.command_sender())
                     .clicked()
@@ -190,6 +202,64 @@ fn all_sections_ui(
 
     for server_data in &recording_panel_data.servers {
         server_section_ui(ctx, ui, server_data);
+    }
+
+    //
+    // TOS datasets (streamed straight from an object-store bucket)
+    //
+
+    if !recording_panel_data.tos_apps.is_empty() {
+        let id = egui::Id::new("tos items");
+        if ui
+            .list_item()
+            .header()
+            .show_hierarchical_with_children(
+                ui,
+                id,
+                true,
+                list_item::LabelContent::header("Volcengine TOS"),
+                |ui| {
+                    for app_id_data in &recording_panel_data.tos_apps {
+                        app_id_section_ui(ctx, ui, app_id_data);
+                    }
+                },
+            )
+            .item_response
+            .clicked()
+        {
+            let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, true);
+            state.toggle(ui);
+            state.store(ui.ctx());
+        }
+    }
+
+    //
+    // Hugging Face datasets
+    //
+
+    if !recording_panel_data.hf_apps.is_empty() {
+        let id = egui::Id::new("hf items");
+        if ui
+            .list_item()
+            .header()
+            .show_hierarchical_with_children(
+                ui,
+                id,
+                true,
+                list_item::LabelContent::header("Hugging Face"),
+                |ui| {
+                    for app_id_data in &recording_panel_data.hf_apps {
+                        app_id_section_ui(ctx, ui, app_id_data);
+                    }
+                },
+            )
+            .item_response
+            .clicked()
+        {
+            let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, true);
+            state.toggle(ui);
+            state.store(ui.ctx());
+        }
     }
 
     //
@@ -633,13 +703,41 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
     let item = local_app_id.item();
     let list_item = ui.list_item().selected(*is_selected).active(*is_active);
 
+    // Remote dataset streams (TOS / Hugging Face) can be paused and resumed.
+    let streaming = re_data_source::lerobot_remote::is_dataset_streaming(app_id.as_str());
+    let paused = streaming && re_data_source::lerobot_remote::is_dataset_paused(app_id.as_str());
+
+    // Make the paused state impossible to miss: the row itself says so (the resume button
+    // alone only shows on hover, which reads as "downloads just stopped"). Prefixed, because
+    // dataset names are long URLs and the panel truncates the tail.
+    let name_text = if paused {
+        format!("⏸ paused · {}", local_app_id.name())
+    } else {
+        local_app_id.name().to_owned()
+    };
+
     let mut list_item_content =
-        re_ui::list_item::LabelContent::new(local_app_id.name()).with_icon(&icons::DATASET);
+        re_ui::list_item::LabelContent::new(name_text).with_icon(&icons::DATASET);
 
     let id = ui.make_persistent_id(local_app_id.id());
 
-    if !local_app_id.loaded_recordings.is_empty() {
+    if !local_app_id.loaded_recordings.is_empty() || streaming {
+        if paused {
+            // Keep the resume button visible without hovering.
+            list_item_content = list_item_content.with_always_show_buttons(true);
+        }
         list_item_content = list_item_content.with_buttons(|ui| {
+            if streaming {
+                let (icon, tooltip) = if paused {
+                    (&icons::PLAY, "Resume downloading this dataset")
+                } else {
+                    (&icons::PAUSE, "Pause downloading this dataset")
+                };
+                if ui.small_icon_button(icon, tooltip).clicked() {
+                    re_data_source::lerobot_remote::set_dataset_paused(app_id.as_str(), !paused);
+                }
+            }
+
             // Close-button:
             let resp = ui
                 .small_icon_button(&icons::CLOSE_SMALL, "Close all recordings in this dataset")
