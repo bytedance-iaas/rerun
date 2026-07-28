@@ -86,6 +86,10 @@ pub struct AppState {
     #[serde(skip)]
     pub(crate) open_url_modal: crate::ui::OpenUrlModal,
     #[serde(skip)]
+    pub(crate) open_tos_modal: crate::ui::OpenTosModal,
+    #[serde(skip)]
+    pub(crate) open_hf_modal: crate::ui::OpenHfModal,
+    #[serde(skip)]
     pub(crate) share_modal: crate::ui::ShareModal,
 
     /// Test-only: single-shot callback to run at the end of the frame. Used in integration tests
@@ -157,6 +161,8 @@ impl Default for AppState {
             datastore_ui: Default::default(),
             redap_servers: Default::default(),
             open_url_modal: Default::default(),
+            open_tos_modal: Default::default(),
+            open_hf_modal: Default::default(),
             share_modal: Default::default(),
             navigation: Default::default(),
             history: Default::default(),
@@ -793,6 +799,8 @@ impl AppState {
         }
         self.redap_servers.modals_ui(&app_ctx, ui);
         self.open_url_modal.ui(ui);
+        self.open_tos_modal.ui(ui, command_sender);
+        self.open_hf_modal.ui(ui, command_sender);
 
         drag_and_drop_manager.payload_cursor_ui(&egui_ctx);
 

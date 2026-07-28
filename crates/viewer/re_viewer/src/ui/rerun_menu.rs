@@ -96,6 +96,8 @@ impl App {
 
         UICommand::Open.menu_button_ui(ui, &self.command_sender);
         UICommand::OpenUrl.menu_button_ui(ui, &self.command_sender);
+        UICommand::OpenTosDataset.menu_button_ui(ui, &self.command_sender);
+        UICommand::OpenHfDataset.menu_button_ui(ui, &self.command_sender);
         UICommand::AddRedapServer.menu_button_ui(ui, &self.command_sender);
         UICommand::Import.menu_button_ui(ui, &self.command_sender);
 

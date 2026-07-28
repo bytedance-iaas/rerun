@@ -1,4 +1,6 @@
 mod mobile_warning_ui;
+mod open_hf_modal;
+mod open_tos_modal;
 mod open_url_modal;
 mod rerun_menu;
 mod share_modal;
@@ -12,6 +14,8 @@ mod settings_screen;
 
 pub use rerun_menu::about_rerun_ui;
 
+pub(crate) use open_hf_modal::OpenHfModal;
+pub(crate) use open_tos_modal::OpenTosModal;
 pub(crate) use open_url_modal::OpenUrlModal;
 pub(crate) use settings_screen::settings_screen_ui;
 pub(crate) use share_modal::ShareModal;
