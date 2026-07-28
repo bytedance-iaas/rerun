@@ -212,10 +212,18 @@ impl App {
             }
 
             SystemCommand::CloseApp(app_id) => {
+                // If this is a remote dataset still streaming in, stop its downloads —
+                // otherwise the stream re-announces episodes and the app comes right back.
+                re_data_source::lerobot_remote::cancel_dataset_stream(app_id.as_str());
                 store_hub.close_app(&app_id);
             }
 
             SystemCommand::CloseRecordingOrTable(entry) => {
+                // If this is a remote dataset item, forget it in the download queue
+                // (and abort its download if it is the one currently being fetched).
+                if let RecordingOrTable::Recording { store_id } = &entry {
+                    re_data_source::lerobot_remote::cancel_episode_for_store(store_id);
+                }
                 // The active recording we're closing, if that's what this is. When set, we move off
                 // it after closing.
                 let active_being_closed = match &entry {
@@ -256,6 +264,7 @@ impl App {
             }
 
             SystemCommand::CloseAllEntries => {
+                re_data_source::lerobot_remote::cancel_all_dataset_streams();
                 self.state.navigation.reset();
                 store_hub.clear_entries();
 
@@ -284,6 +293,12 @@ impl App {
             SystemCommand::SetRoute(new_route) => {
                 if &new_route == self.state.navigation.current() {
                     return;
+                }
+
+                // If this recording is a TOS dataset episode still being fetched, bump it to the
+                // front of the download queue.
+                if let Route::LocalRecording { recording_id } = &new_route {
+                    re_data_source::lerobot_remote::prioritize_episode_for_store(recording_id);
                 }
 
                 self.state.view_states.preview_state = None;
@@ -635,6 +650,11 @@ impl App {
                         if let Route::LocalRecording { recording_id } = &route {
                             store_hub
                                 .load_blueprint_and_caches(recording_id, &self.view_class_registry);
+                            // If this recording is a TOS dataset episode still being fetched,
+                            // bump it to the front of the download queue.
+                            re_data_source::lerobot_remote::prioritize_episode_for_store(
+                                recording_id,
+                            );
                         }
                         self.state.navigation.replace(route);
                     }
@@ -885,6 +905,14 @@ impl App {
 
             UICommand::OpenUrl => {
                 self.state.open_url_modal.open();
+            }
+
+            UICommand::OpenTosDataset => {
+                self.state.open_tos_modal.open();
+            }
+
+            UICommand::OpenHfDataset => {
+                self.state.open_hf_modal.open();
             }
 
             UICommand::CloseAllEntries => {
@@ -1659,8 +1687,20 @@ impl App {
                 // Specific files should stop streaming when closing them.
                 LogSource::File { .. } => true,
 
-                // Specific HTTP streams should stop streaming when closing them.
-                LogSource::HttpStream { .. } => true,
+                // Specific HTTP streams should stop streaming when closing them — unless the
+                // source is a remote-dataset stream (TOS / Hugging Face), which feeds many
+                // recordings from one source: closing a single episode must not kill the
+                // whole dataset's channel. (The per-episode cancel hook stops that episode's
+                // download; closing the whole dataset goes through `CloseApp`, which cancels
+                // the stream and thereby ends the receiver.)
+                LogSource::HttpStream { .. } => match entry {
+                    RecordingOrTable::Recording { store_id } => {
+                        !re_data_source::lerobot_remote::is_dataset_streaming(
+                            store_id.application_id().as_str(),
+                        )
+                    }
+                    RecordingOrTable::Table { .. } => true,
+                },
 
                 // Specific GRPC streams should stop streaming when closing them.
                 // TODO(#10967): We still stream in some data after that.

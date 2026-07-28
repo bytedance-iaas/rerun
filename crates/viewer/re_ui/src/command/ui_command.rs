@@ -19,6 +19,8 @@ pub enum UICommand {
     // Listed in the order they show up in the command palette by default!
     Open,
     OpenUrl,
+    OpenTosDataset,
+    OpenHfDataset,
     Import,
 
     CloseAllEntries,
@@ -108,6 +110,14 @@ impl UICommand {
             Self::OpenUrl => (
                 "Open from URL…",
                 "Open or navigate to data from any supported URL",
+            ),
+            Self::OpenTosDataset => (
+                "Open from Volcengine TOS…",
+                "Stream a LeRobot dataset directly from a Volcengine TOS (S3-compatible) bucket",
+            ),
+            Self::OpenHfDataset => (
+                "Open from Hugging Face…",
+                "Stream a LeRobot dataset directly from Hugging Face",
             ),
             Self::Import => (
                 "Import into current recording…",
@@ -280,6 +290,8 @@ impl UICommand {
             // But unfortunately there's no standard shortcut for this.
             // Claude however thinks it's this one (it's not). Let's go with that anyways!
             Self::OpenUrl => smallvec![cmd_shift(Key::L)],
+            Self::OpenTosDataset => smallvec![],
+            Self::OpenHfDataset => smallvec![],
             Self::Import => smallvec![cmd_shift(Key::O)],
             Self::CloseAllEntries => smallvec![],
 
