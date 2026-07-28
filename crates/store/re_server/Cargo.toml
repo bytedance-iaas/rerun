@@ -79,7 +79,10 @@ clap = { workspace = true, features = ["derive", "env"] }
 http.workspace = true
 http-body.workspace = true
 lance = { workspace = true, optional = true }
+object_store.workspace = true
 opentelemetry.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = [
   "fs",

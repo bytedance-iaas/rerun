@@ -138,6 +138,27 @@ async fn validate_sources(
             continue;
         }
 
+        // Remote object-store sources (tos://, s3://): fetch into the local cache, then
+        // validate/load like a local file. The remote URL stays the source's identity.
+        if matches!(storage_url.scheme(), "tos" | "s3") {
+            #[cfg(target_arch = "wasm32")]
+            return Err(tonic::Status::invalid_argument(format!(
+                "remote storage URLs are not supported on wasm: {storage_url}"
+            )));
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let rrd_path = crate::cloud_storage::ensure_cached(&storage_url).await?;
+                if let Some(source) =
+                    validate_local_rrd(store_kind, rrd_path, &storage_url, layer_info, &mut seen)
+                        .await?
+                {
+                    validated.push(source);
+                }
+                continue;
+            }
+        }
+
         if let Some(file_source) =
             validate_file_source(store_kind, &storage_url, layer_info, &mut seen).await?
         {
@@ -204,6 +225,20 @@ async fn validate_file_source(
         )));
     }
 
+    validate_local_rrd(store_kind, rrd_path, storage_url, layer_info, seen).await
+}
+
+/// Validate an rrd that is present on the local filesystem, under whatever URL identity the
+/// caller chose (`file://` for local files, the original remote URL for cached `tos://`/`s3://` ones).
+///
+/// Returns `None` if the file's store kind doesn't match (silently skipped).
+async fn validate_local_rrd(
+    store_kind: StoreKind,
+    rrd_path: PathBuf,
+    storage_url: &url::Url,
+    layer_info: Arc<LayerInfo>,
+    seen: &mut BTreeMap<(LayerName, SegmentId), Vec<url::Url>>,
+) -> tonic::Result<Option<ValidatedSource>> {
     let store_ids = load_store_ids(&rrd_path).await?;
 
     let mut matched = false;
@@ -475,4 +510,24 @@ fn parse_memory_url(url: &url::Url) -> tonic::Result<StoreSlotId> {
             "invalid store slot ID in memory URL '{url}': {err}"
         ))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_memory_url_roundtrips_the_slot_id() {
+        let id = StoreSlotId::new();
+        let url = url::Url::parse(&format!("memory:///store/{id}")).unwrap();
+        assert_eq!(parse_memory_url(&url).unwrap(), id);
+    }
+
+    #[test]
+    fn parse_memory_url_rejects_bad_shapes() {
+        // Missing the `/store/` segment.
+        assert!(parse_memory_url(&url::Url::parse("memory:///wrong/x").unwrap()).is_err());
+        // Slot id is not a valid Tuid.
+        assert!(parse_memory_url(&url::Url::parse("memory:///store/not-a-tuid").unwrap()).is_err());
+    }
 }
