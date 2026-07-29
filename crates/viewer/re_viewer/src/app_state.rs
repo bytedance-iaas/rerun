@@ -77,6 +77,11 @@ pub struct AppState {
     #[serde(skip)]
     welcome_screen: crate::ui::WelcomeScreen,
 
+    /// Remote datasets (TOS/HF) opened before, shown on the welcome screen after a restart.
+    /// Persisted (web: `localStorage`) — converted data itself is RAM-only, so this list is the
+    /// only trace of what was open. Holds no credentials.
+    pub(crate) recent_datasets: Vec<crate::recent_datasets::RecentDataset>,
+
     #[serde(skip)]
     datastore_ui: re_chunk_store_ui::DatastoreUi,
 
@@ -158,6 +163,7 @@ impl Default for AppState {
             recording_panel: Default::default(),
             blueprint_tree: Default::default(),
             welcome_screen: Default::default(),
+            recent_datasets: Default::default(),
             datastore_ui: Default::default(),
             redap_servers: Default::default(),
             open_url_modal: Default::default(),
@@ -235,6 +241,14 @@ impl AppState {
         re_tracing::profile_function!();
 
         let egui_ctx = ui.ctx().clone();
+
+        // Learn metadata for the "recently opened" list while its streams are active, so the
+        // welcome screen can show e.g. episode counts after the next restart.
+        for recent in &mut self.recent_datasets {
+            if let Some(count) = re_data_source::lerobot_remote::dataset_item_count(&recent.url) {
+                recent.item_count = Some(count);
+            }
+        }
 
         let blueprint_query =
             self.blueprint_query_for_viewer(active_store_context.map(|ctx| ctx.blueprint));
@@ -721,13 +735,40 @@ impl AppState {
                                 login: login_state,
                                 has_server: origin,
                             };
-                            self.welcome_screen.ui(
+                            let recent_action = self.welcome_screen.ui(
                                 ui,
                                 &app_ctx,
                                 welcome_screen_state,
                                 &rx_log.sources(),
                                 &login_state,
+                                &self.recent_datasets,
                             );
+                            match recent_action {
+                                Some(crate::ui::RecentAction::Open(index)) => {
+                                    if let Some(recent) = self.recent_datasets.get(index) {
+                                        // Re-open via the matching dialog, pre-filled: credential
+                                        // resolution and validation stay in one place.
+                                        match recent.kind {
+                                            crate::recent_datasets::RecentKind::Tos => {
+                                                self.open_tos_modal.open_prefilled(
+                                                    &recent.url,
+                                                    &recent.endpoint,
+                                                    &recent.region,
+                                                );
+                                            }
+                                            crate::recent_datasets::RecentKind::Hf => {
+                                                self.open_hf_modal.open_prefilled(&recent.url);
+                                            }
+                                        }
+                                    }
+                                }
+                                Some(crate::ui::RecentAction::Remove(index))
+                                    if index < self.recent_datasets.len() =>
+                                {
+                                    self.recent_datasets.remove(index);
+                                }
+                                Some(crate::ui::RecentAction::Remove(_)) | None => {}
+                            }
                         } else {
                             self.redap_servers.server_central_panel_ui(
                                 &app_ctx,

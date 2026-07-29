@@ -2,7 +2,10 @@ mod example_section;
 mod intro_section;
 mod loading_data_ui;
 mod no_data_ui;
+mod recent_section;
 mod welcome_section;
+
+pub use recent_section::RecentAction;
 
 use std::sync::Arc;
 
@@ -25,6 +28,8 @@ impl WelcomeScreen {
     }
 
     /// Welcome screen shown in place of the viewport when no data is loaded.
+    ///
+    /// Returns what the user did in the "recently opened" section, if anything.
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -32,9 +37,10 @@ impl WelcomeScreen {
         welcome_screen_state: &WelcomeScreenState,
         log_sources: &[Arc<LogSource>],
         login_state: &CloudState,
-    ) {
+        recent_datasets: &[crate::recent_datasets::RecentDataset],
+    ) -> Option<RecentAction> {
         if welcome_screen_state.opacity <= 0.0 {
-            return;
+            return None;
         }
 
         // This is needed otherwise `example_page_ui` bleeds by a few pixels over the timeline panel
@@ -43,6 +49,7 @@ impl WelcomeScreen {
 
         let horizontal_scroll = ui.available_width() < 40.0 * 2.0 + MIN_COLUMN_WIDTH;
 
+        let mut recent_action = None;
         let response = egui::ScrollArea::new([horizontal_scroll, true])
             .id_salt("welcome_screen_page")
             .auto_shrink([false, false])
@@ -57,6 +64,8 @@ impl WelcomeScreen {
                     ..Default::default()
                 }
                 .show(ui, |ui| {
+                    recent_action = recent_section::recent_datasets_ui(ui, recent_datasets);
+
                     if welcome_screen_state.hide_examples {
                         if let Some(loading_text) =
                             loading_data_ui::loading_text_for_data_sources(log_sources)
@@ -77,5 +86,7 @@ impl WelcomeScreen {
             ui.painter()
                 .rect_filled(response.inner_rect, 0.0, fill_color);
         }
+
+        recent_action
     }
 }

@@ -19,7 +19,7 @@
 
 use std::collections::BTreeSet;
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::task::{Poll, Waker};
 
@@ -373,6 +373,10 @@ struct StreamState {
     /// the user closing the item (which would cancel the re-download). Consumed on close.
     redownload_shield: Mutex<BTreeSet<usize>>,
 
+    /// Total episodes/files of the dataset (0 until the listing is in). For the UI — e.g. the
+    /// welcome screen's "recently opened" metadata.
+    n_items: AtomicUsize,
+
     pause: PauseState,
 }
 
@@ -563,6 +567,15 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
         eta_secs,
         phase: progress.phase,
     })
+}
+
+/// Total episodes/files of an active dataset stream, if its listing is in.
+///
+/// Keyed by application id (the dataset URL, e.g. `tos://…` / `hf://…`).
+pub fn dataset_item_count(application_id: &str) -> Option<usize> {
+    let registry = ACTIVE_STREAMS.lock();
+    let n = registry.get(application_id)?.n_items.load(Ordering::SeqCst);
+    (n > 0).then_some(n)
 }
 
 /// Why this item's download was given up on, if it was.
@@ -1094,6 +1107,7 @@ async fn stream_items<S: DatasetStore>(
     re_log::info!("Loaded dataset metadata: {total} {noun}\nDataset: {dataset_url}");
 
     let guard = StreamGuard::new(&application_id);
+    guard.state.n_items.store(total, Ordering::SeqCst);
 
     // ---- Announce the first batch so the recording panel fills up immediately ----
     let has_more_entry = total > ANNOUNCE_BATCH;
