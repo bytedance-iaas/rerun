@@ -123,6 +123,11 @@ async fn fetch_range<S: DatasetStore>(
     rel_path: &str,
     range: Range<u64>,
 ) -> anyhow::Result<Vec<u8>> {
+    /// Cap on a single range request. A response only surfaces once its whole body is buffered,
+    /// so requesting a multi-GB file in one go would leave the progress counter frozen at 0%
+    /// for minutes; bounded chunks make it tick as bytes actually arrive.
+    const MAX_RANGE_REQUEST: u64 = 64 * 1024 * 1024;
+
     let expected = usize::try_from(range.end.saturating_sub(range.start)).unwrap_or_default();
     let mut out: Vec<u8> = Vec::with_capacity(expected);
     let mut pos = range.start;
@@ -134,7 +139,8 @@ async fn fetch_range<S: DatasetStore>(
             anyhow::bail!("Download interrupted\nFile: {rel_path}");
         }
 
-        let bytes = store.get_range_once(rel_path, pos..range.end).await?;
+        let chunk_end = range.end.min(pos + MAX_RANGE_REQUEST);
+        let bytes = store.get_range_once(rel_path, pos..chunk_end).await?;
         if bytes.is_empty() {
             empty_responses += 1;
             if empty_responses > 3 {
@@ -148,12 +154,13 @@ async fn fetch_range<S: DatasetStore>(
         empty_responses = 0;
 
         let remaining = usize::try_from(range.end - pos).unwrap_or_default();
+        let requested = usize::try_from(chunk_end - pos).unwrap_or_default();
         let take = bytes.len().min(remaining);
         out.extend_from_slice(&bytes[..take]);
         pos += take as u64;
         pause.add_item_progress(take as u64);
 
-        if pos < range.end {
+        if take < requested {
             re_log::debug!(
                 "Byte-range response truncated ({take} bytes) — resuming at offset {pos} \
                  ({} of {expected} bytes so far)\nFile: {rel_path}",
@@ -212,6 +219,16 @@ fn queue_index_from_recording_id(recording_id: &str) -> Option<usize> {
     n.parse().ok()
 }
 
+/// What the loader is doing to the current item — download first, then conversion.
+///
+/// Shown in the UI: a big file spends real time in each phase, and a bare percentage is
+/// misleading during conversion (bytes are done, work isn't).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LoadPhase {
+    Downloading,
+    Converting,
+}
+
 /// Live byte counts of the item currently being downloaded.
 #[derive(Clone, Copy)]
 struct ItemProgress {
@@ -220,6 +237,8 @@ struct ItemProgress {
 
     /// Estimated size of the whole item, when known (v3 episodes, loose files).
     bytes_total: Option<u64>,
+
+    phase: LoadPhase,
 }
 
 /// Flow control of one active stream: dataset-level pause, stream cancellation (the user closed
@@ -283,12 +302,20 @@ impl PauseState {
             started_nanos: re_log_types::Timestamp::now().nanos_since_epoch(),
             bytes_done: 0,
             bytes_total,
+            phase: LoadPhase::Downloading,
         });
     }
 
     fn add_item_progress(&self, bytes: u64) {
         if let Some(progress) = &mut *self.item_progress.lock() {
             progress.bytes_done += bytes;
+        }
+    }
+
+    /// Mark the current item as past its downloads and into conversion.
+    fn set_item_converting(&self) {
+        if let Some(progress) = &mut *self.item_progress.lock() {
+            progress.phase = LoadPhase::Converting;
         }
     }
 
@@ -496,6 +523,8 @@ pub struct DownloadProgress {
 
     /// Estimated seconds remaining (needs a known total and a settled speed).
     pub eta_secs: Option<f64>,
+
+    pub phase: LoadPhase,
 }
 
 /// Byte progress of the item currently being downloaded, if this recording is it.
@@ -518,8 +547,9 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
     } else {
         0.0
     };
+    // A byte-rate ETA only means something while bytes are still being fetched.
     let eta_secs = match progress.bytes_total {
-        Some(total) if bytes_per_sec > 1.0 => {
+        Some(total) if bytes_per_sec > 1.0 && progress.phase == LoadPhase::Downloading => {
             Some((total.saturating_sub(progress.bytes_done)) as f64 / bytes_per_sec)
         }
         _ => None,
@@ -530,6 +560,7 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
         bytes_total: progress.bytes_total,
         bytes_per_sec,
         eta_secs,
+        phase: progress.phase,
     })
 }
 
@@ -1362,6 +1393,7 @@ async fn load_one_item<S: DatasetStore>(
                 }
             }
 
+            pause.set_item_converting();
             episode_log_msgs(dataset.as_ref(), application_id, episode, recording_name)
         }
 
@@ -1438,6 +1470,7 @@ async fn load_one_item<S: DatasetStore>(
                 evict.push(video_rel);
             }
 
+            pause.set_item_converting();
             episode_log_msgs(dataset.as_ref(), application_id, episode, recording_name)
         }
 
@@ -1462,6 +1495,7 @@ async fn load_one_item<S: DatasetStore>(
                 ..re_importer::ImporterSettings::recommended(format!("file_{index}"))
             };
 
+            pause.set_item_converting();
             re_importer::import_from_file_contents(
                 &settings,
                 re_log_types::FileSource::Uri,

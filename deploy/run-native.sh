@@ -6,10 +6,8 @@ cd "$(dirname "$0")/.."
 
 export TOS_ENDPOINT="${TOS_ENDPOINT:-https://tos-s3-cn-beijing.volces.com}"
 export TOS_REGION="${TOS_REGION:-cn-beijing}"
-export TOS_DEFAULT_URL="${TOS_DEFAULT_URL:-tos://physical-ai-rerun-test/dataset-1/so101-pick-place/}"
 export TOS_ACCESS_KEY="$(cat deploy/secrets/tos_access_key)"
 export TOS_SECRET_KEY="$(cat deploy/secrets/tos_secret_key)"
 export HF_TOKEN="$(cat deploy/secrets/hf_token 2>/dev/null || true)"
-export HF_DEFAULT_URL="${HF_DEFAULT_URL:-henry-guo/so101-pick-place}"
 
 exec ./target/debug/rerun "$@"

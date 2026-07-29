@@ -9,6 +9,7 @@
 mod data_source;
 pub(crate) mod fetch_file_from_http;
 pub mod hf;
+mod http_client;
 pub mod lerobot_remote;
 mod stream_rrd_from_http;
 pub mod tos;
