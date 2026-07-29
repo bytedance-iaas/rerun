@@ -24,6 +24,9 @@ struct ServerTosConfig {
     /// `""`/`"off"` disables the artifacts store.
     #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
     tos_rrd_artifacts_url: String,
+
+    /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
+    rrd_artifacts_prefetch: usize,
 }
 
 impl Default for ServerTosConfig {
@@ -35,6 +38,7 @@ impl Default for ServerTosConfig {
             tos_secret_key: String::new(),
             // The artifacts store is on by default, even with no config file at all.
             tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            rrd_artifacts_prefetch: 0,
         }
     }
 }
@@ -129,6 +133,11 @@ impl OpenTosModal {
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+            if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
+                && let Ok(n) = value.trim().parse()
+            {
+                parsed.rrd_artifacts_prefetch = n;
+            }
 
             *self.server_config.lock() = Some(parsed);
         }
@@ -303,6 +312,7 @@ impl OpenTosModal {
                                     location: artifacts_location,
                                     credentials: credentials.clone(),
                                     write_back: !self.artifact_upload_disabled,
+                                    prefetch_items: server_config.rrd_artifacts_prefetch,
                                 }
                             });
 

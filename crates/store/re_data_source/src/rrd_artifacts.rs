@@ -48,6 +48,26 @@ pub struct RrdArtifactsConfig {
 
     /// Upload freshly converted episodes (reading the store is always on when this is `Some`).
     pub write_back: bool,
+
+    /// How many artifacts to prefetch at once; `0` = automatic.
+    /// See [`resolve_prefetch_items`].
+    pub prefetch_items: usize,
+}
+
+/// How many artifacts to prefetch concurrently, from the configured value
+/// (`rrd_artifacts_prefetch` / `RRD_ARTIFACTS_PREFETCH`).
+///
+/// `0` (or an absent key) picks the automatic default: 3 in the browser — the ~6
+/// connections-per-host budget shared with the per-artifact range parallelism — and 4
+/// natively. Explicit values are capped to keep a typo from opening hundreds of
+/// connections.
+pub fn resolve_prefetch_items(configured: usize) -> usize {
+    const AUTO: usize = if cfg!(target_arch = "wasm32") { 3 } else { 4 };
+    const MAX: usize = 16;
+    match configured {
+        0 => AUTO,
+        n => n.min(MAX),
+    }
 }
 
 /// Interpret the configured artifacts-store URL: `""`/`"off"` disables, anything else must parse.

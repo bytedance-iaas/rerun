@@ -124,10 +124,18 @@ fn tos_lerobot_stream_smoke() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
 
+    // Artifacts on (the default bucket): the first run converts + writes artifacts back,
+    // a re-run exercises the parallel prefetch path end-to-end.
     let source = TosDatasetSource {
         location: TosLocation::parse(TEST_DATASET).unwrap(),
         credentials: credentials(),
-        rrd_artifacts: None,
+        rrd_artifacts: Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
+            location: TosLocation::parse(re_data_source::rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL)
+                .unwrap(),
+            credentials: credentials(),
+            write_back: true,
+            prefetch_items: 0,
+        }),
     };
     let rx = stream_lerobot_dataset(source);
 
