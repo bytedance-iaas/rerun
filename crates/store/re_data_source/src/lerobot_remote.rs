@@ -440,6 +440,10 @@ struct StreamState {
     /// from a listing at stream start and on every write-back. For the UI (tooltip + copy).
     rrd_artifact_urls: Mutex<ahash::HashMap<usize, String>>,
 
+    /// Per-item progress of artifact fetches. Its own map (not the single
+    /// [`PauseState::item_progress`] slot) because artifacts prefetch several items at once.
+    artifact_progress: Mutex<ahash::HashMap<usize, ItemProgress>>,
+
     pause: PauseState,
 }
 
@@ -603,12 +607,24 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
     let index = queue_index_from_recording_id(store_id.recording_id().as_str())?;
     let app_id = store_id.application_id().as_str();
 
-    if CURRENTLY_LOADING.lock().get(app_id) != Some(&index) {
-        return None;
-    }
+    let is_current = CURRENTLY_LOADING.lock().get(app_id) == Some(&index);
 
     let registry = ACTIVE_STREAMS.lock();
-    let progress = (*registry.get(app_id)?.pause.item_progress.lock())?;
+    let state = registry.get(app_id)?;
+    // Concurrent artifact fetches track their own per-item progress; the single
+    // "current item" slot covers the serial download+convert path.
+    let progress = state
+        .artifact_progress
+        .lock()
+        .get(&index)
+        .copied()
+        .or_else(|| {
+            if is_current {
+                *state.pause.item_progress.lock()
+            } else {
+                None
+            }
+        })?;
 
     let elapsed_secs =
         (re_log_types::Timestamp::now().nanos_since_epoch() - progress.started_nanos) as f64 / 1e9;
@@ -704,11 +720,17 @@ pub fn is_episode_loading(store_id: &StoreId) -> bool {
     let Some(index) = queue_index_from_recording_id(store_id.recording_id().as_str()) else {
         return false;
     };
+    let app_id = store_id.application_id().as_str();
 
-    CURRENTLY_LOADING
+    if CURRENTLY_LOADING.lock().get(app_id) == Some(&index) {
+        return true;
+    }
+
+    // Also loading: an artifact fetch running concurrently with other items.
+    ACTIVE_STREAMS
         .lock()
-        .get(store_id.application_id().as_str())
-        == Some(&index)
+        .get(app_id)
+        .is_some_and(|state| state.artifact_progress.lock().contains_key(&index))
 }
 
 /// Whether a remote dataset stream is currently active for this application id.
@@ -1316,6 +1338,21 @@ async fn stream_items<S: DatasetStore>(
         return Ok(());
     }
 
+    // ---- Artifact prefetch: pour in everything already converted, in parallel ----
+    if let Some(artifacts) = &rrd_artifacts
+        && !prefetch_artifacts(
+            &guard,
+            &remote,
+            artifacts,
+            &application_id,
+            &mut pending,
+            tx,
+        )
+        .await
+    {
+        return Ok(()); // Receiver hung up.
+    }
+
     // ---- Fetch + convert items, user-selected ones first ----
     // Failed items are retried in later rounds (transient network errors are common through
     // proxies); only after a few attempts is an item given up on, with a visible marker.
@@ -1393,6 +1430,20 @@ async fn stream_items<S: DatasetStore>(
             Some(MORE_SENTINEL) => {
                 if !announce_next_batch(&mut pending, &mut announced)? {
                     return Ok(());
+                }
+                // The freshly announced batch gets the same parallel artifact treatment.
+                if let Some(artifacts) = &rrd_artifacts
+                    && !prefetch_artifacts(
+                        &guard,
+                        &remote,
+                        artifacts,
+                        &application_id,
+                        &mut pending,
+                        tx,
+                    )
+                    .await
+                {
+                    return Ok(()); // Receiver hung up.
                 }
                 continue;
             }
@@ -1513,6 +1564,108 @@ async fn stream_items<S: DatasetStore>(
     }
 }
 
+/// Byte-range parallelism per artifact while several items prefetch at once (the item
+/// count itself is configurable — see [`crate::rrd_artifacts::resolve_prefetch_items`]).
+/// Browsers allow ~6 concurrent connections per host, so `items × chunks` should stay
+/// in that ballpark.
+#[cfg(target_arch = "wasm32")]
+const ARTIFACT_PREFETCH_CHUNKS: usize = 2;
+#[cfg(not(target_arch = "wasm32"))]
+const ARTIFACT_PREFETCH_CHUNKS: usize = 4;
+
+/// The serial loop fetches one artifact at a time, so it may use the whole budget itself.
+const ARTIFACT_SERIAL_CHUNKS: usize = 6;
+
+/// Fetch every announced-and-pending item that already has an rrd artifact, several at once.
+///
+/// This is the payoff of the artifacts store: re-opening a dataset whose episodes were
+/// all converted before turns into a burst of parallel plain downloads — no conversion,
+/// no one-item queue. Only afterwards does the serial loop start downloading sources and
+/// converting whatever is left. Items that miss (stale, error) simply stay pending.
+///
+/// Returns `false` if the receiver hung up (the stream should end).
+async fn prefetch_artifacts(
+    guard: &StreamGuard,
+    remote: &RemoteDataset,
+    artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
+    application_id: &ApplicationId,
+    pending: &mut BTreeSet<usize>,
+    tx: &LogSender,
+) -> bool {
+    let candidates: Vec<usize> = {
+        let urls = guard.state.rrd_artifact_urls.lock();
+        let parked = guard.state.parked.lock();
+        pending
+            .iter()
+            .copied()
+            .filter(|index| {
+                urls.contains_key(index)
+                    && !parked.contains(index)
+                    && !item_cancelled(&guard.state, *index)
+            })
+            .collect()
+    };
+    if candidates.is_empty() {
+        return true;
+    }
+
+    re_log::debug!(
+        "Prefetching {} ready-made rrds from the artifacts store\nDataset: {application_id}",
+        candidates.len()
+    );
+
+    use futures_util::stream::StreamExt as _;
+    let state: &StreamState = &guard.state;
+    let id_prefix = remote.recording_id_prefix();
+    let mut tasks = futures_util::stream::iter(candidates.into_iter().map(|index| async move {
+        let result = async {
+            let Some(fingerprint) = episode_artifact_fingerprint(remote, EpisodeIndex(index))
+            else {
+                return Ok(None); // No fingerprint (e.g. loose files): not artifact material.
+            };
+            let key = crate::rrd_artifacts::object_key(
+                &artifacts.location.prefix,
+                application_id.as_str(),
+                &format!("{id_prefix}{index}"),
+            );
+            try_load_rrd_artifact(
+                artifacts,
+                &key,
+                &fingerprint,
+                state,
+                index,
+                ARTIFACT_PREFETCH_CHUNKS,
+                tx,
+            )
+            .await
+        }
+        .await;
+        (index, result)
+    }))
+    .buffer_unordered(crate::rrd_artifacts::resolve_prefetch_items(
+        artifacts.prefetch_items,
+    ));
+
+    while let Some((index, result)) = tasks.next().await {
+        match result {
+            Ok(Some(true)) => {
+                pending.remove(&index); // Loaded — the serial loop can skip it entirely.
+            }
+            Ok(Some(false)) => return false, // Receiver hung up.
+            Ok(None) => {} // Miss or stale: the serial loop downloads + converts it.
+            Err(err) => {
+                if state.pause.is_cancelled() {
+                    return true; // The caller's loop top handles cancellation.
+                }
+                re_log::debug!(
+                    "Artifact prefetch failed (item {index} stays queued): {err:#}\nDataset: {application_id}"
+                );
+            }
+        }
+    }
+    true
+}
+
 /// Fetch, convert, and send one item. Returns false if the receiver hung up.
 #[expect(clippy::too_many_arguments)]
 async fn load_one_item<S: DatasetStore>(
@@ -1543,7 +1696,17 @@ async fn load_one_item<S: DatasetStore>(
     });
 
     if let Some((artifacts, key, expected)) = &artifact_ctx {
-        match try_load_rrd_artifact(artifacts, key, expected, pause, tx).await {
+        match try_load_rrd_artifact(
+            artifacts,
+            key,
+            expected,
+            state,
+            index,
+            ARTIFACT_SERIAL_CHUNKS,
+            tx,
+        )
+        .await
+        {
             Ok(Some(sent_ok)) => {
                 state
                     .rrd_artifact_urls
@@ -1808,14 +1971,27 @@ fn episode_artifact_fingerprint(remote: &RemoteDataset, episode: EpisodeIndex) -
     }
 }
 
+/// Was this specific item's recording closed by the user (and not yet processed)?
+///
+/// Concurrent artifact fetches must check this themselves: the shared skip flag only
+/// covers the single item the serial loop is on.
+fn item_cancelled(state: &StreamState, index: usize) -> bool {
+    state.cancels.lock().contains(&index)
+}
+
 /// Serve an episode from the rrd artifacts store, if a fresh entry exists.
+///
+/// `chunk_parallel` is how many byte ranges of the object to fetch at once — keep
+/// `items × chunks` within the browser's ~6-connections-per-host budget.
 ///
 /// `Ok(Some(sent_ok))`: hit — the artifact was fetched and replayed. `Ok(None)`: miss or stale.
 async fn try_load_rrd_artifact(
     artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
     key: &str,
     expected_fingerprint: &str,
-    pause: &PauseState,
+    state: &StreamState,
+    index: usize,
+    chunk_parallel: usize,
     tx: &LogSender,
 ) -> anyhow::Result<Option<bool>> {
     let client = crate::tos::TosClient::new(
@@ -1840,34 +2016,62 @@ async fn try_load_rrd_artifact(
         return Ok(None); // A truncated upload — treat as a miss and re-convert.
     }
 
-    // Hit: fetch the ready-made rrd as parallel byte ranges. One connection is throttled by
+    // Per-item progress entry for the UI; removed again on every exit path.
+    state.artifact_progress.lock().insert(
+        index,
+        ItemProgress {
+            started_nanos: re_log_types::Timestamp::now().nanos_since_epoch(),
+            bytes_done: 0,
+            bytes_total: Some(head.size),
+            phase: LoadPhase::Downloading,
+            kind: DownloadKind::RrdArtifact,
+        },
+    );
+    let result =
+        fetch_and_replay_artifact(&client, key, head.size, state, index, chunk_parallel, tx).await;
+    state.artifact_progress.lock().remove(&index);
+    result
+}
+
+/// The fetch+replay half of [`try_load_rrd_artifact`] (split off so the progress-map
+/// entry is cleaned up on every exit path).
+async fn fetch_and_replay_artifact(
+    client: &crate::tos::TosClient,
+    key: &str,
+    size: u64,
+    state: &StreamState,
+    index: usize,
+    chunk_parallel: usize,
+    tx: &LogSender,
+) -> anyhow::Result<Option<bool>> {
+    let pause = &state.pause;
+
+    // Fetch the ready-made rrd as parallel byte ranges. One connection is throttled by
     // TCP slow start and per-stream limits; several slices at once multiply the throughput.
     // Small chunks double as progress granularity — the counter ticks per finished slice.
     const CHUNK: u64 = 4 * 1024 * 1024;
-    const PARALLEL: usize = 6; // browsers allow ~6 concurrent connections per host
-
-    pause.begin_item_progress(Some(head.size), DownloadKind::RrdArtifact);
 
     use futures_util::stream::StreamExt as _;
-    let n_chunks = usize::try_from(head.size.div_ceil(CHUNK)).unwrap_or_default();
-    let client = &client;
+    let n_chunks = usize::try_from(size.div_ceil(CHUNK)).unwrap_or_default();
     let mut fetches = futures_util::stream::iter((0..n_chunks).map(|i| async move {
         pause.wait_while_paused().await;
-        if pause.interrupted() {
+        if pause.interrupted() || item_cancelled(state, index) {
             anyhow::bail!("Download interrupted\nObject: {key}");
         }
         let start = i as u64 * CHUNK;
         // `get_object` re-requests short (proxy-truncated) responses, so the
         // slice comes back complete or errors.
         let slice = client
-            .get_object(key, Some(start..head.size.min(start + CHUNK)))
+            .get_object(key, Some(start..size.min(start + CHUNK)))
             .await?;
-        pause.add_item_progress(slice.len() as u64);
+        if let Some(progress) = state.artifact_progress.lock().get_mut(&index) {
+            progress.bytes_done += slice.len() as u64;
+        }
         Ok((i, slice))
     }))
-    .buffer_unordered(PARALLEL);
+    .buffer_unordered(chunk_parallel.max(1));
 
-    let mut bytes = vec![0u8; usize::try_from(head.size).unwrap_or_default()];
+    let mut bytes = vec![0u8; usize::try_from(size).unwrap_or_default()];
     while let Some(slice) = fetches.next().await {
         let (i, slice) = slice?;
         let start = i * usize::try_from(CHUNK).unwrap_or_default();
@@ -1883,10 +2087,12 @@ async fn try_load_rrd_artifact(
 
     re_log::debug!(
         "Serving episode from the rrd artifacts store ({})\nObject: {key}",
-        re_format::format_bytes(head.size as _)
+        re_format::format_bytes(size as _)
     );
 
-    if pause.interrupted() {
+    // A close that raced with the end of the download must not send: sending would
+    // resurrect the closed recording.
+    if pause.interrupted() || item_cancelled(state, index) {
         anyhow::bail!("Download interrupted");
     }
     for msg in re_log_encoding::Decoder::decode_lazy(std::io::Cursor::new(bytes)) {

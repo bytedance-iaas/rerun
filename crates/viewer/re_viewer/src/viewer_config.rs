@@ -22,6 +22,9 @@ pub struct ViewerConfig {
     /// `""`/`"off"` disables the artifacts store.
     #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
     pub tos_rrd_artifacts_url: String,
+
+    /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
+    pub rrd_artifacts_prefetch: usize,
 }
 
 impl Default for ViewerConfig {
@@ -33,6 +36,7 @@ impl Default for ViewerConfig {
             tos_secret_key: String::new(),
             hf_token: String::new(),
             tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            rrd_artifacts_prefetch: 0,
         }
     }
 }
@@ -61,6 +65,7 @@ impl ViewerConfig {
                 secret_key: self.tos_secret_key.clone(),
             },
             write_back,
+            prefetch_items: self.rrd_artifacts_prefetch,
         })
     }
 }
@@ -107,6 +112,11 @@ pub fn request() {
         env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
         env_override(&mut parsed.hf_token, "HF_TOKEN");
         env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+        if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
+            && let Ok(n) = value.trim().parse()
+        {
+            parsed.rrd_artifacts_prefetch = n;
+        }
 
         *CONFIG.lock() = Some(parsed);
     }

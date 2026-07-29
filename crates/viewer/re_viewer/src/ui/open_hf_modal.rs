@@ -27,6 +27,9 @@ struct ServerHfConfig {
     /// `""`/`"off"` disables the artifacts store.
     #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
     tos_rrd_artifacts_url: String,
+
+    /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
+    rrd_artifacts_prefetch: usize,
 }
 
 impl Default for ServerHfConfig {
@@ -39,6 +42,7 @@ impl Default for ServerHfConfig {
             tos_secret_key: String::new(),
             // The artifacts store is on by default, even with no config file at all.
             tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            rrd_artifacts_prefetch: 0,
         }
     }
 }
@@ -63,6 +67,7 @@ impl ServerHfConfig {
                 secret_key: self.tos_secret_key.clone(),
             },
             write_back,
+            prefetch_items: self.rrd_artifacts_prefetch,
         })
     }
 }
@@ -142,6 +147,11 @@ impl OpenHfModal {
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+            if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
+                && let Ok(n) = value.trim().parse()
+            {
+                parsed.rrd_artifacts_prefetch = n;
+            }
 
             *self.server_config.lock() = Some(parsed);
         }
