@@ -668,7 +668,7 @@ pub fn entity_db_button_ui(
 
     // Live progress in the row itself: big downloads are agony without a sense of how far
     // along they are. The full name would push the numbers past the panel's truncation, so
-    // while loading the row shows a compact "<name> · downloading 43% · ~12s left" instead
+    // while loading the row shows a compact "<name> · downloading mp4 43% · ~12s left" instead
     // (the full name returns when the item finishes). The phase word matters: a bare
     // percentage reads as stalled during the conversion that follows the download.
     if let Some(progress) = &download_progress {
@@ -684,13 +684,19 @@ pub fn entity_db_button_ui(
                 write!(title, " · converting…").ok();
             }
             LoadPhase::Downloading => {
+                // Name the file type ("downloading parquet"): it tells apart fetching
+                // sources for a conversion from fetching a ready-made rrd artifact.
+                write!(title, " · downloading").ok();
+                if let Some(kind) = progress.kind.label() {
+                    write!(title, " {kind}").ok();
+                }
                 if let Some(total) = progress.bytes_total {
                     let pct = (progress.bytes_done as f64 / total.max(1) as f64 * 100.0).min(100.0);
-                    write!(title, " · downloading {pct:.0}%").ok();
+                    write!(title, " {pct:.0}%").ok();
                 } else {
                     write!(
                         title,
-                        " · downloading {}",
+                        " {}",
                         re_format::format_bytes(progress.bytes_done as _)
                     )
                     .ok();
@@ -842,6 +848,13 @@ pub fn entity_db_button_ui(
 
     if let Some(reason) = &episode_failure {
         response = response.on_hover_text(reason.clone());
+    }
+
+    // A converted copy of this episode lives in the rrd artifacts store: show where. The address is
+    // copyable via the context menu ("Copy rrd artifact address").
+    if let Some(artifact_url) = re_data_source::lerobot_remote::episode_rrd_artifact_url(&store_id)
+    {
+        response = response.on_hover_text(format!("Rrd artifact: {artifact_url}"));
     }
 
     if let Some(progress) = &download_progress {

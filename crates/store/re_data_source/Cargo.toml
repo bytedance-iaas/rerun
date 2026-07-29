@@ -27,7 +27,7 @@ re_importer.workspace = true
 re_format.workspace = true
 re_grpc_client.workspace = true
 re_log_channel.workspace = true
-re_log_encoding = { workspace = true, features = ["decoder", "stream_from_http"] }
+re_log_encoding = { workspace = true, features = ["decoder", "encoder", "stream_from_http"] }
 re_log_types.workspace = true
 re_log.workspace = true
 re_redap_client.workspace = true
@@ -39,6 +39,7 @@ anyhow.workspace = true
 bytes.workspace = true
 parking_lot.workspace = true
 ehttp.workspace = true
+futures-util.workspace = true
 hmac.workspace = true
 itertools.workspace = true
 rayon.workspace = true

@@ -28,6 +28,68 @@ fn credentials() -> TosCredentials {
 
 const TEST_DATASET: &str = "tos://physical-ai-rerun-test/dataset-1/so101-pick-place/";
 
+/// End-to-end round-trip of the rrd-artifacts primitives against the real bucket:
+/// PUT with fingerprint metadata → HEAD returns it → GET returns the bytes.
+#[test]
+#[ignore = "needs real TOS credentials via TOS_ACCESS_KEY / TOS_SECRET_KEY"]
+fn tos_rrd_artifacts_roundtrip() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        use re_data_source::rrd_artifacts;
+
+        let location = TosLocation::parse(rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL).unwrap();
+        let client = TosClient::new(credentials(), location.bucket.clone());
+
+        let key = format!("{}_selftest/roundtrip.rrd", location.prefix);
+        let payload = b"rrd-artifacts self test payload".to_vec();
+        let fingerprint = "test-fingerprint-123";
+
+        client
+            .put_object(
+                &key,
+                payload.clone(),
+                &[
+                    (
+                        rrd_artifacts::FINGERPRINT_METADATA_KEY.to_owned(),
+                        fingerprint.to_owned(),
+                    ),
+                    (
+                        rrd_artifacts::SOURCE_URL_METADATA_KEY.to_owned(),
+                        "tos://selftest/".to_owned(),
+                    ),
+                ],
+            )
+            .await
+            .unwrap();
+        println!("PUT ok: {key}");
+
+        let head = client.head_object(&key).await.unwrap().expect("must exist");
+        println!(
+            "HEAD ok: {} bytes, metadata: {:?}",
+            head.size, head.metadata
+        );
+        assert_eq!(head.size, payload.len() as u64);
+        let stored_fingerprint = head
+            .metadata
+            .iter()
+            .find(|(name, _)| name == rrd_artifacts::FINGERPRINT_METADATA_KEY)
+            .map(|(_, value)| value.as_str());
+        assert_eq!(stored_fingerprint, Some(fingerprint));
+
+        let fetched = client.get_object(&key, None).await.unwrap();
+        assert_eq!(fetched, payload);
+
+        // A key that does not exist is a clean miss, not an error.
+        let missing = client
+            .head_object(&format!("{}_selftest/missing.rrd", location.prefix))
+            .await
+            .unwrap();
+        assert!(missing.is_none());
+
+        println!("rrd-artifacts roundtrip ok");
+    });
+}
+
 #[test]
 #[ignore = "needs real TOS credentials via TOS_ACCESS_KEY / TOS_SECRET_KEY"]
 fn tos_list_and_get() {
@@ -65,6 +127,7 @@ fn tos_lerobot_stream_smoke() {
     let source = TosDatasetSource {
         location: TosLocation::parse(TEST_DATASET).unwrap(),
         credentials: credentials(),
+        rrd_artifacts: None,
     };
     let rx = stream_lerobot_dataset(source);
 

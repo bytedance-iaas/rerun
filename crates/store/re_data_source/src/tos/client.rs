@@ -6,9 +6,12 @@ use sha2::{Digest as _, Sha256};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// SHA-256 of an empty payload (all requests we make are bodyless GETs).
+/// SHA-256 of an empty payload (GET/HEAD requests are bodyless).
 const EMPTY_PAYLOAD_SHA256: &str =
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+/// Header prefix for S3 user metadata (where the rrd-artifacts fingerprint lives).
+pub const USER_METADATA_PREFIX: &str = "x-amz-meta-";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TosCredentials {
@@ -26,6 +29,18 @@ pub struct TosCredentials {
 pub struct ListedObject {
     pub key: String,
     pub size: u64,
+
+    /// The object's `ETag` (content hash for simple uploads) — feeds source fingerprints.
+    pub etag: Option<String>,
+}
+
+/// Size and user metadata of an object, from a HEAD request.
+#[derive(Clone, Debug)]
+pub struct ObjectHead {
+    pub size: u64,
+
+    /// User metadata (`x-amz-meta-*`), with the prefix stripped and names lowercased.
+    pub metadata: Vec<(String, String)>,
 }
 
 pub struct TosClient {
@@ -127,7 +142,7 @@ impl TosClient {
         }
 
         let response = self
-            .signed_request(&format!("/{key}"), &[], extra_headers)
+            .signed_request("GET", &format!("/{key}"), &[], extra_headers, Vec::new())
             .await?;
 
         if !(response.status == 200 || response.status == 206) {
@@ -157,7 +172,9 @@ impl TosClient {
             }
             query.sort();
 
-            let response = self.signed_request("/", &query, Vec::new()).await?;
+            let response = self
+                .signed_request("GET", "/", &query, Vec::new(), Vec::new())
+                .await?;
             if response.status != 200 {
                 anyhow::bail!(
                     "ListObjectsV2 failed with HTTP {}: {}\nBucket: {}",
@@ -182,15 +199,88 @@ impl TosClient {
         }
     }
 
-    /// Fire a SigV4-signed GET request.
+    /// HEAD an object: its size and user metadata, or `None` if it does not exist.
+    pub async fn head_object(&self, key: &str) -> anyhow::Result<Option<ObjectHead>> {
+        let response = self
+            .signed_request("HEAD", &format!("/{key}"), &[], Vec::new(), Vec::new())
+            .await?;
+
+        if response.status == 404 {
+            return Ok(None);
+        }
+        if response.status != 200 {
+            anyhow::bail!("HEAD failed with HTTP {}\nObject: {key}", response.status);
+        }
+
+        let size = response
+            .headers
+            .get("content-length")
+            .and_then(|len| len.parse().ok())
+            .unwrap_or(0);
+        let metadata = response
+            .headers
+            .headers
+            .iter()
+            .filter_map(|(name, value)| {
+                let name = name.to_ascii_lowercase();
+                name.strip_prefix(USER_METADATA_PREFIX)
+                    .map(|stripped| (stripped.to_owned(), value.clone()))
+            })
+            .collect();
+
+        Ok(Some(ObjectHead { size, metadata }))
+    }
+
+    /// PUT an object in a single request, with user metadata (`x-amz-meta-<key>: value`).
+    ///
+    /// Good for episode-sized files; no multipart support.
+    pub async fn put_object(
+        &self,
+        key: &str,
+        bytes: Vec<u8>,
+        metadata: &[(String, String)],
+    ) -> anyhow::Result<()> {
+        let extra_headers = metadata
+            .iter()
+            .map(|(name, value)| {
+                (
+                    format!("{USER_METADATA_PREFIX}{}", name.to_ascii_lowercase()),
+                    value.clone(),
+                )
+            })
+            .collect();
+
+        let response = self
+            .signed_request("PUT", &format!("/{key}"), &[], extra_headers, bytes)
+            .await?;
+
+        if response.status != 200 {
+            anyhow::bail!(
+                "PUT failed with HTTP {}: {}\nObject: {key}",
+                response.status,
+                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
+            );
+        }
+        Ok(())
+    }
+
+    /// Fire a SigV4-signed request.
     async fn signed_request(
         &self,
+        method: &str,               // "GET", "HEAD" or "PUT"
         path: &str,                 // must start with `/`
         query: &[(String, String)], // must be sorted by key
         extra_headers: Vec<(String, String)>,
+        body: Vec<u8>,
     ) -> anyhow::Result<ehttp::Response> {
         let host = self.host();
         let (amz_date, date) = amz_timestamps();
+
+        let payload_sha256 = if body.is_empty() {
+            EMPTY_PAYLOAD_SHA256.to_owned()
+        } else {
+            hex(&Sha256::digest(&body))
+        };
 
         let canonical_query = query
             .iter()
@@ -198,13 +288,10 @@ impl TosClient {
             .collect::<Vec<_>>()
             .join("&");
 
-        // Signed headers: host + x-amz-* + any extra (e.g. range), sorted by name.
+        // Signed headers: host + x-amz-* + any extra (e.g. range, metadata), sorted by name.
         let mut headers: Vec<(String, String)> = vec![
             ("host".to_owned(), host.clone()),
-            (
-                "x-amz-content-sha256".to_owned(),
-                EMPTY_PAYLOAD_SHA256.to_owned(),
-            ),
+            ("x-amz-content-sha256".to_owned(), payload_sha256.clone()),
             ("x-amz-date".to_owned(), amz_date.clone()),
         ];
         headers.extend(extra_headers);
@@ -221,7 +308,7 @@ impl TosClient {
             .join(";");
 
         let canonical_request = format!(
-            "GET\n{}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{EMPTY_PAYLOAD_SHA256}",
+            "{method}\n{}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{payload_sha256}",
             uri_encode(path, false),
         );
 
@@ -252,7 +339,20 @@ impl TosClient {
             format!("{}://{host}{path}?{canonical_query}", self.scheme())
         };
 
-        let mut request = ehttp::Request::get(&url);
+        let mut request = match method {
+            "GET" => ehttp::Request::get(&url),
+            "HEAD" => {
+                let mut request = ehttp::Request::get(&url);
+                request.method = ehttp::Method::HEAD;
+                request
+            }
+            "PUT" => {
+                let mut request = ehttp::Request::post(&url, body);
+                request.method = ehttp::Method::PUT;
+                request
+            }
+            other => anyhow::bail!("Unsupported method: {other}"),
+        };
         for (k, v) in &headers {
             if k != "host" {
                 // `host` is set by the HTTP stack itself.
@@ -364,9 +464,13 @@ fn parse_list_objects(xml: &str) -> Vec<ListedObject> {
             xml_tag_content(entry, "Key"),
             xml_tag_content(entry, "Size").and_then(|s| s.parse().ok()),
         ) {
+            // ETags come XML-escaped and quoted (`&quot;abc123&quot;`); strip both.
+            let etag = xml_tag_content(entry, "ETag")
+                .map(|etag| xml_unescape(&etag).trim_matches('"').to_owned());
             objects.push(ListedObject {
                 key: xml_unescape(&key),
                 size,
+                etag,
             });
         }
 
@@ -422,7 +526,7 @@ mod tests {
         let xml = "\
 <?xml version=\"1.0\"?>
 <ListBucketResult>
-  <Contents><Key>meta/info.json</Key><Size>123</Size></Contents>
+  <Contents><Key>meta/info.json</Key><Size>123</Size><ETag>&quot;abc123&quot;</ETag></Contents>
   <Contents><Key>data/a&amp;b.parquet</Key><Size>4567</Size></Contents>
 </ListBucketResult>";
 
@@ -430,9 +534,12 @@ mod tests {
         assert_eq!(objects.len(), 2);
         assert_eq!(objects[0].key, "meta/info.json");
         assert_eq!(objects[0].size, 123);
+        // The ETag is unescaped and unquoted.
+        assert_eq!(objects[0].etag.as_deref(), Some("abc123"));
         // The key is XML-unescaped.
         assert_eq!(objects[1].key, "data/a&b.parquet");
         assert_eq!(objects[1].size, 4567);
+        assert_eq!(objects[1].etag, None);
     }
 
     #[test]

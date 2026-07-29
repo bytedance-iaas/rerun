@@ -11,10 +11,60 @@ use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 ///
 /// The deployment can hold a default token (injected as a docker secret); it is used unless the
 /// user opts into providing their own. The token is never shown in the dialog.
-#[derive(Default, Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(default)]
 struct ServerHfConfig {
     hf_token: String,
+
+    // The rrd artifacts store lives in a TOS bucket regardless of the dataset's source, so the HF dialog
+    // needs the TOS connection settings too (same keys, same config file).
+    tos_endpoint: String,
+    tos_region: String,
+    tos_access_key: String,
+    tos_secret_key: String,
+
+    /// Where converted rrds are stored; an absent key means the default bucket,
+    /// `""`/`"off"` disables the artifacts store.
+    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    tos_rrd_artifacts_url: String,
+}
+
+impl Default for ServerHfConfig {
+    fn default() -> Self {
+        Self {
+            hf_token: String::new(),
+            tos_endpoint: String::new(),
+            tos_region: String::new(),
+            tos_access_key: String::new(),
+            tos_secret_key: String::new(),
+            // The artifacts store is on by default, even with no config file at all.
+            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+        }
+    }
+}
+
+impl ServerHfConfig {
+    /// The resolved rrd-artifacts target — `None` when disabled or without TOS credentials.
+    fn rrd_artifacts(
+        &self,
+        write_back: bool,
+    ) -> Option<re_data_source::rrd_artifacts::RrdArtifactsConfig> {
+        let location =
+            re_data_source::rrd_artifacts::parse_artifacts_url(&self.tos_rrd_artifacts_url)?;
+        if self.tos_access_key.is_empty() || self.tos_secret_key.is_empty() {
+            return None; // No credentials for the artifacts bucket: silently skip.
+        }
+        Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
+            location,
+            credentials: re_data_source::tos::TosCredentials {
+                endpoint: self.tos_endpoint.clone(),
+                region: self.tos_region.clone(),
+                access_key: self.tos_access_key.clone(),
+                secret_key: self.tos_secret_key.clone(),
+            },
+            write_back,
+        })
+    }
 }
 
 /// Dialog for opening a `LeRobot` dataset stored on Hugging Face.
@@ -28,6 +78,9 @@ pub struct OpenHfModal {
     /// Show the token input and use it instead of the server-side default token.
     use_custom_token: bool,
     token: String,
+
+    /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
+    artifact_upload_disabled: bool,
 
     /// Filled asynchronously from the server's `/tos-config.json` (web only).
     server_config: Arc<Mutex<Option<ServerHfConfig>>>,
@@ -76,11 +129,19 @@ impl OpenHfModal {
                 .and_then(|bytes| serde_json::from_slice::<ServerHfConfig>(&bytes).ok())
                 .unwrap_or_default();
 
-            if let Ok(value) = std::env::var("HF_TOKEN")
-                && !value.is_empty()
-            {
-                parsed.hf_token = value;
+            fn env_override(field: &mut String, key: &str) {
+                if let Ok(value) = std::env::var(key)
+                    && !value.is_empty()
+                {
+                    *field = value;
+                }
             }
+            env_override(&mut parsed.hf_token, "HF_TOKEN");
+            env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
+            env_override(&mut parsed.tos_region, "TOS_REGION");
+            env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
+            env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
+            env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
 
             *self.server_config.lock() = Some(parsed);
         }
@@ -130,6 +191,18 @@ impl OpenHfModal {
                         });
                 }
 
+                // Converted episodes are uploaded to a shared rrd artifacts store (a TOS bucket) by
+                // default. Needs TOS credentials — without them the upload silently no-ops,
+                // but the checkbox still communicates the intent.
+                if let Some(artifacts_location) =
+                    re_data_source::rrd_artifacts::parse_artifacts_url(&server_config.tos_rrd_artifacts_url)
+                {
+                    let mut upload = !self.artifact_upload_disabled;
+                    ui.re_checkbox(&mut upload, "Upload converted rrd to the artifacts store")
+                        .on_hover_text(format!("{artifacts_location}"));
+                    self.artifact_upload_disabled = !upload;
+                }
+
                 let parsed = parse_hf_dataset_input(&self.dataset);
                 let can_open = parsed.is_some();
 
@@ -171,6 +244,8 @@ impl OpenHfModal {
                                     repo,
                                     file_path,
                                     token,
+                                    rrd_artifacts: server_config
+                                        .rrd_artifacts(!self.artifact_upload_disabled),
                                 }),
                             ));
                         }

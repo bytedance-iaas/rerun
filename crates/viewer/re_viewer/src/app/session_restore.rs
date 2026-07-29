@@ -104,6 +104,7 @@ impl App {
                             access_key: config.tos_access_key.clone(),
                             secret_key: config.tos_secret_key.clone(),
                         },
+                        rrd_artifacts: config.rrd_artifacts(true),
                     })
                 }
 
@@ -117,6 +118,7 @@ impl App {
                         repo,
                         file_path,
                         token: config.hf_token.clone(),
+                        rrd_artifacts: config.rrd_artifacts(true),
                     })
                 }
             };
