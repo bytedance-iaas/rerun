@@ -55,6 +55,19 @@ impl OpenTosModal {
         self.fetch_server_config();
     }
 
+    /// Open with the URL and non-secret connection fields pre-filled (e.g. from the welcome
+    /// screen's "recently opened" list). Credentials are never pre-filled from outside.
+    pub fn open_prefilled(&mut self, url: &str, endpoint: &str, region: &str) {
+        self.url = url.to_owned();
+        if !endpoint.is_empty() {
+            self.endpoint = endpoint.to_owned();
+        }
+        if !region.is_empty() {
+            self.region = region.to_owned();
+        }
+        self.open();
+    }
+
     /// Fetch server-side defaults once per app run.
     fn fetch_server_config(&mut self) {
         if self.server_config_requested {

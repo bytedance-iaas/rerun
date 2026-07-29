@@ -40,6 +40,8 @@ mod latency_tracker;
 mod navigation;
 mod open_url_description;
 mod prefetch_chunks;
+mod recent_datasets;
+mod viewer_config;
 mod saving;
 mod screenshotter;
 mod startup_options;
