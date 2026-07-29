@@ -27,6 +27,7 @@ fn hf_cancel_stream_stops_downloads() {
         repo: HF_TEST_DATASET.to_owned(),
         file_path: None,
         token: String::new(),
+        rrd_artifacts: None,
     });
 
     // Wait until the stream is up (episodes announced ⇒ the item loop is running).
@@ -93,6 +94,7 @@ fn hf_redownload_episode() {
         repo: HF_TEST_DATASET.to_owned(),
         file_path: None,
         token: String::new(),
+        rrd_artifacts: None,
     });
 
     let ep0 = re_log_types::StoreId::recording(
@@ -166,6 +168,7 @@ fn hf_lerobot_v2_stream_smoke() {
         repo: "jesbu1/bridge_v2_lerobot".to_owned(),
         file_path: None,
         token: String::new(),
+        rrd_artifacts: None,
     });
 
     let mut store_infos = 0usize;
@@ -266,6 +269,7 @@ fn hf_mcap_repo_announces_files() {
         repo: "cortexdatalabs/MCAP-Housing".to_owned(),
         file_path: None,
         token: String::new(),
+        rrd_artifacts: None,
     });
 
     let mut announced = Vec::new();
@@ -306,6 +310,7 @@ fn hf_non_lerobot_is_rejected() {
         repo: "rerun-io/does-not-exist-4a7f".to_owned(),
         file_path: None,
         token: String::new(),
+        rrd_artifacts: None,
     });
 
     let started = Instant::now();
@@ -339,6 +344,7 @@ fn hf_lerobot_stream_smoke() {
         repo: HF_TEST_DATASET.to_owned(),
         file_path: None,
         token: String::new(),
+        rrd_artifacts: None,
     });
 
     let mut store_infos = 0usize;

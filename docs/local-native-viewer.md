@@ -53,9 +53,13 @@ Example `~/.rerun/tos-config.json`:
   "tos_region": "cn-beijing",
   "tos_access_key": "AK...",
   "tos_secret_key": "SK...",
-  "hf_token": "hf_..."
+  "hf_token": "hf_...",
+  "tos_rrd_artifacts_url": "tos://physical-ai-rerun-test/rrd-data/"
 }
 ```
+
+`tos_rrd_artifacts_url` is where converted rrd artifacts are stored (read + write-back), shared by all viewers.
+When the key is absent the default bucket above is used; set it to `"off"` (or use `TOS_RRD_ARTIFACTS_URL=off`) to disable the artifacts store.
 
 All fields are optional.
 Omit `tos_access_key`/`tos_secret_key` and the dialog will ask for credentials when you open a dataset.

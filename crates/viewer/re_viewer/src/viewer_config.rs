@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
 
 /// The deployment/user-level default connection settings. May be entirely empty.
-#[derive(Default, Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(default)]
 pub struct ViewerConfig {
     pub tos_endpoint: String,
@@ -17,11 +17,51 @@ pub struct ViewerConfig {
     pub tos_access_key: String,
     pub tos_secret_key: String,
     pub hf_token: String,
+
+    /// Where converted rrds are stored; an absent key means the default bucket,
+    /// `""`/`"off"` disables the artifacts store.
+    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    pub tos_rrd_artifacts_url: String,
+}
+
+impl Default for ViewerConfig {
+    fn default() -> Self {
+        Self {
+            tos_endpoint: String::new(),
+            tos_region: String::new(),
+            tos_access_key: String::new(),
+            tos_secret_key: String::new(),
+            hf_token: String::new(),
+            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+        }
+    }
 }
 
 impl ViewerConfig {
     pub fn has_tos_credentials(&self) -> bool {
         !self.tos_access_key.is_empty() && !self.tos_secret_key.is_empty()
+    }
+
+    /// The resolved rrd-artifacts target — `None` when disabled or without TOS credentials.
+    pub fn rrd_artifacts(
+        &self,
+        write_back: bool,
+    ) -> Option<re_data_source::rrd_artifacts::RrdArtifactsConfig> {
+        let location =
+            re_data_source::rrd_artifacts::parse_artifacts_url(&self.tos_rrd_artifacts_url)?;
+        if !self.has_tos_credentials() {
+            return None; // No credentials for the artifacts bucket: silently skip.
+        }
+        Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
+            location,
+            credentials: re_data_source::tos::TosCredentials {
+                endpoint: self.tos_endpoint.clone(),
+                region: self.tos_region.clone(),
+                access_key: self.tos_access_key.clone(),
+                secret_key: self.tos_secret_key.clone(),
+            },
+            write_back,
+        })
     }
 }
 
@@ -66,6 +106,7 @@ pub fn request() {
         env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
         env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
         env_override(&mut parsed.hf_token, "HF_TOKEN");
+        env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
 
         *CONFIG.lock() = Some(parsed);
     }

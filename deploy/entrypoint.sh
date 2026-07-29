@@ -30,7 +30,8 @@ web)
   "tos_region": "${TOS_REGION:-cn-beijing}",
   "tos_access_key": "${TOS_AK}",
   "tos_secret_key": "${TOS_SK}",
-  "hf_token": "${HF_TOKEN_VALUE}"
+  "hf_token": "${HF_TOKEN_VALUE}",
+  "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL:-tos://physical-ai-rerun-test/rrd-data/}"
 }
 EOF
     chmod 644 /run/tos-config.json

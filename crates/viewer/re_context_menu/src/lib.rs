@@ -173,6 +173,7 @@ fn action_list(
                 Box::new(ShowHideInAllViewsAction::Hide),
                 Box::new(RemoveAction),
                 Box::new(CopyEntityPathToClipboard),
+                Box::new(actions::CopyRrdArtifactUrl),
                 Box::new(TrackEntity),
             ],
             vec![

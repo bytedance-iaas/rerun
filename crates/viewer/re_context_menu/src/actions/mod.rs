@@ -10,8 +10,10 @@ pub mod show_hide_in_all_views;
 pub mod track_entity;
 
 mod copy_entity_path;
+mod copy_rrd_artifact_url;
 mod screenshot_action;
 
 pub use copy_entity_path::CopyEntityPathToClipboard;
+pub use copy_rrd_artifact_url::CopyRrdArtifactUrl;
 pub use screenshot_action::ScreenshotAction;
 pub use track_entity::TrackEntity;
