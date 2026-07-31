@@ -10,7 +10,7 @@ and produce basic dataset-level results.
         -> serve so the Viewer can browse all 5 episodes at the dataset level
 
 Install:  pip install "rerun-sdk[datafusion]" lerobot pandas pyarrow
-Run:      python lerobot_aloha_review.py
+Run:      python lerobot_dataset_review.py
 Then:     rerun rerun+http://127.0.0.1:51234
 
 Verified on rerun-sdk 0.33.0. `aloha_static_coffee`: 50 eps, 50 fps,
