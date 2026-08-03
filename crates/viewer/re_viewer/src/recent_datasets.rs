@@ -22,6 +22,7 @@ pub struct RecentDataset {
 
     /// TOS only (non-secret connection info, so re-opening needs no typing).
     pub endpoint: String,
+
     /// TOS only.
     pub region: String,
 
@@ -131,5 +132,16 @@ mod tests {
     fn display_name_is_last_segment() {
         assert_eq!(entry("tos://bucket/data/set-1/", 0).display_name(), "set-1");
         assert_eq!(entry("hf://org/name", 0).display_name(), "name");
+    }
+
+    #[test]
+    fn relative_time_labels() {
+        assert_eq!(relative_time_label(100, 130), "just now");
+        assert_eq!(relative_time_label(0, 5 * 60), "5 min ago");
+        assert_eq!(relative_time_label(0, 3 * 60 * 60), "3 h ago");
+        assert_eq!(relative_time_label(0, 30 * 60 * 60), "yesterday");
+        assert_eq!(relative_time_label(0, 3 * 24 * 60 * 60), "3 days ago");
+        // A clock that went backwards must not underflow.
+        assert_eq!(relative_time_label(100, 50), "just now");
     }
 }
