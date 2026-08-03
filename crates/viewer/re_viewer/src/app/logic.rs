@@ -51,6 +51,9 @@ impl App {
             self.prefetch_chunks(&mut store_hub);
         }
 
+        // Once at startup: re-open the datasets that were open when the viewer last shut down.
+        self.maybe_restore_session(&store_hub, egui_ctx);
+
         self.run_pending_system_commands(&mut store_hub, egui_ctx);
 
         {

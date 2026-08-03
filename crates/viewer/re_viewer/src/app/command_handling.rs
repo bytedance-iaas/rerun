@@ -507,6 +507,7 @@ impl App {
             }
 
             SystemCommand::LoadDataSource(data_source) => {
+                self.remember_recent_dataset(&data_source);
                 self.load_data_source(store_hub, egui_ctx, &data_source);
             }
 
