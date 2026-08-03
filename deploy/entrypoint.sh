@@ -26,13 +26,11 @@ web)
     # unless the user opts into "Use non-default AK/SK" in the dialog.
     cat > /run/tos-config.json <<EOF
 {
-  "endpoint": "${TOS_ENDPOINT:-https://tos-s3-cn-beijing.volces.com}",
-  "region": "${TOS_REGION:-cn-beijing}",
-  "accessKey": "${TOS_AK}",
-  "secretKey": "${TOS_SK}",
-  "defaultUrl": "${TOS_DEFAULT_URL:-}",
-  "hfToken": "${HF_TOKEN_VALUE}",
-  "hfDefaultUrl": "${HF_DEFAULT_URL:-}"
+  "tos_endpoint": "${TOS_ENDPOINT:-https://tos-s3-cn-beijing.volces.com}",
+  "tos_region": "${TOS_REGION:-cn-beijing}",
+  "tos_access_key": "${TOS_AK}",
+  "tos_secret_key": "${TOS_SK}",
+  "hf_token": "${HF_TOKEN_VALUE}"
 }
 EOF
     chmod 644 /run/tos-config.json

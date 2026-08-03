@@ -119,7 +119,7 @@ impl DatasetStore for HfStore {
                 request.headers.insert(&name, &value);
             }
 
-            let response = ehttp::fetch_async(request)
+            let response = crate::http_client::fetch_async(request)
                 .await
                 .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))?;
 
@@ -155,9 +155,11 @@ impl DatasetStore for HfStore {
     }
 
     async fn file_size(&self, rel_path: &str) -> anyhow::Result<u64> {
+        // Percent-encode the path: file names with spaces etc. are invalid in a raw URI.
         let url = format!(
-            "https://huggingface.co/datasets/{}/resolve/main/{rel_path}",
-            self.source.repo
+            "https://huggingface.co/datasets/{}/resolve/main/{}",
+            self.source.repo,
+            crate::tos::client::uri_encode(rel_path, false)
         );
 
         let mut request = ehttp::Request::get(&url);
@@ -166,7 +168,7 @@ impl DatasetStore for HfStore {
             request.headers.insert(&name, &value);
         }
 
-        let response = ehttp::fetch_async(request)
+        let response = crate::http_client::fetch_async(request)
             .await
             .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))?;
 
@@ -186,9 +188,11 @@ impl DatasetStore for HfStore {
     }
 
     async fn get_range_once(&self, rel_path: &str, range: Range<u64>) -> anyhow::Result<Vec<u8>> {
+        // Percent-encode the path: file names with spaces etc. are invalid in a raw URI.
         let url = format!(
-            "https://huggingface.co/datasets/{}/resolve/main/{rel_path}",
-            self.source.repo
+            "https://huggingface.co/datasets/{}/resolve/main/{}",
+            self.source.repo,
+            crate::tos::client::uri_encode(rel_path, false)
         );
 
         let mut request = ehttp::Request::get(&url);
@@ -201,7 +205,7 @@ impl DatasetStore for HfStore {
             request.headers.insert(&name, &value);
         }
 
-        let response = ehttp::fetch_async(request)
+        let response = crate::http_client::fetch_async(request)
             .await
             .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))?;
 
@@ -246,6 +250,32 @@ pub fn stream_lerobot_dataset(source: HfDatasetSource) -> LogReceiver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// End-to-end HEAD of a real file whose name contains spaces, exercising the URI
+    /// percent-encoding (raw spaces are rejected by the native HTTP stack as an invalid URI).
+    ///
+    /// Ignored by default (network access); run manually:
+    ///
+    /// ```text
+    /// cargo test -p re_data_source spaced_filename -- --ignored --nocapture
+    /// ```
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    #[ignore = "requires network access"]
+    async fn spaced_filename_head_succeeds() {
+        let store = HfStore {
+            source: HfDatasetSource {
+                repo: "cortexdatalabs/MCAP-Housing".to_owned(),
+                file_path: None,
+                token: String::new(),
+            },
+        };
+        let size = store
+            .file_size("Filling water bottles.mcap")
+            .await
+            .expect("HEAD of a spaced filename failed");
+        assert!(size > 0, "expected a non-zero reported size");
+    }
 
     #[test]
     fn test_parse_hf_dataset_input() {

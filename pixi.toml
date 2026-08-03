@@ -172,6 +172,12 @@ rerun-build = "cargo build --package rerun-cli --no-default-features --features 
 # Compile `rerun-cli` without the web-viewer.
 rerun-build-release = "cargo build --package rerun-cli --release --no-default-features --features release_no_web_viewer"
 
+# Build a standalone local native viewer: the exact same viewer as the web/cloud builds
+# (shared `re_viewer` core, TOS/Hugging Face data sources included), but meant to run directly
+# on a user's own machine with no cloud resources. Outputs `target/release/rerun`.
+# See `docs/local-native-viewer.md` for how to run and configure it.
+local-viewer = "cargo build --release --package rerun-cli --no-default-features --features release_no_web_viewer"
+
 # Compile and run the rerun viewer with --release.
 #
 # You can also give an argument for what to view (e.g. an .rrd file).

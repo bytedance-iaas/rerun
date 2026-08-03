@@ -1,4 +1,6 @@
 mod mobile_warning_ui;
+#[cfg(not(target_arch = "wasm32"))]
+mod native_config;
 mod open_hf_modal;
 mod open_tos_modal;
 mod open_url_modal;

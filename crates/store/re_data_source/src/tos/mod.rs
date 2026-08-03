@@ -8,7 +8,7 @@
 //!    that episode's samples — convert with the regular `LeRobot` importer code, and stream the
 //!    resulting `LogMsg`s. Selecting an episode in the viewer moves it to the front of the queue.
 
-mod client;
+pub(crate) mod client;
 mod lerobot_stream;
 
 pub use client::{TosClient, TosCredentials};

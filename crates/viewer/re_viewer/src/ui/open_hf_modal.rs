@@ -12,10 +12,9 @@ use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 /// The deployment can hold a default token (injected as a docker secret); it is used unless the
 /// user opts into providing their own. The token is never shown in the dialog.
 #[derive(Default, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(default)]
 struct ServerHfConfig {
     hf_token: String,
-    hf_default_url: String,
 }
 
 /// Dialog for opening a `LeRobot` dataset stored on Hugging Face.
@@ -33,7 +32,6 @@ pub struct OpenHfModal {
     /// Filled asynchronously from the server's `/tos-config.json` (web only).
     server_config: Arc<Mutex<Option<ServerHfConfig>>>,
     server_config_requested: bool,
-    server_config_applied: bool,
 }
 
 impl OpenHfModal {
@@ -51,7 +49,7 @@ impl OpenHfModal {
         self.server_config_requested = true;
 
         // On the web the viewer is served next to `/tos-config.json`; natively there is no
-        // server, so fall back to environment variables for developer convenience.
+        // server, so read the same file from the user's config dir and let env vars override.
         #[cfg(target_arch = "wasm32")]
         {
             let config = self.server_config.clone();
@@ -67,35 +65,21 @@ impl OpenHfModal {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let parsed = ServerHfConfig {
-                hf_token: std::env::var("HF_TOKEN").unwrap_or_default(),
-                hf_default_url: std::env::var("HF_DEFAULT_URL").unwrap_or_default(),
-            };
+            let mut parsed = super::native_config::load_local_config_bytes()
+                .and_then(|bytes| serde_json::from_slice::<ServerHfConfig>(&bytes).ok())
+                .unwrap_or_default();
+
+            if let Ok(value) = std::env::var("HF_TOKEN")
+                && !value.is_empty()
+            {
+                parsed.hf_token = value;
+            }
+
             *self.server_config.lock() = Some(parsed);
         }
     }
 
-    /// Pre-fill still-empty (non-secret) fields once the server defaults arrive.
-    fn apply_server_config(&mut self) {
-        if self.server_config_applied {
-            return;
-        }
-        let Some(config) = self.server_config.lock().clone() else {
-            return;
-        };
-        self.server_config_applied = true;
-
-        if self.dataset.is_empty() {
-            self.dataset = config.hf_default_url;
-        }
-        // The token input is never pre-filled. Unlike TOS (where credentials are required),
-        // public HF datasets work without any token, so an absent server token doesn't force
-        // the custom-token input.
-    }
-
     pub fn ui(&mut self, ui: &egui::Ui, command_sender: &CommandSender) {
-        self.apply_server_config();
-
         let server_config = self.server_config.lock().clone().unwrap_or_default();
 
         self.modal.ui(
