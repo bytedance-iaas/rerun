@@ -50,6 +50,44 @@ impl App {
         self.external_memory_users.add(user);
     }
 
+    /// Record a remote dataset in the welcome screen's "recently opened" list.
+    ///
+    /// Only non-secret metadata is kept — never access keys or tokens.
+    pub(super) fn remember_recent_dataset(&mut self, data_source: &LogDataSource) {
+        use crate::recent_datasets::{RecentDataset, RecentKind, now_unix, remember};
+
+        let entry = match data_source {
+            LogDataSource::TosDataset(source) => RecentDataset {
+                url: source.location.to_string(),
+                kind: RecentKind::Tos,
+                endpoint: source.credentials.endpoint.clone(),
+                region: source.credentials.region.clone(),
+                item_count: None,
+                last_opened_unix: now_unix(),
+                open_at_exit: false,
+            },
+            LogDataSource::HfDataset(source) => {
+                let mut url = format!("hf://{}", source.repo);
+                if let Some(file_path) = &source.file_path {
+                    url.push('/');
+                    url.push_str(file_path);
+                }
+                RecentDataset {
+                    url,
+                    kind: RecentKind::Hf,
+                    endpoint: String::new(),
+                    region: String::new(),
+                    item_count: None,
+                    last_opened_unix: now_unix(),
+                    open_at_exit: false,
+                }
+            }
+            _ => return,
+        };
+
+        remember(&mut self.state.recent_datasets, entry);
+    }
+
     /// Loads a data source into the viewer.
     ///
     /// Tries to detect whether the datasource is already present (either still streaming in or already loaded),

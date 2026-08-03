@@ -41,6 +41,13 @@ impl OpenHfModal {
         self.fetch_server_config();
     }
 
+    /// Open with the dataset field pre-filled (e.g. from the welcome screen's "recently opened"
+    /// list). The token is never pre-filled from outside.
+    pub fn open_prefilled(&mut self, dataset: &str) {
+        self.dataset = dataset.to_owned();
+        self.open();
+    }
+
     /// Fetch server-side defaults once per app run.
     fn fetch_server_config(&mut self) {
         if self.server_config_requested {

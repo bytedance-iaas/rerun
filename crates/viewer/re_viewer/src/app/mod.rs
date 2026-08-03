@@ -34,6 +34,7 @@ use crate::{AppState, command_palette::CommandPaletteAction};
 mod add_data_source;
 mod command_handling;
 mod logic;
+mod session_restore;
 mod ui;
 
 // ----------------------------------------------------------------------------
@@ -115,6 +116,13 @@ pub struct App {
 
     /// What is serialized
     pub(crate) state: AppState,
+
+    /// Session restore (re-opening the remote datasets that were open on last shutdown) runs
+    /// once at startup; true once it ran (or was skipped).
+    session_restore_attempted: bool,
+
+    /// When session restore started waiting for the config fetch (egui time, seconds).
+    session_restore_wait_since: Option<f64>,
 
     /// Pending background tasks, e.g. files being saved.
     pub(crate) background_tasks: BackgroundTasks,
@@ -493,6 +501,8 @@ impl App {
             open_files_promise: Default::default(),
 
             state,
+            session_restore_attempted: false,
+            session_restore_wait_since: None,
             background_tasks: Default::default(),
             store_hub: Some(StoreHub::new(
                 if is_test {
@@ -1201,6 +1211,19 @@ impl eframe::App for App {
         re_tracing::profile_function!();
 
         storage.set_string(RERUN_VERSION_KEY, self.build_info.version.to_string());
+
+        // Stamp which remote datasets are open right now, so the next launch can restore them
+        // ("as if the page was never closed"). Runs on every periodic save, so the flags stay
+        // reasonably fresh even after a crash.
+        if let Some(hub) = &self.store_hub {
+            let bundle = hub.store_bundle();
+            for recent in &mut self.state.recent_datasets {
+                recent.open_at_exit = bundle.entity_dbs().any(|db| {
+                    db.store_kind() == re_log_types::StoreKind::Recording
+                        && db.application_id().as_str() == recent.url
+                });
+            }
+        }
 
         // Save the app state
         eframe::set_value(storage, eframe::APP_KEY, &self.state);
