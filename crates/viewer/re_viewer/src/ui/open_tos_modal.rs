@@ -12,13 +12,35 @@ use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 /// The deployment can hold default credentials (injected as docker secrets); those are used
 /// unless the user opts into providing their own. The credential fields are never shown in the
 /// dialog unless the user explicitly asks to override them.
-#[derive(Default, Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(default)]
 struct ServerTosConfig {
     tos_endpoint: String,
     tos_region: String,
     tos_access_key: String,
     tos_secret_key: String,
+
+    /// Where converted rrds are stored; an absent key means the default bucket,
+    /// `""`/`"off"` disables the artifacts store.
+    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    tos_rrd_artifacts_url: String,
+
+    /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
+    rrd_artifacts_prefetch: usize,
+}
+
+impl Default for ServerTosConfig {
+    fn default() -> Self {
+        Self {
+            tos_endpoint: String::new(),
+            tos_region: String::new(),
+            tos_access_key: String::new(),
+            tos_secret_key: String::new(),
+            // The artifacts store is on by default, even with no config file at all.
+            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            rrd_artifacts_prefetch: 0,
+        }
+    }
 }
 
 impl ServerTosConfig {
@@ -41,6 +63,9 @@ pub struct OpenTosModal {
     use_custom_credentials: bool,
     access_key: String,
     secret_key: String,
+
+    /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
+    artifact_upload_disabled: bool,
 
     /// Filled asynchronously from the server's `/tos-config.json` (web only).
     server_config: Arc<Mutex<Option<ServerTosConfig>>>,
@@ -107,6 +132,12 @@ impl OpenTosModal {
             env_override(&mut parsed.tos_region, "TOS_REGION");
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
+            env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+            if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
+                && let Ok(n) = value.trim().parse()
+            {
+                parsed.rrd_artifacts_prefetch = n;
+            }
 
             *self.server_config.lock() = Some(parsed);
         }
@@ -204,6 +235,17 @@ impl OpenTosModal {
                         });
                 }
 
+                // Converted episodes are uploaded to a shared rrd artifacts store by default, so the next
+                // open (by anyone) skips the conversion. Deployment-disabled → no checkbox.
+                if let Some(artifacts_location) =
+                    re_data_source::rrd_artifacts::parse_artifacts_url(&server_config.tos_rrd_artifacts_url)
+                {
+                    let mut upload = !self.artifact_upload_disabled;
+                    ui.re_checkbox(&mut upload, "Upload converted rrd to the artifacts store")
+                        .on_hover_text(format!("{artifacts_location}"));
+                    self.artifact_upload_disabled = !upload;
+                }
+
                 let credentials_ok = if self.use_custom_credentials {
                     !self.access_key.trim().is_empty() && !self.secret_key.trim().is_empty()
                 } else {
@@ -255,15 +297,30 @@ impl OpenTosModal {
                                 )
                             };
 
+                            let credentials = TosCredentials {
+                                endpoint: self.endpoint.trim().to_owned(),
+                                region: self.region.trim().to_owned(),
+                                access_key,
+                                secret_key,
+                            };
+                            // The artifacts bucket uses the same credentials as the source.
+                            let rrd_artifacts = re_data_source::rrd_artifacts::parse_artifacts_url(
+                                &server_config.tos_rrd_artifacts_url,
+                            )
+                            .map(|artifacts_location| {
+                                re_data_source::rrd_artifacts::RrdArtifactsConfig {
+                                    location: artifacts_location,
+                                    credentials: credentials.clone(),
+                                    write_back: !self.artifact_upload_disabled,
+                                    prefetch_items: server_config.rrd_artifacts_prefetch,
+                                }
+                            });
+
                             command_sender.send_system(SystemCommand::LoadDataSource(
                                 LogDataSource::TosDataset(TosDatasetSource {
                                     location,
-                                    credentials: TosCredentials {
-                                        endpoint: self.endpoint.trim().to_owned(),
-                                        region: self.region.trim().to_owned(),
-                                        access_key,
-                                        secret_key,
-                                    },
+                                    credentials,
+                                    rrd_artifacts,
                                 }),
                             ));
                         }

@@ -33,16 +33,27 @@ pub async fn fetch_async(request: ehttp::Request) -> Result<ehttp::Response, Str
 fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
     let agent = agent();
 
-    let mut builder = match &request.method {
-        ehttp::Method::GET => agent.get(&request.url),
-        ehttp::Method::HEAD => agent.head(&request.url),
+    let mut response = match &request.method {
+        ehttp::Method::GET | ehttp::Method::HEAD => {
+            let mut builder = match &request.method {
+                ehttp::Method::GET => agent.get(&request.url),
+                _ => agent.head(&request.url),
+            };
+            for (name, value) in &request.headers.headers {
+                builder = builder.header(name.as_str(), value.as_str());
+            }
+            builder.call()
+        }
+        ehttp::Method::PUT => {
+            let mut builder = agent.put(&request.url);
+            for (name, value) in &request.headers.headers {
+                builder = builder.header(name.as_str(), value.as_str());
+            }
+            builder.send(&request.body[..])
+        }
         other => return Err(format!("Unsupported HTTP method: {other:?}")),
-    };
-    for (name, value) in &request.headers.headers {
-        builder = builder.header(name.as_str(), value.as_str());
     }
-
-    let mut response = builder.call().map_err(|err| err.to_string())?;
+    .map_err(|err| err.to_string())?;
 
     let status = response.status().as_u16();
     let status_text = response

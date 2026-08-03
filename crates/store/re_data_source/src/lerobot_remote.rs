@@ -57,6 +57,10 @@ pub struct ListedFile {
     pub rel_path: String,
 
     pub size: u64,
+
+    /// Content id when the backend provides one — `ETag` (TOS) or git blob oid (Hugging Face).
+    /// Feeds the rrd-artifacts fingerprint; `None` weakens the fingerprint to path+size.
+    pub content_id: Option<String>,
 }
 
 /// Read access to the files of one remote `LeRobot` dataset.
@@ -127,6 +131,8 @@ async fn fetch_range<S: DatasetStore>(
     /// so requesting a multi-GB file in one go would leave the progress counter frozen at 0%
     /// for minutes; bounded chunks make it tick as bytes actually arrive.
     const MAX_RANGE_REQUEST: u64 = 64 * 1024 * 1024;
+
+    pause.set_download_kind(DownloadKind::from_path(rel_path));
 
     let expected = usize::try_from(range.end.saturating_sub(range.start)).unwrap_or_default();
     let mut out: Vec<u8> = Vec::with_capacity(expected);
@@ -229,6 +235,50 @@ pub enum LoadPhase {
     Converting,
 }
 
+/// The file type currently being downloaded, shown right in the progress label.
+///
+/// "downloading parquet" tells apart fetching sources for a conversion from fetching
+/// a ready-made rrd from the artifacts store.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum DownloadKind {
+    Parquet,
+    Mp4,
+    Mcap,
+
+    /// The source file itself is an rrd.
+    Rrd,
+
+    /// A previously converted rrd, served from the artifacts store.
+    RrdArtifact,
+
+    #[default]
+    Other,
+}
+
+impl DownloadKind {
+    fn from_path(path: &str) -> Self {
+        match path.rsplit('.').next() {
+            Some(ext) if ext.eq_ignore_ascii_case("parquet") => Self::Parquet,
+            Some(ext) if ext.eq_ignore_ascii_case("mp4") => Self::Mp4,
+            Some(ext) if ext.eq_ignore_ascii_case("mcap") => Self::Mcap,
+            Some(ext) if ext.eq_ignore_ascii_case("rrd") => Self::Rrd,
+            _ => Self::Other,
+        }
+    }
+
+    /// The word(s) after "downloading" in the UI; `None` keeps it a bare "downloading".
+    pub fn label(&self) -> Option<&'static str> {
+        match self {
+            Self::Parquet => Some("parquet"),
+            Self::Mp4 => Some("mp4"),
+            Self::Mcap => Some("mcap"),
+            Self::Rrd => Some("rrd"),
+            Self::RrdArtifact => Some("rrd (artifacts store)"),
+            Self::Other => None,
+        }
+    }
+}
+
 /// Live byte counts of the item currently being downloaded.
 #[derive(Clone, Copy)]
 struct ItemProgress {
@@ -239,6 +289,7 @@ struct ItemProgress {
     bytes_total: Option<u64>,
 
     phase: LoadPhase,
+    kind: DownloadKind,
 }
 
 /// Flow control of one active stream: dataset-level pause, stream cancellation (the user closed
@@ -297,18 +348,26 @@ impl PauseState {
         }
     }
 
-    fn begin_item_progress(&self, bytes_total: Option<u64>) {
+    fn begin_item_progress(&self, bytes_total: Option<u64>, kind: DownloadKind) {
         *self.item_progress.lock() = Some(ItemProgress {
             started_nanos: re_log_types::Timestamp::now().nanos_since_epoch(),
             bytes_done: 0,
             bytes_total,
             phase: LoadPhase::Downloading,
+            kind,
         });
     }
 
     fn add_item_progress(&self, bytes: u64) {
         if let Some(progress) = &mut *self.item_progress.lock() {
             progress.bytes_done += bytes;
+        }
+    }
+
+    /// Tell the UI what file type the loader is fetching right now.
+    fn set_download_kind(&self, kind: DownloadKind) {
+        if let Some(progress) = &mut *self.item_progress.lock() {
+            progress.kind = kind;
         }
     }
 
@@ -375,6 +434,14 @@ struct StreamState {
     /// Total episodes/files of the dataset (0 until the listing is in). For the UI — e.g. the
     /// welcome screen's "recently opened" metadata.
     n_items: AtomicUsize,
+
+    /// Display URLs (`tos://artifacts-bucket/key`) of items known to have an rrd artifact — filled
+    /// from a listing at stream start and on every write-back. For the UI (tooltip + copy).
+    rrd_artifact_urls: Mutex<ahash::HashMap<usize, String>>,
+
+    /// Per-item progress of artifact fetches. Its own map (not the single
+    /// [`PauseState::item_progress`] slot) because artifacts prefetch several items at once.
+    artifact_progress: Mutex<ahash::HashMap<usize, ItemProgress>>,
 
     pause: PauseState,
 }
@@ -529,6 +596,9 @@ pub struct DownloadProgress {
     pub eta_secs: Option<f64>,
 
     pub phase: LoadPhase,
+
+    /// The file type currently coming down the wire.
+    pub kind: DownloadKind,
 }
 
 /// Byte progress of the item currently being downloaded, if this recording is it.
@@ -536,12 +606,24 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
     let index = queue_index_from_recording_id(store_id.recording_id().as_str())?;
     let app_id = store_id.application_id().as_str();
 
-    if CURRENTLY_LOADING.lock().get(app_id) != Some(&index) {
-        return None;
-    }
+    let is_current = CURRENTLY_LOADING.lock().get(app_id) == Some(&index);
 
     let registry = ACTIVE_STREAMS.lock();
-    let progress = (*registry.get(app_id)?.pause.item_progress.lock())?;
+    let state = registry.get(app_id)?;
+    // Concurrent artifact fetches track their own per-item progress; the single
+    // "current item" slot covers the serial download+convert path.
+    let progress = state
+        .artifact_progress
+        .lock()
+        .get(&index)
+        .copied()
+        .or_else(|| {
+            if is_current {
+                *state.pause.item_progress.lock()
+            } else {
+                None
+            }
+        })?;
 
     let elapsed_secs =
         (re_log_types::Timestamp::now().nanos_since_epoch() - progress.started_nanos) as f64 / 1e9;
@@ -565,6 +647,7 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
         bytes_per_sec,
         eta_secs,
         phase: progress.phase,
+        kind: progress.kind,
     })
 }
 
@@ -575,6 +658,20 @@ pub fn dataset_item_count(application_id: &str) -> Option<usize> {
     let registry = ACTIVE_STREAMS.lock();
     let n = registry.get(application_id)?.n_items.load(Ordering::SeqCst);
     (n > 0).then_some(n)
+}
+
+/// The artifacts-store URL of this episode's converted rrd, if one is known to exist.
+///
+/// For the UI: shown in the episode tooltip, copyable from the context menu.
+pub fn episode_rrd_artifact_url(store_id: &StoreId) -> Option<String> {
+    let index = queue_index_from_recording_id(store_id.recording_id().as_str())?;
+    ACTIVE_STREAMS
+        .lock()
+        .get(store_id.application_id().as_str())?
+        .rrd_artifact_urls
+        .lock()
+        .get(&index)
+        .cloned()
 }
 
 /// Why this item's download was given up on, if it was.
@@ -622,11 +719,17 @@ pub fn is_episode_loading(store_id: &StoreId) -> bool {
     let Some(index) = queue_index_from_recording_id(store_id.recording_id().as_str()) else {
         return false;
     };
+    let app_id = store_id.application_id().as_str();
 
-    CURRENTLY_LOADING
+    if CURRENTLY_LOADING.lock().get(app_id) == Some(&index) {
+        return true;
+    }
+
+    // Also loading: an artifact fetch running concurrently with other items.
+    ACTIVE_STREAMS
         .lock()
-        .get(store_id.application_id().as_str())
-        == Some(&index)
+        .get(app_id)
+        .is_some_and(|state| state.artifact_progress.lock().contains_key(&index))
 }
 
 /// Whether a remote dataset stream is currently active for this application id.
@@ -749,12 +852,15 @@ pub fn stream_remote_file<S: DatasetStore + 'static>(
 /// Returns immediately; fetching and conversion run as a background task feeding the returned
 /// receiver. Unsupported locations produce a clear, persistent error notification instead of
 /// silently doing nothing.
-pub fn stream_lerobot_dataset<S: DatasetStore + 'static>(store: S) -> LogReceiver {
+pub fn stream_lerobot_dataset<S: DatasetStore + 'static>(
+    store: S,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+) -> LogReceiver {
     let url = store.url();
     let (tx, rx) = re_log_channel::log_channel(LogSource::HttpStream { url: url.clone() });
 
     crate::data_source::spawn_future(async move {
-        if let Err(err) = run_stream(&store, &tx).await {
+        if let Err(err) = run_stream(&store, &tx, rrd_artifacts).await {
             re_log::error!(?url, "Failed to stream dataset: {err:#}");
             tx.quit(Some(err.into())).ok();
         } else {
@@ -771,7 +877,11 @@ struct MinimalInfo {
     codebase_version: String,
 }
 
-async fn run_stream<S: DatasetStore>(store: &S, tx: &LogSender) -> anyhow::Result<()> {
+async fn run_stream<S: DatasetStore>(
+    store: &S,
+    tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+) -> anyhow::Result<()> {
     let dataset_url = store.url();
 
     // ---- 1. Identify the dataset format ----
@@ -799,8 +909,8 @@ async fn run_stream<S: DatasetStore>(store: &S, tx: &LogSender) -> anyhow::Resul
     memfs.insert("meta/info.json", Blob::Full(Bytes::from(info_bytes)));
 
     match major {
-        "2" => run_stream_v2(store, &memfs, &dataset_url, tx).await,
-        "3" => run_stream_v3(store, &memfs, &dataset_url, tx).await,
+        "2" => run_stream_v2(store, &memfs, &dataset_url, tx, rrd_artifacts).await,
+        "3" => run_stream_v3(store, &memfs, &dataset_url, tx, rrd_artifacts).await,
         "1" => anyhow::bail!(
             "This is a LeRobot v1 dataset ({}), which is not supported. \
              Supported versions: v2 and v3.",
@@ -823,6 +933,9 @@ enum RemoteDataset {
 
         /// File sizes by dataset-relative path (from the listing; needed for video range math).
         sizes: ahash::HashMap<String, u64>,
+
+        /// Content ids (`ETag`/oid) by dataset-relative path — feeds the rrd-artifacts fingerprint.
+        content_ids: ahash::HashMap<String, String>,
 
         video_indexes: ahash::HashMap<String, VideoIndex>,
     },
@@ -866,6 +979,7 @@ async fn run_stream_v2<S: DatasetStore>(
     memfs: &Arc<MemFs>,
     dataset_url: &str,
     tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 ) -> anyhow::Result<()> {
     // v2 metadata is three small-ish files; episode files are derived from path templates,
     // so no listing is needed at all.
@@ -910,6 +1024,7 @@ async fn run_stream_v2<S: DatasetStore>(
         names,
         dataset_url,
         tx,
+        rrd_artifacts,
     )
     .await
 }
@@ -919,6 +1034,7 @@ async fn run_stream_v3<S: DatasetStore>(
     memfs: &Arc<MemFs>,
     dataset_url: &str,
     tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 ) -> anyhow::Result<()> {
     // v3 packs many episodes per file, so a full listing is cheap — and needed, both for the
     // episode-metadata parquet paths and for the video byte-range math.
@@ -928,6 +1044,14 @@ async fn run_stream_v3<S: DatasetStore>(
     let sizes: ahash::HashMap<String, u64> = all_files
         .iter()
         .map(|file| (file.rel_path.clone(), file.size))
+        .collect();
+    let content_ids: ahash::HashMap<String, String> = all_files
+        .iter()
+        .filter_map(|file| {
+            file.content_id
+                .clone()
+                .map(|id| (file.rel_path.clone(), id))
+        })
         .collect();
 
     for file in &all_files {
@@ -962,6 +1086,7 @@ async fn run_stream_v3<S: DatasetStore>(
         RemoteDataset::V3 {
             dataset: Box::new(dataset),
             sizes,
+            content_ids,
             video_indexes: Default::default(),
         },
         memfs,
@@ -969,6 +1094,7 @@ async fn run_stream_v3<S: DatasetStore>(
         names,
         dataset_url,
         tx,
+        rrd_artifacts,
     )
     .await
 }
@@ -1080,11 +1206,13 @@ async fn run_stream_files<S: DatasetStore>(
         names,
         dataset_url,
         tx,
+        None, // The rrd artifacts store only covers LeRobot episodes, not loose files.
     )
     .await
 }
 
 /// Shared announce + prioritized fetch/convert loop for all dataset flavors.
+#[expect(clippy::too_many_arguments)]
 async fn stream_items<S: DatasetStore>(
     store: &S,
     mut remote: RemoteDataset,
@@ -1093,6 +1221,7 @@ async fn stream_items<S: DatasetStore>(
     names: ahash::HashMap<usize, String>,
     dataset_url: &str,
     tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 ) -> anyhow::Result<()> {
     // 0.36.0: application ids are restricted to entry-name characters; URLs get
     // normalized (with a short hash suffix) rather than used verbatim.
@@ -1109,6 +1238,39 @@ async fn stream_items<S: DatasetStore>(
 
     let guard = StreamGuard::new(&application_id);
     guard.state.n_items.store(total, Ordering::SeqCst);
+
+    // One listing of this dataset's artifacts directory marks which items already have a converted
+    // rrd (for the UI). Best-effort: per-episode lookups still run regardless.
+    if let Some(artifacts) = &rrd_artifacts {
+        let client = crate::tos::TosClient::new(
+            artifacts.credentials.clone(),
+            artifacts.location.bucket.clone(),
+        );
+        let artifacts_dir =
+            crate::rrd_artifacts::dataset_artifacts_dir(&artifacts.location.prefix, dataset_url);
+        match client.list_objects(&artifacts_dir).await {
+            Ok(objects) => {
+                let mut urls = guard.state.rrd_artifact_urls.lock();
+                for object in objects {
+                    if let Some(index) = object
+                        .key
+                        .strip_prefix(&artifacts_dir)
+                        .and_then(|rest| rest.strip_prefix(id_prefix))
+                        .and_then(|rest| rest.strip_suffix(".rrd"))
+                        .and_then(|n| n.parse::<usize>().ok())
+                    {
+                        urls.insert(
+                            index,
+                            format!("tos://{}/{}", artifacts.location.bucket, object.key),
+                        );
+                    }
+                }
+            }
+            Err(err) => re_log::debug!(
+                "rrd-artifacts listing failed (per-episode lookups continue): {err:#}\nDirectory: {artifacts_dir}"
+            ),
+        }
+    }
 
     // ---- Announce the first batch so the recording panel fills up immediately ----
     let has_more_entry = total > ANNOUNCE_BATCH;
@@ -1175,6 +1337,21 @@ async fn stream_items<S: DatasetStore>(
 
     if !announce_next_batch(&mut pending, &mut announced)? {
         return Ok(());
+    }
+
+    // ---- Artifact prefetch: pour in everything already converted, in parallel ----
+    if let Some(artifacts) = &rrd_artifacts
+        && !prefetch_artifacts(
+            &guard,
+            &remote,
+            artifacts,
+            &application_id,
+            &mut pending,
+            tx,
+        )
+        .await
+    {
+        return Ok(()); // Receiver hung up.
     }
 
     // ---- Fetch + convert items, user-selected ones first ----
@@ -1255,6 +1432,20 @@ async fn stream_items<S: DatasetStore>(
                 if !announce_next_batch(&mut pending, &mut announced)? {
                     return Ok(());
                 }
+                // The freshly announced batch gets the same parallel artifact treatment.
+                if let Some(artifacts) = &rrd_artifacts
+                    && !prefetch_artifacts(
+                        &guard,
+                        &remote,
+                        artifacts,
+                        &application_id,
+                        &mut pending,
+                        tx,
+                    )
+                    .await
+                {
+                    return Ok(()); // Receiver hung up.
+                }
                 continue;
             }
             Some(index) => index,
@@ -1290,20 +1481,21 @@ async fn stream_items<S: DatasetStore>(
         guard
             .state
             .pause
-            .begin_item_progress(remote.item_total_bytes(next));
+            .begin_item_progress(remote.item_total_bytes(next), DownloadKind::Other);
         CURRENTLY_LOADING
             .lock()
             .insert(application_id.to_string(), next);
 
         let result = load_one_item(
             store,
-            &guard.state.pause,
+            &guard.state,
             &mut remote,
             memfs,
             &application_id,
             next,
             recording_name,
             tx,
+            rrd_artifacts.as_ref(),
         )
         .await;
 
@@ -1373,21 +1565,170 @@ async fn stream_items<S: DatasetStore>(
     }
 }
 
+/// Byte-range parallelism per artifact while several items prefetch at once (the item
+/// count itself is configurable — see [`crate::rrd_artifacts::resolve_prefetch_items`]).
+/// Browsers allow ~6 concurrent connections per host, so `items × chunks` should stay
+/// in that ballpark.
+#[cfg(target_arch = "wasm32")]
+const ARTIFACT_PREFETCH_CHUNKS: usize = 2;
+#[cfg(not(target_arch = "wasm32"))]
+const ARTIFACT_PREFETCH_CHUNKS: usize = 4;
+
+/// The serial loop fetches one artifact at a time, so it may use the whole budget itself.
+const ARTIFACT_SERIAL_CHUNKS: usize = 6;
+
+/// Fetch every announced-and-pending item that already has an rrd artifact, several at once.
+///
+/// This is the payoff of the artifacts store: re-opening a dataset whose episodes were
+/// all converted before turns into a burst of parallel plain downloads — no conversion,
+/// no one-item queue. Only afterwards does the serial loop start downloading sources and
+/// converting whatever is left. Items that miss (stale, error) simply stay pending.
+///
+/// Returns `false` if the receiver hung up (the stream should end).
+async fn prefetch_artifacts(
+    guard: &StreamGuard,
+    remote: &RemoteDataset,
+    artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
+    application_id: &ApplicationId,
+    pending: &mut BTreeSet<usize>,
+    tx: &LogSender,
+) -> bool {
+    let candidates: Vec<usize> = {
+        let urls = guard.state.rrd_artifact_urls.lock();
+        let parked = guard.state.parked.lock();
+        pending
+            .iter()
+            .copied()
+            .filter(|index| {
+                urls.contains_key(index)
+                    && !parked.contains(index)
+                    && !item_cancelled(&guard.state, *index)
+            })
+            .collect()
+    };
+    if candidates.is_empty() {
+        return true;
+    }
+
+    re_log::debug!(
+        "Prefetching {} ready-made rrds from the artifacts store\nDataset: {application_id}",
+        candidates.len()
+    );
+
+    use futures_util::stream::StreamExt as _;
+    let state: &StreamState = &guard.state;
+    let id_prefix = remote.recording_id_prefix();
+    let mut tasks = futures_util::stream::iter(candidates.into_iter().map(|index| async move {
+        let result = async {
+            let Some(fingerprint) = episode_artifact_fingerprint(remote, EpisodeIndex(index))
+            else {
+                return Ok(None); // No fingerprint (e.g. loose files): not artifact material.
+            };
+            let key = crate::rrd_artifacts::object_key(
+                &artifacts.location.prefix,
+                application_id.as_str(),
+                &format!("{id_prefix}{index}"),
+            );
+            try_load_rrd_artifact(
+                artifacts,
+                &key,
+                &fingerprint,
+                state,
+                index,
+                ARTIFACT_PREFETCH_CHUNKS,
+                tx,
+            )
+            .await
+        }
+        .await;
+        (index, result)
+    }))
+    .buffer_unordered(crate::rrd_artifacts::resolve_prefetch_items(
+        artifacts.prefetch_items,
+    ));
+
+    while let Some((index, result)) = tasks.next().await {
+        match result {
+            Ok(Some(true)) => {
+                pending.remove(&index); // Loaded — the serial loop can skip it entirely.
+            }
+            Ok(Some(false)) => return false, // Receiver hung up.
+            Ok(None) => {} // Miss or stale: the serial loop downloads + converts it.
+            Err(err) => {
+                if state.pause.is_cancelled() {
+                    return true; // The caller's loop top handles cancellation.
+                }
+                re_log::debug!(
+                    "Artifact prefetch failed (item {index} stays queued): {err:#}\nDataset: {application_id}"
+                );
+            }
+        }
+    }
+    true
+}
+
 /// Fetch, convert, and send one item. Returns false if the receiver hung up.
 #[expect(clippy::too_many_arguments)]
 async fn load_one_item<S: DatasetStore>(
     store: &S,
-    pause: &PauseState,
+    state: &Arc<StreamState>,
     remote: &mut RemoteDataset,
     memfs: &Arc<MemFs>,
     application_id: &ApplicationId,
     index: usize,
     recording_name: &str,
     tx: &LogSender,
+    rrd_artifacts: Option<&crate::rrd_artifacts::RrdArtifactsConfig>,
 ) -> anyhow::Result<bool> {
+    let pause = &state.pause;
+
+    // ---- rrd artifacts store read-through ----
+    // A previously converted episode with a matching source fingerprint is fetched ready-made,
+    // skipping the source downloads and the conversion entirely.
+    let episode = EpisodeIndex(index);
+    let artifact_ctx = rrd_artifacts.and_then(|artifacts| {
+        let fingerprint = episode_artifact_fingerprint(remote, episode)?;
+        let key = crate::rrd_artifacts::object_key(
+            &artifacts.location.prefix,
+            application_id.as_str(),
+            &format!("{}{index}", remote.recording_id_prefix()),
+        );
+        Some((artifacts, key, fingerprint))
+    });
+
+    if let Some((artifacts, key, expected)) = &artifact_ctx {
+        match try_load_rrd_artifact(
+            artifacts,
+            key,
+            expected,
+            state,
+            index,
+            ARTIFACT_SERIAL_CHUNKS,
+            tx,
+        )
+        .await
+        {
+            Ok(Some(sent_ok)) => {
+                state
+                    .rrd_artifact_urls
+                    .lock()
+                    .insert(index, format!("tos://{}/{key}", artifacts.location.bucket));
+                return Ok(sent_ok);
+            }
+            Ok(None) => {} // Miss or stale — download and convert below.
+            Err(err) => {
+                if pause.interrupted() {
+                    return Err(err);
+                }
+                re_log::debug!(
+                    "rrd-artifacts lookup failed (treating as a miss): {err:#}\nObject: {key}"
+                );
+            }
+        }
+    }
+
     // Fetch this item's files, remembering which entries to evict afterwards.
     let mut evict = Vec::new();
-    let episode = EpisodeIndex(index);
 
     let msgs = match remote {
         RemoteDataset::V2 { dataset } => {
@@ -1415,6 +1756,7 @@ async fn load_one_item<S: DatasetStore>(
             dataset,
             sizes,
             video_indexes,
+            ..
         } => {
             let episode_data = dataset
                 .metadata
@@ -1532,13 +1874,290 @@ async fn load_one_item<S: DatasetStore>(
         anyhow::bail!("Download interrupted");
     }
 
-    for msg in msgs? {
+    let msgs = msgs?;
+
+    // ---- rrd artifacts store write-back ----
+    // Upload the conversion result in the background; viewing never waits for (or fails on) it.
+    if let Some((artifacts, key, fingerprint)) = &artifact_ctx
+        && artifacts.write_back
+        && !msgs.is_empty()
+    {
+        spawn_artifact_write_back(
+            artifacts,
+            key,
+            fingerprint,
+            application_id.as_str(),
+            &msgs,
+            state,
+            index,
+        );
+    }
+
+    for msg in msgs {
         if tx.send(msg.into()).is_err() {
             return Ok(false);
         }
     }
 
     Ok(true)
+}
+
+// ----------------------------------------------------------------------------
+// rrd artifacts store (read-through + write-back).
+
+/// The expected artifact fingerprint of one episode, from listing metadata alone (no downloads).
+///
+/// v3 fingerprints are strong: per-file sizes and ETags/oids from the upfront listing.
+/// v2 has no listing, so its fingerprint falls back to the episode's file paths plus its frame
+/// count from the (fully fetched) metadata — weaker, but any re-recorded episode changes it.
+fn episode_artifact_fingerprint(remote: &RemoteDataset, episode: EpisodeIndex) -> Option<String> {
+    use crate::rrd_artifacts::FingerprintPart;
+
+    let mut rels: Vec<String> = Vec::new();
+    let parts_for = |rels: &[String],
+                     size_of: &dyn Fn(&str) -> u64,
+                     content_id_of: &dyn Fn(&str) -> Option<String>| {
+        let owned_ids: Vec<Option<String>> = rels.iter().map(|rel| content_id_of(rel)).collect();
+        let mut parts: Vec<FingerprintPart<'_>> = std::iter::zip(rels, &owned_ids)
+            .map(|(rel, id)| FingerprintPart {
+                rel_path: rel,
+                size: size_of(rel),
+                content_id: id.as_deref(),
+            })
+            .collect();
+        crate::rrd_artifacts::fingerprint(&mut parts)
+    };
+
+    match remote {
+        RemoteDataset::V2 { dataset } => {
+            let info = &dataset.metadata.info;
+            rels.push(info.episode_data_path(episode).ok()?);
+            for (feature_key, feature) in &info.features {
+                if feature.dtype == DType::Video {
+                    rels.push(info.video_path(feature_key, episode).ok()?);
+                }
+            }
+            let length = dataset
+                .metadata
+                .get_episode(episode)
+                .map(|meta| meta.length)
+                .unwrap_or_default();
+            Some(parts_for(&rels, &|_| length as u64, &|_| None))
+        }
+
+        RemoteDataset::V3 {
+            dataset,
+            sizes,
+            content_ids,
+            ..
+        } => {
+            let episode_data = dataset.metadata.get_episode_data(episode)?.clone();
+            let info = &dataset.metadata.info;
+            rels.push(info.episode_data_path(&episode_data));
+            for (feature_key, feature) in &info.features {
+                if feature.dtype == DType::Video {
+                    rels.push(info.video_path(feature_key, &episode_data).ok()?);
+                }
+            }
+            Some(parts_for(
+                &rels,
+                &|rel| sizes.get(rel).copied().unwrap_or_default(),
+                &|rel| content_ids.get(rel).cloned(),
+            ))
+        }
+
+        RemoteDataset::Files { .. } => None, // Loose files get no artifacts.
+    }
+}
+
+/// Was this specific item's recording closed by the user (and not yet processed)?
+///
+/// Concurrent artifact fetches must check this themselves: the shared skip flag only
+/// covers the single item the serial loop is on.
+fn item_cancelled(state: &StreamState, index: usize) -> bool {
+    state.cancels.lock().contains(&index)
+}
+
+/// Serve an episode from the rrd artifacts store, if a fresh entry exists.
+///
+/// `chunk_parallel` is how many byte ranges of the object to fetch at once — keep
+/// `items × chunks` within the browser's ~6-connections-per-host budget.
+///
+/// `Ok(Some(sent_ok))`: hit — the artifact was fetched and replayed. `Ok(None)`: miss or stale.
+async fn try_load_rrd_artifact(
+    artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
+    key: &str,
+    expected_fingerprint: &str,
+    state: &StreamState,
+    index: usize,
+    chunk_parallel: usize,
+    tx: &LogSender,
+) -> anyhow::Result<Option<bool>> {
+    let client = crate::tos::TosClient::new(
+        artifacts.credentials.clone(),
+        artifacts.location.bucket.clone(),
+    );
+
+    let Some(head) = client.head_object(key).await? else {
+        return Ok(None);
+    };
+    let fingerprint = head
+        .metadata
+        .iter()
+        .find(|(name, _)| name == crate::rrd_artifacts::FINGERPRINT_METADATA_KEY)
+        .map(|(_, value)| value.as_str());
+    if fingerprint != Some(expected_fingerprint) {
+        re_log::debug!("Stale rrd artifact (source changed) — re-converting\nObject: {key}");
+        return Ok(None);
+    }
+
+    if head.size == 0 {
+        return Ok(None); // A truncated upload — treat as a miss and re-convert.
+    }
+
+    // Per-item progress entry for the UI; removed again on every exit path.
+    state.artifact_progress.lock().insert(
+        index,
+        ItemProgress {
+            started_nanos: re_log_types::Timestamp::now().nanos_since_epoch(),
+            bytes_done: 0,
+            bytes_total: Some(head.size),
+            phase: LoadPhase::Downloading,
+            kind: DownloadKind::RrdArtifact,
+        },
+    );
+    let result =
+        fetch_and_replay_artifact(&client, key, head.size, state, index, chunk_parallel, tx).await;
+    state.artifact_progress.lock().remove(&index);
+    result
+}
+
+/// The fetch+replay half of [`try_load_rrd_artifact`] (split off so the progress-map
+/// entry is cleaned up on every exit path).
+async fn fetch_and_replay_artifact(
+    client: &crate::tos::TosClient,
+    key: &str,
+    size: u64,
+    state: &StreamState,
+    index: usize,
+    chunk_parallel: usize,
+    tx: &LogSender,
+) -> anyhow::Result<Option<bool>> {
+    let pause = &state.pause;
+
+    // Fetch the ready-made rrd as parallel byte ranges. One connection is throttled by
+    // TCP slow start and per-stream limits; several slices at once multiply the throughput.
+    // Small chunks double as progress granularity — the counter ticks per finished slice.
+    const CHUNK: u64 = 4 * 1024 * 1024;
+
+    use futures_util::stream::StreamExt as _;
+    let n_chunks = usize::try_from(size.div_ceil(CHUNK)).unwrap_or_default();
+    let mut fetches = futures_util::stream::iter((0..n_chunks).map(|i| async move {
+        pause.wait_while_paused().await;
+        if pause.interrupted() || item_cancelled(state, index) {
+            anyhow::bail!("Download interrupted\nObject: {key}");
+        }
+        let start = i as u64 * CHUNK;
+        // `get_object` re-requests short (proxy-truncated) responses, so the
+        // slice comes back complete or errors.
+        let slice = client
+            .get_object(key, Some(start..size.min(start + CHUNK)))
+            .await?;
+        if let Some(progress) = state.artifact_progress.lock().get_mut(&index) {
+            progress.bytes_done += slice.len() as u64;
+        }
+        Ok((i, slice))
+    }))
+    .buffer_unordered(chunk_parallel.max(1));
+
+    let mut bytes = vec![0u8; usize::try_from(size).unwrap_or_default()];
+    while let Some(slice) = fetches.next().await {
+        let (i, slice) = slice?;
+        let start = i * usize::try_from(CHUNK).unwrap_or_default();
+        anyhow::ensure!(
+            start + slice.len() <= bytes.len(),
+            "Byte-range response overruns the object size ({} > {})\nObject: {key}",
+            start + slice.len(),
+            bytes.len()
+        );
+        bytes[start..start + slice.len()].copy_from_slice(&slice);
+    }
+    drop(fetches);
+
+    re_log::debug!(
+        "Serving episode from the rrd artifacts store ({})\nObject: {key}",
+        re_format::format_bytes(size as _)
+    );
+
+    // A close that raced with the end of the download must not send: sending would
+    // resurrect the closed recording.
+    if pause.interrupted() || item_cancelled(state, index) {
+        anyhow::bail!("Download interrupted");
+    }
+    for msg in re_log_encoding::Decoder::decode_lazy(std::io::Cursor::new(bytes)) {
+        let msg: re_log_types::LogMsg = msg?;
+        if tx.send(msg.into()).is_err() {
+            return Ok(Some(false)); // Receiver hung up.
+        }
+    }
+    Ok(Some(true))
+}
+
+/// Encode the freshly converted episode and upload it to the artifacts store in the background.
+///
+/// Failures only log — the artifacts store is an accelerator, never a dependency.
+fn spawn_artifact_write_back(
+    artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
+    key: &str,
+    fingerprint: &str,
+    source_url: &str,
+    msgs: &[re_log_types::LogMsg],
+    state: &Arc<StreamState>,
+    index: usize,
+) {
+    let encoded = match re_log_encoding::Encoder::encode(msgs.iter().map(Ok)) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            re_log::warn_once!("Failed to encode an episode for the rrd artifacts store: {err}");
+            return;
+        }
+    };
+
+    let metadata = vec![
+        (
+            crate::rrd_artifacts::FINGERPRINT_METADATA_KEY.to_owned(),
+            fingerprint.to_owned(),
+        ),
+        (
+            crate::rrd_artifacts::SOURCE_URL_METADATA_KEY.to_owned(),
+            source_url.to_owned(),
+        ),
+    ];
+    let client = crate::tos::TosClient::new(
+        artifacts.credentials.clone(),
+        artifacts.location.bucket.clone(),
+    );
+    let key = key.to_owned();
+    let display_url = format!("tos://{}/{key}", artifacts.location.bucket);
+    let state = Arc::clone(state);
+    let size = encoded.len();
+
+    crate::data_source::spawn_future(async move {
+        match client.put_object(&key, encoded, &metadata).await {
+            Ok(()) => {
+                re_log::debug!(
+                    "Uploaded converted rrd to the artifacts store ({})\nObject: {key}",
+                    re_format::format_bytes(size as _)
+                );
+                state.rrd_artifact_urls.lock().insert(index, display_url);
+            }
+            Err(err) => {
+                re_log::warn_once!(
+                    "Failed to upload a converted rrd to the artifacts store (viewing is unaffected): {err:#}"
+                );
+            }
+        }
+    });
 }
 
 /// Shorten a file path to something panel-friendly, keeping the tail (the informative part —
@@ -1927,5 +2546,36 @@ mod fetch_range_tests {
             *store.requested.lock(),
             vec![0..CAP, CAP..2 * CAP, 2 * CAP..(2 * CAP + MIB)]
         );
+    }
+}
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+
+    /// The artifacts-store format contract: an episode encoded for upload
+    /// ([`spawn_artifact_write_back`]) must decode back into the same messages
+    /// ([`fetch_and_replay_artifact`]) — possibly by a different viewer build.
+    #[test]
+    fn artifact_rrd_roundtrip() {
+        let application_id = ApplicationId::from("tos://bucket/dataset/");
+        let msgs = [recording_store_info_msg(&application_id, "episode_3")];
+
+        let encoded = re_log_encoding::Encoder::encode(msgs.iter().map(Ok)).unwrap();
+
+        let decoded: Vec<re_log_types::LogMsg> =
+            re_log_encoding::Decoder::decode_lazy(std::io::Cursor::new(encoded))
+                .collect::<Result<_, _>>()
+                .unwrap();
+
+        assert_eq!(decoded.len(), msgs.len());
+        let (
+            re_log_types::LogMsg::SetStoreInfo(original),
+            re_log_types::LogMsg::SetStoreInfo(round_tripped),
+        ) = (&msgs[0], &decoded[0])
+        else {
+            panic!("expected SetStoreInfo on both sides");
+        };
+        assert_eq!(original.info.store_id, round_tripped.info.store_id);
     }
 }

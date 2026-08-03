@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
 
 /// The deployment/user-level default connection settings. May be entirely empty.
-#[derive(Default, Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(default)]
 pub struct ViewerConfig {
     pub tos_endpoint: String,
@@ -17,11 +17,56 @@ pub struct ViewerConfig {
     pub tos_access_key: String,
     pub tos_secret_key: String,
     pub hf_token: String,
+
+    /// Where converted rrds are stored; an absent key means the default bucket,
+    /// `""`/`"off"` disables the artifacts store.
+    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    pub tos_rrd_artifacts_url: String,
+
+    /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
+    pub rrd_artifacts_prefetch: usize,
+}
+
+impl Default for ViewerConfig {
+    fn default() -> Self {
+        Self {
+            tos_endpoint: String::new(),
+            tos_region: String::new(),
+            tos_access_key: String::new(),
+            tos_secret_key: String::new(),
+            hf_token: String::new(),
+            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            rrd_artifacts_prefetch: 0,
+        }
+    }
 }
 
 impl ViewerConfig {
     pub fn has_tos_credentials(&self) -> bool {
         !self.tos_access_key.is_empty() && !self.tos_secret_key.is_empty()
+    }
+
+    /// The resolved rrd-artifacts target — `None` when disabled or without TOS credentials.
+    pub fn rrd_artifacts(
+        &self,
+        write_back: bool,
+    ) -> Option<re_data_source::rrd_artifacts::RrdArtifactsConfig> {
+        let location =
+            re_data_source::rrd_artifacts::parse_artifacts_url(&self.tos_rrd_artifacts_url)?;
+        if !self.has_tos_credentials() {
+            return None; // No credentials for the artifacts bucket: silently skip.
+        }
+        Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
+            location,
+            credentials: re_data_source::tos::TosCredentials {
+                endpoint: self.tos_endpoint.clone(),
+                region: self.tos_region.clone(),
+                access_key: self.tos_access_key.clone(),
+                secret_key: self.tos_secret_key.clone(),
+            },
+            write_back,
+            prefetch_items: self.rrd_artifacts_prefetch,
+        })
     }
 }
 
@@ -66,6 +111,12 @@ pub fn request() {
         env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
         env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
         env_override(&mut parsed.hf_token, "HF_TOKEN");
+        env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+        if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
+            && let Ok(n) = value.trim().parse()
+        {
+            parsed.rrd_artifacts_prefetch = n;
+        }
 
         *CONFIG.lock() = Some(parsed);
     }
@@ -91,6 +142,35 @@ mod tests {
         assert_eq!(config.tos_endpoint, "https://tos.example.com");
         assert_eq!(config.tos_region, "");
         assert!(!config.has_tos_credentials());
+    }
+
+    #[test]
+    fn artifacts_store_defaults_on_but_needs_credentials() {
+        // An absent key resolves to the default bucket…
+        let mut config: ViewerConfig = serde_json::from_slice(b"{}").unwrap();
+        assert_eq!(
+            config.tos_rrd_artifacts_url,
+            re_data_source::rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL
+        );
+        // …but without TOS credentials there is no artifacts target.
+        assert!(config.rrd_artifacts(true).is_none());
+
+        config.tos_access_key = "ak".to_owned();
+        config.tos_secret_key = "sk".to_owned();
+        let artifacts = config.rrd_artifacts(true).unwrap();
+        assert_eq!(artifacts.location.bucket, "physical-ai-rerun-test");
+        assert!(artifacts.write_back);
+    }
+
+    #[test]
+    fn artifacts_store_off_switch_wins_over_credentials() {
+        let config = ViewerConfig {
+            tos_access_key: "ak".to_owned(),
+            tos_secret_key: "sk".to_owned(),
+            tos_rrd_artifacts_url: "off".to_owned(),
+            ..Default::default()
+        };
+        assert!(config.rrd_artifacts(false).is_none());
     }
 
     #[test]

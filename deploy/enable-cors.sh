@@ -9,8 +9,11 @@ AK=$(cat secrets/tos_access_key)
 SK=$(cat secrets/tos_secret_key)
 BUCKET_HOST="physical-ai-rerun-test.tos-s3-cn-beijing.volces.com"
 
+# ExposeHeader must list the rrd-artifacts metadata explicitly (no wildcards in ExposeHeader):
+# the browser hides un-exposed response headers, and without the fingerprint header every
+# web-viewer artifact lookup would silently miss.
 cat > /tmp/tos-cors.xml <<'EOF'
-<CORSConfiguration><CORSRule><AllowedOrigin>http://127.0.0.1:9091</AllowedOrigin><AllowedOrigin>http://localhost:9091</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader><ExposeHeader>Content-Range</ExposeHeader><ExposeHeader>Content-Length</ExposeHeader><MaxAgeSeconds>3600</MaxAgeSeconds></CORSRule></CORSConfiguration>
+<CORSConfiguration><CORSRule><AllowedOrigin>http://127.0.0.1:9091</AllowedOrigin><AllowedOrigin>http://localhost:9091</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader><ExposeHeader>Content-Range</ExposeHeader><ExposeHeader>Content-Length</ExposeHeader><ExposeHeader>x-amz-meta-rerun-fingerprint</ExposeHeader><ExposeHeader>x-amz-meta-rerun-source-url</ExposeHeader><MaxAgeSeconds>3600</MaxAgeSeconds></CORSRule></CORSConfiguration>
 EOF
 
 MD5=$(openssl md5 -binary /tmp/tos-cors.xml | base64)
