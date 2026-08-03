@@ -668,31 +668,40 @@ pub fn entity_db_button_ui(
 
     // Live progress in the row itself: big downloads are agony without a sense of how far
     // along they are. The full name would push the numbers past the panel's truncation, so
-    // while downloading the row shows a compact "<name> · 43% · ~12s left" instead (the
-    // full name returns when the download finishes).
+    // while loading the row shows a compact "<name> · downloading 43% · ~12s left" instead
+    // (the full name returns when the item finishes). The phase word matters: a bare
+    // percentage reads as stalled during the conversion that follows the download.
     if let Some(progress) = &download_progress {
+        use re_data_source::lerobot_remote::LoadPhase;
         use std::fmt::Write as _;
         let short_name = recording_name
             .split(" · ")
             .next()
             .unwrap_or(recording_name.as_str());
         title = format!("{app_id_prefix}{short_name}");
-        if let Some(total) = progress.bytes_total {
-            let pct = (progress.bytes_done as f64 / total.max(1) as f64 * 100.0).min(100.0);
-            write!(title, " · {pct:.0}%").ok();
-        } else {
-            write!(
-                title,
-                " · {}",
-                re_format::format_bytes(progress.bytes_done as _)
-            )
-            .ok();
-        }
-        if let Some(eta) = progress.eta_secs {
-            if eta >= 90.0 {
-                write!(title, " · ~{:.0}min left", (eta / 60.0).ceil()).ok();
-            } else {
-                write!(title, " · ~{eta:.0}s left").ok();
+        match progress.phase {
+            LoadPhase::Converting => {
+                write!(title, " · converting…").ok();
+            }
+            LoadPhase::Downloading => {
+                if let Some(total) = progress.bytes_total {
+                    let pct = (progress.bytes_done as f64 / total.max(1) as f64 * 100.0).min(100.0);
+                    write!(title, " · downloading {pct:.0}%").ok();
+                } else {
+                    write!(
+                        title,
+                        " · downloading {}",
+                        re_format::format_bytes(progress.bytes_done as _)
+                    )
+                    .ok();
+                }
+                if let Some(eta) = progress.eta_secs {
+                    if eta >= 90.0 {
+                        write!(title, " · ~{:.0}min left", (eta / 60.0).ceil()).ok();
+                    } else {
+                        write!(title, " · ~{eta:.0}s left").ok();
+                    }
+                }
             }
         }
     }

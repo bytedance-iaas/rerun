@@ -261,7 +261,7 @@ impl TosClient {
         }
         request.headers.insert("authorization", &authorization);
 
-        ehttp::fetch_async(request)
+        crate::http_client::fetch_async(request)
             .await
             .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))
     }
@@ -280,7 +280,11 @@ fn hex(bytes: &[u8]) -> String {
 
 /// AWS-style URI encoding: unreserved characters stay, everything else is `%XX`-encoded.
 /// `/` is kept verbatim in paths but encoded in query values.
-fn uri_encode(input: &str, encode_slash: bool) -> String {
+///
+/// Also used by the Hugging Face backend: file names with spaces (or any non-ASCII) must be
+/// percent-encoded before they go into a URL — the browser does this implicitly on the web,
+/// the native HTTP stack rejects the raw form as an invalid URI.
+pub(crate) fn uri_encode(input: &str, encode_slash: bool) -> String {
     use std::fmt::Write as _;
 
     let mut out = String::with_capacity(input.len());

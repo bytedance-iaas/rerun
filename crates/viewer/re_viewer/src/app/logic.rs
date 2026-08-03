@@ -970,7 +970,13 @@ impl App {
         };
 
         if let Some(minimum_fraction_to_purge) = limit.is_exceeded_by(&mem_use_before) {
-            re_log::info_once!("Reached memory limit of {limit}. Freeing up data…");
+            re_log::warn_once!(
+                "Reached the memory limit of {limit} — dropping the oldest data to keep the viewer running. \
+                 This is not a bug: the recording is larger than this machine's memory budget, \
+                 so earlier parts of it will be missing from the timeline. \
+                 To view it in full, open it on a machine with more RAM \
+                 (e.g. a cloud native-viewer session) or raise the limit with --memory-limit."
+            );
 
             let fraction_to_purge = (minimum_fraction_to_purge + 0.2).clamp(0.25, 1.0);
 

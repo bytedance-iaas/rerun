@@ -13,18 +13,17 @@ use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 /// unless the user opts into providing their own. The credential fields are never shown in the
 /// dialog unless the user explicitly asks to override them.
 #[derive(Default, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(default)]
 struct ServerTosConfig {
-    endpoint: String,
-    region: String,
-    access_key: String,
-    secret_key: String,
-    default_url: String,
+    tos_endpoint: String,
+    tos_region: String,
+    tos_access_key: String,
+    tos_secret_key: String,
 }
 
 impl ServerTosConfig {
     fn has_credentials(&self) -> bool {
-        !self.access_key.is_empty() && !self.secret_key.is_empty()
+        !self.tos_access_key.is_empty() && !self.tos_secret_key.is_empty()
     }
 }
 
@@ -64,7 +63,7 @@ impl OpenTosModal {
         self.server_config_requested = true;
 
         // On the web the viewer is served next to `/tos-config.json`; natively there is no
-        // server, so fall back to environment variables for developer convenience.
+        // server, so read the same file from the user's config dir and let env vars override.
         #[cfg(target_arch = "wasm32")]
         {
             let config = self.server_config.clone();
@@ -80,13 +79,22 @@ impl OpenTosModal {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let parsed = ServerTosConfig {
-                endpoint: std::env::var("TOS_ENDPOINT").unwrap_or_default(),
-                region: std::env::var("TOS_REGION").unwrap_or_default(),
-                access_key: std::env::var("TOS_ACCESS_KEY").unwrap_or_default(),
-                secret_key: std::env::var("TOS_SECRET_KEY").unwrap_or_default(),
-                default_url: std::env::var("TOS_DEFAULT_URL").unwrap_or_default(),
-            };
+            let mut parsed = super::native_config::load_local_config_bytes()
+                .and_then(|bytes| serde_json::from_slice::<ServerTosConfig>(&bytes).ok())
+                .unwrap_or_default();
+
+            fn env_override(field: &mut String, key: &str) {
+                if let Ok(value) = std::env::var(key)
+                    && !value.is_empty()
+                {
+                    *field = value;
+                }
+            }
+            env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
+            env_override(&mut parsed.tos_region, "TOS_REGION");
+            env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
+            env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
+
             *self.server_config.lock() = Some(parsed);
         }
     }
@@ -101,14 +109,11 @@ impl OpenTosModal {
         };
         self.server_config_applied = true;
 
-        if self.url.is_empty() {
-            self.url = config.default_url.clone();
-        }
         if self.endpoint.is_empty() {
-            self.endpoint = config.endpoint.clone();
+            self.endpoint = config.tos_endpoint.clone();
         }
         if self.region.is_empty() {
-            self.region = config.region.clone();
+            self.region = config.tos_region.clone();
         }
 
         // Without server-side default credentials the user must provide their own.
@@ -232,8 +237,8 @@ impl OpenTosModal {
                                 )
                             } else {
                                 (
-                                    server_config.access_key.clone(),
-                                    server_config.secret_key.clone(),
+                                    server_config.tos_access_key.clone(),
+                                    server_config.tos_secret_key.clone(),
                                 )
                             };
 

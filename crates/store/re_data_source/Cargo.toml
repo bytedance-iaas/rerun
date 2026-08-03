@@ -54,6 +54,9 @@ web-time.workspace = true
 # native dependencies:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio.workspace = true
+# HTTP client that validates against the OS trust store (via the platform verifier), so requests
+# work behind a corporate TLS-intercepting proxy where the bundled webpki roots would reject them.
+ureq.workspace = true
 
 # web dependencies:
 [target.'cfg(target_arch = "wasm32")'.dependencies]

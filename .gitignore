@@ -107,3 +107,13 @@ justfile
 
 # Saved pytest-benchmark results
 /.benchmarks
+
+# Local-only PoC scaffolding (deploy manifests, notes). Kept on disk for reference,
+# never committed — it may hold real credentials. The shipping deploy kit lives in /deploy.
+/tos-poc/
+
+# Belt-and-suspenders: never commit secret material, wherever it lands.
+secrets/
+*.pem
+.env
+!*.env.example

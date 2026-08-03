@@ -19,7 +19,7 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 | `entrypoint.sh` | `MODE` dispatch: web renders `/tos-config.json` and runs nginx; native starts Xvnc + websockify + the viewer; server runs the catalog. |
 | `nginx.conf` | Static serving + `/tos-config.json` + WebDAV `PUT` on `/rrd-cache/` (phase-2 write-back). |
 | `novnc-paste-bridge.js` | Appended into noVNC's `ui.js` at build time so Cmd+V / Ctrl+V pastes into the native session in one step. |
-| `.env.example` | Non-secret settings: endpoint, region, default dataset URLs. Copy to `.env` (gitignored). |
+| `.env.example` | Non-secret settings: endpoint, region. Copy to `.env` (gitignored). |
 | `gen-ca-bundle.sh` | Exports macOS keychain certs so cargo can download deps behind a corporate TLS-intercepting proxy. Optional; skip on Linux / no proxy. |
 | `enable-cors.sh` | One-time CORS setup for a new TOS bucket (so the browser reads the bucket directly). |
 | `run-native.sh` | Runs a host-built native viewer with credentials from `secrets/` (dev convenience). |
@@ -36,6 +36,38 @@ docker compose up --build -d   # first build compiles both viewers: expect ~45-6
 open http://127.0.0.1:9091     # web viewer
 open "http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale"   # native session
 ```
+
+## Local native viewer (no cloud, no Docker)
+
+The three modes above all run the viewer as a *service* (behind nginx / noVNC / gRPC).
+The same viewer also runs as a plain desktop app directly on your machine — no Docker, no VNC, no cloud — sharing the exact same `re_viewer` code and the same "Open from Volcengine TOS / Hugging Face" features.
+See [`docs/local-native-viewer.md`](../docs/local-native-viewer.md) for the full reference; the smoke test:
+
+```bash
+# 1. Build the local viewer (from the repo root). Outputs target/release/rerun.
+pixi run local-viewer
+
+# 2. (Optional) pre-fill credentials so you don't retype them.
+#    Same file the web deployment serves as /tos-config.json, read from your home dir.
+mkdir -p ~/.rerun
+cat > ~/.rerun/tos-config.json <<'EOF'
+{
+  "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
+  "tos_region": "cn-beijing",
+  "tos_access_key": "AK...",
+  "tos_secret_key": "SK...",
+  "hf_token": "hf_..."
+}
+EOF
+chmod 600 ~/.rerun/tos-config.json
+
+# 3. Run it.
+./target/release/rerun
+```
+
+Then, in the viewer: **Menu → Open → Open from Volcengine TOS…**, enter a `tos://bucket/prefix/` URL, and click **Open** — episodes should appear immediately and stream in one by one.
+Credentials can come from three places (highest priority first): the `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` environment variables, then `~/.rerun/tos-config.json` (or `$RERUN_TOS_CONFIG`), then whatever you type into the dialog.
+With no file and no env vars, the dialog just asks for the AK/SK directly — nothing cloud-side is required.
 
 ## Cloud / CI builds
 

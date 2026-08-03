@@ -123,6 +123,11 @@ async fn fetch_range<S: DatasetStore>(
     rel_path: &str,
     range: Range<u64>,
 ) -> anyhow::Result<Vec<u8>> {
+    /// Cap on a single range request. A response only surfaces once its whole body is buffered,
+    /// so requesting a multi-GB file in one go would leave the progress counter frozen at 0%
+    /// for minutes; bounded chunks make it tick as bytes actually arrive.
+    const MAX_RANGE_REQUEST: u64 = 64 * 1024 * 1024;
+
     let expected = usize::try_from(range.end.saturating_sub(range.start)).unwrap_or_default();
     let mut out: Vec<u8> = Vec::with_capacity(expected);
     let mut pos = range.start;
@@ -134,7 +139,8 @@ async fn fetch_range<S: DatasetStore>(
             anyhow::bail!("Download interrupted\nFile: {rel_path}");
         }
 
-        let bytes = store.get_range_once(rel_path, pos..range.end).await?;
+        let chunk_end = range.end.min(pos + MAX_RANGE_REQUEST);
+        let bytes = store.get_range_once(rel_path, pos..chunk_end).await?;
         if bytes.is_empty() {
             empty_responses += 1;
             if empty_responses > 3 {
@@ -148,12 +154,13 @@ async fn fetch_range<S: DatasetStore>(
         empty_responses = 0;
 
         let remaining = usize::try_from(range.end - pos).unwrap_or_default();
+        let requested = usize::try_from(chunk_end - pos).unwrap_or_default();
         let take = bytes.len().min(remaining);
         out.extend_from_slice(&bytes[..take]);
         pos += take as u64;
         pause.add_item_progress(take as u64);
 
-        if pos < range.end {
+        if take < requested {
             re_log::debug!(
                 "Byte-range response truncated ({take} bytes) — resuming at offset {pos} \
                  ({} of {expected} bytes so far)\nFile: {rel_path}",
@@ -212,6 +219,16 @@ fn queue_index_from_recording_id(recording_id: &str) -> Option<usize> {
     n.parse().ok()
 }
 
+/// What the loader is doing to the current item — download first, then conversion.
+///
+/// Shown in the UI: a big file spends real time in each phase, and a bare percentage is
+/// misleading during conversion (bytes are done, work isn't).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LoadPhase {
+    Downloading,
+    Converting,
+}
+
 /// Live byte counts of the item currently being downloaded.
 #[derive(Clone, Copy)]
 struct ItemProgress {
@@ -220,6 +237,8 @@ struct ItemProgress {
 
     /// Estimated size of the whole item, when known (v3 episodes, loose files).
     bytes_total: Option<u64>,
+
+    phase: LoadPhase,
 }
 
 /// Flow control of one active stream: dataset-level pause, stream cancellation (the user closed
@@ -283,12 +302,20 @@ impl PauseState {
             started_nanos: re_log_types::Timestamp::now().nanos_since_epoch(),
             bytes_done: 0,
             bytes_total,
+            phase: LoadPhase::Downloading,
         });
     }
 
     fn add_item_progress(&self, bytes: u64) {
         if let Some(progress) = &mut *self.item_progress.lock() {
             progress.bytes_done += bytes;
+        }
+    }
+
+    /// Mark the current item as past its downloads and into conversion.
+    fn set_item_converting(&self) {
+        if let Some(progress) = &mut *self.item_progress.lock() {
+            progress.phase = LoadPhase::Converting;
         }
     }
 
@@ -496,6 +523,8 @@ pub struct DownloadProgress {
 
     /// Estimated seconds remaining (needs a known total and a settled speed).
     pub eta_secs: Option<f64>,
+
+    pub phase: LoadPhase,
 }
 
 /// Byte progress of the item currently being downloaded, if this recording is it.
@@ -518,8 +547,9 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
     } else {
         0.0
     };
+    // A byte-rate ETA only means something while bytes are still being fetched.
     let eta_secs = match progress.bytes_total {
-        Some(total) if bytes_per_sec > 1.0 => {
+        Some(total) if bytes_per_sec > 1.0 && progress.phase == LoadPhase::Downloading => {
             Some((total.saturating_sub(progress.bytes_done)) as f64 / bytes_per_sec)
         }
         _ => None,
@@ -530,6 +560,7 @@ pub fn episode_download_progress(store_id: &StoreId) -> Option<DownloadProgress>
         bytes_total: progress.bytes_total,
         bytes_per_sec,
         eta_secs,
+        phase: progress.phase,
     })
 }
 
@@ -1362,6 +1393,7 @@ async fn load_one_item<S: DatasetStore>(
                 }
             }
 
+            pause.set_item_converting();
             episode_log_msgs(dataset.as_ref(), application_id, episode, recording_name)
         }
 
@@ -1438,6 +1470,7 @@ async fn load_one_item<S: DatasetStore>(
                 evict.push(video_rel);
             }
 
+            pause.set_item_converting();
             episode_log_msgs(dataset.as_ref(), application_id, episode, recording_name)
         }
 
@@ -1462,6 +1495,7 @@ async fn load_one_item<S: DatasetStore>(
                 ..re_importer::ImporterSettings::recommended(format!("file_{index}"))
             };
 
+            pause.set_item_converting();
             re_importer::import_from_file_contents(
                 &settings,
                 re_log_types::FileSource::Uri,
@@ -1709,5 +1743,175 @@ mod tests {
         assert_eq!(queue_index_from_recording_id("foo_1"), None);
         assert_eq!(queue_index_from_recording_id("episode_-1"), None);
         assert_eq!(queue_index_from_recording_id("episode_x"), None);
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod fetch_range_tests {
+    #![expect(clippy::unwrap_used)] // tests may panic
+
+    use super::*;
+    use std::collections::VecDeque;
+
+    /// A `DatasetStore` whose ranged reads follow a script: each entry is the byte count the next
+    /// `get_range_once` call returns — `Some(0)` is an empty response, more than requested is an
+    /// over-long response, `None` (and a spent script) answers honestly. Every requested range is
+    /// recorded for assertions.
+    struct ScriptedStore {
+        file: Vec<u8>,
+        script: Mutex<VecDeque<Option<usize>>>,
+        requested: Mutex<Vec<Range<u64>>>,
+    }
+
+    impl ScriptedStore {
+        fn new(file: Vec<u8>, script: &[Option<usize>]) -> Self {
+            Self {
+                file,
+                script: Mutex::new(script.iter().copied().collect()),
+                requested: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl DatasetStore for ScriptedStore {
+        fn url(&self) -> String {
+            "mock://dataset".to_owned()
+        }
+
+        async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {
+            Ok(Vec::new())
+        }
+
+        async fn file_size(&self, _rel_path: &str) -> anyhow::Result<u64> {
+            Ok(self.file.len() as u64)
+        }
+
+        async fn get_range_once(
+            &self,
+            _rel_path: &str,
+            range: Range<u64>,
+        ) -> anyhow::Result<Vec<u8>> {
+            self.requested.lock().push(range.clone());
+            let start = usize::try_from(range.start).unwrap();
+            let requested = usize::try_from(range.end - range.start).unwrap();
+            let len = self
+                .script
+                .lock()
+                .pop_front()
+                .flatten()
+                .unwrap_or(requested);
+            let end = (start + len).min(self.file.len());
+            Ok(self.file[start.min(end)..end].to_vec())
+        }
+    }
+
+    fn file_100() -> Vec<u8> {
+        (0_u8..100).collect()
+    }
+
+    #[tokio::test]
+    async fn honest_range_is_fetched_in_one_request() {
+        let store = ScriptedStore::new(file_100(), &[]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..90)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..90]);
+        assert_eq!(*store.requested.lock(), vec![10_u64..90]);
+    }
+
+    #[tokio::test]
+    async fn truncated_response_resumes_where_it_stopped() {
+        // A proxy delivering 30 of the 80 requested bytes: the driver must re-request the rest.
+        let store = ScriptedStore::new(file_100(), &[Some(30)]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..90)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..90]);
+        assert_eq!(*store.requested.lock(), vec![10_u64..90, 40_u64..90]);
+    }
+
+    #[tokio::test]
+    async fn overlong_response_is_trimmed() {
+        // A proxy turning the range request into (a prefix of) the whole file.
+        let store = ScriptedStore::new(file_100(), &[Some(90)]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..20)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..20]);
+        assert_eq!(store.requested.lock().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_few_empty_responses_are_tolerated() {
+        let store = ScriptedStore::new(file_100(), &[Some(0), Some(0), Some(0)]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 0..100)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100());
+    }
+
+    #[tokio::test]
+    async fn persistent_empty_responses_fail() {
+        let store = ScriptedStore::new(file_100(), &[Some(0), Some(0), Some(0), Some(0)]);
+        let err = fetch_range(&store, &PauseState::default(), "f", 0..100)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("Empty byte-range response"));
+    }
+
+    #[tokio::test]
+    async fn skip_aborts_the_download() {
+        let pause = PauseState::default();
+        pause.request_skip();
+        let store = ScriptedStore::new(file_100(), &[]);
+        let err = fetch_range(&store, &pause, "f", 0..100).await.unwrap_err();
+        assert!(err.to_string().contains("Download interrupted"));
+    }
+
+    /// Returns however many zero bytes were asked for, recording each request — lets the cap
+    /// test cover multi-chunk ranges without a real backing file.
+    #[derive(Default)]
+    struct ZeroStore {
+        requested: Mutex<Vec<Range<u64>>>,
+    }
+
+    impl DatasetStore for ZeroStore {
+        fn url(&self) -> String {
+            "mock://zeros".to_owned()
+        }
+
+        async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {
+            Ok(Vec::new())
+        }
+
+        async fn file_size(&self, _rel_path: &str) -> anyhow::Result<u64> {
+            Ok(u64::MAX)
+        }
+
+        async fn get_range_once(
+            &self,
+            _rel_path: &str,
+            range: Range<u64>,
+        ) -> anyhow::Result<Vec<u8>> {
+            self.requested.lock().push(range.clone());
+            Ok(vec![0; usize::try_from(range.end - range.start).unwrap()])
+        }
+    }
+
+    #[tokio::test]
+    async fn big_ranges_are_requested_in_bounded_chunks() {
+        const MIB: u64 = 1024 * 1024;
+        // Mirrors `MAX_RANGE_REQUEST` in `fetch_range`.
+        const CAP: u64 = 64 * MIB;
+
+        let store = ZeroStore::default();
+        let out = fetch_range(&store, &PauseState::default(), "f", 0..(2 * CAP + MIB))
+            .await
+            .unwrap();
+        assert_eq!(out.len(), usize::try_from(2 * CAP + MIB).unwrap());
+        assert_eq!(
+            *store.requested.lock(),
+            vec![0..CAP, CAP..2 * CAP, 2 * CAP..(2 * CAP + MIB)]
+        );
     }
 }
