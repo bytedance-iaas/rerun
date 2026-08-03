@@ -160,6 +160,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn prefetch_resolution() {
+        assert_eq!(resolve_prefetch_items(0), 4, "0 = automatic (4 natively)");
+        assert_eq!(resolve_prefetch_items(2), 2);
+        assert_eq!(resolve_prefetch_items(100), 16, "typo guard: capped at 16");
+    }
+
+    #[test]
     fn parse_artifacts_url_off_switch() {
         assert_eq!(parse_artifacts_url(""), None);
         assert_eq!(parse_artifacts_url("off"), None);
