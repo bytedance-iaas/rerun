@@ -93,7 +93,12 @@ fn agent() -> ureq::Agent {
             let tls = ureq::tls::TlsConfig::builder()
                 .root_certs(ureq::tls::RootCerts::PlatformVerifier)
                 .build();
-            let config = ureq::Agent::config_builder().tls_config(tls).build();
+            let config = ureq::Agent::config_builder()
+                .tls_config(tls)
+                // Match `ehttp`'s (and the browser's) semantics: a 4xx/5xx is a response,
+                // not an error — callers check `status` themselves (e.g. 404 = cache miss).
+                .http_status_as_error(false)
+                .build();
             ureq::Agent::new_with_config(config)
         })
         .clone()
@@ -101,6 +106,99 @@ fn agent() -> ureq::Agent {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
+    #![expect(clippy::unwrap_used)] // tests may panic
+
+    use std::io::{Read as _, Write as _};
+
+    /// Serves exactly one request on a fresh local port: captures the request head, then writes
+    /// `response` verbatim and closes. Returns the server's URL and the captured request bytes.
+    fn serve_once(response: Vec<u8>) -> (String, std::sync::mpsc::Receiver<Vec<u8>>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        std::thread::Builder::new()
+            .name("test_http_server".to_owned())
+            .spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                let mut buf = [0_u8; 1024];
+                // GET/HEAD requests have no body: the head ends at the blank line.
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => request.extend_from_slice(&buf[..n]),
+                    }
+                }
+                tx.send(request).ok();
+                stream.write_all(&response).ok();
+            })
+            .unwrap();
+        (url, rx)
+    }
+
+    #[tokio::test]
+    async fn get_roundtrip_against_a_local_server() {
+        let (url, _request) = serve_once(
+            b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\nx-test: yes\r\n\r\nhello".to_vec(),
+        );
+        let response = super::fetch_async(ehttp::Request::get(&url)).await.unwrap();
+        assert!(response.ok);
+        assert_eq!(response.status, 200);
+        assert_eq!(response.bytes, b"hello".to_vec());
+        assert!(
+            response
+                .headers
+                .headers
+                .iter()
+                .any(|(name, value)| name == "x-test" && value == "yes")
+        );
+    }
+
+    #[tokio::test]
+    async fn request_headers_are_forwarded() {
+        let (url, request_rx) =
+            serve_once(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n".to_vec());
+        let mut request = ehttp::Request::get(&url);
+        request.headers.insert("x-dataset-token", "abc123");
+        super::fetch_async(request).await.unwrap();
+        let head = String::from_utf8(request_rx.recv().unwrap())
+            .unwrap()
+            .to_ascii_lowercase();
+        assert!(head.contains("x-dataset-token: abc123"));
+    }
+
+    #[tokio::test]
+    async fn non_2xx_status_is_a_response_not_an_error() {
+        // `ehttp` semantics, which callers rely on: an HTTP error status must surface as a
+        // response with `ok: false`, not as `Err` (ureq's default treats 4xx/5xx as errors).
+        let (url, _request) =
+            serve_once(b"HTTP/1.1 404 Not Found\r\ncontent-length: 9\r\n\r\nnot found".to_vec());
+        let response = super::fetch_async(ehttp::Request::get(&url)).await.unwrap();
+        assert!(!response.ok);
+        assert_eq!(response.status, 404);
+        assert_eq!(response.bytes, b"not found".to_vec());
+    }
+
+    #[tokio::test]
+    async fn bodies_beyond_ureq_default_cap_are_read_fully() {
+        // ureq's `read_to_vec` stops at 10 MB by default; remote episodes are routinely larger,
+        // so the client must lift the limit.
+        const LEN: usize = 11 * 1024 * 1024;
+        let mut response = format!("HTTP/1.1 200 OK\r\ncontent-length: {LEN}\r\n\r\n").into_bytes();
+        response.resize(response.len() + LEN, b'x');
+        let (url, _request) = serve_once(response);
+        let response = super::fetch_async(ehttp::Request::get(&url)).await.unwrap();
+        assert_eq!(response.bytes.len(), LEN);
+    }
+
+    #[tokio::test]
+    async fn unsupported_methods_are_rejected() {
+        // The method check runs before any connection is made, so the unroutable port never hurts.
+        let request = ehttp::Request::post("http://127.0.0.1:9/", Vec::new());
+        let err = super::fetch_async(request).await.unwrap_err();
+        assert!(err.contains("Unsupported HTTP method"));
+    }
+
     /// Reaches a public HTTPS endpoint and asserts the TLS handshake succeeds.
     ///
     /// Ignored by default because it needs network access; run it manually to confirm the OS

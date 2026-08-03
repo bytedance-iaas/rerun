@@ -1744,3 +1744,173 @@ mod tests {
         assert_eq!(queue_index_from_recording_id("episode_x"), None);
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod fetch_range_tests {
+    #![expect(clippy::unwrap_used)] // tests may panic
+
+    use super::*;
+    use std::collections::VecDeque;
+
+    /// A `DatasetStore` whose ranged reads follow a script: each entry is the byte count the next
+    /// `get_range_once` call returns — `Some(0)` is an empty response, more than requested is an
+    /// over-long response, `None` (and a spent script) answers honestly. Every requested range is
+    /// recorded for assertions.
+    struct ScriptedStore {
+        file: Vec<u8>,
+        script: Mutex<VecDeque<Option<usize>>>,
+        requested: Mutex<Vec<Range<u64>>>,
+    }
+
+    impl ScriptedStore {
+        fn new(file: Vec<u8>, script: &[Option<usize>]) -> Self {
+            Self {
+                file,
+                script: Mutex::new(script.iter().copied().collect()),
+                requested: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl DatasetStore for ScriptedStore {
+        fn url(&self) -> String {
+            "mock://dataset".to_owned()
+        }
+
+        async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {
+            Ok(Vec::new())
+        }
+
+        async fn file_size(&self, _rel_path: &str) -> anyhow::Result<u64> {
+            Ok(self.file.len() as u64)
+        }
+
+        async fn get_range_once(
+            &self,
+            _rel_path: &str,
+            range: Range<u64>,
+        ) -> anyhow::Result<Vec<u8>> {
+            self.requested.lock().push(range.clone());
+            let start = usize::try_from(range.start).unwrap();
+            let requested = usize::try_from(range.end - range.start).unwrap();
+            let len = self
+                .script
+                .lock()
+                .pop_front()
+                .flatten()
+                .unwrap_or(requested);
+            let end = (start + len).min(self.file.len());
+            Ok(self.file[start.min(end)..end].to_vec())
+        }
+    }
+
+    fn file_100() -> Vec<u8> {
+        (0_u8..100).collect()
+    }
+
+    #[tokio::test]
+    async fn honest_range_is_fetched_in_one_request() {
+        let store = ScriptedStore::new(file_100(), &[]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..90)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..90]);
+        assert_eq!(*store.requested.lock(), vec![10_u64..90]);
+    }
+
+    #[tokio::test]
+    async fn truncated_response_resumes_where_it_stopped() {
+        // A proxy delivering 30 of the 80 requested bytes: the driver must re-request the rest.
+        let store = ScriptedStore::new(file_100(), &[Some(30)]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..90)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..90]);
+        assert_eq!(*store.requested.lock(), vec![10_u64..90, 40_u64..90]);
+    }
+
+    #[tokio::test]
+    async fn overlong_response_is_trimmed() {
+        // A proxy turning the range request into (a prefix of) the whole file.
+        let store = ScriptedStore::new(file_100(), &[Some(90)]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..20)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..20]);
+        assert_eq!(store.requested.lock().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_few_empty_responses_are_tolerated() {
+        let store = ScriptedStore::new(file_100(), &[Some(0), Some(0), Some(0)]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 0..100)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100());
+    }
+
+    #[tokio::test]
+    async fn persistent_empty_responses_fail() {
+        let store = ScriptedStore::new(file_100(), &[Some(0), Some(0), Some(0), Some(0)]);
+        let err = fetch_range(&store, &PauseState::default(), "f", 0..100)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("Empty byte-range response"));
+    }
+
+    #[tokio::test]
+    async fn skip_aborts_the_download() {
+        let pause = PauseState::default();
+        pause.request_skip();
+        let store = ScriptedStore::new(file_100(), &[]);
+        let err = fetch_range(&store, &pause, "f", 0..100).await.unwrap_err();
+        assert!(err.to_string().contains("Download interrupted"));
+    }
+
+    /// Returns however many zero bytes were asked for, recording each request — lets the cap
+    /// test cover multi-chunk ranges without a real backing file.
+    #[derive(Default)]
+    struct ZeroStore {
+        requested: Mutex<Vec<Range<u64>>>,
+    }
+
+    impl DatasetStore for ZeroStore {
+        fn url(&self) -> String {
+            "mock://zeros".to_owned()
+        }
+
+        async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {
+            Ok(Vec::new())
+        }
+
+        async fn file_size(&self, _rel_path: &str) -> anyhow::Result<u64> {
+            Ok(u64::MAX)
+        }
+
+        async fn get_range_once(
+            &self,
+            _rel_path: &str,
+            range: Range<u64>,
+        ) -> anyhow::Result<Vec<u8>> {
+            self.requested.lock().push(range.clone());
+            Ok(vec![0; usize::try_from(range.end - range.start).unwrap()])
+        }
+    }
+
+    #[tokio::test]
+    async fn big_ranges_are_requested_in_bounded_chunks() {
+        const MIB: u64 = 1024 * 1024;
+        // Mirrors `MAX_RANGE_REQUEST` in `fetch_range`.
+        const CAP: u64 = 64 * MIB;
+
+        let store = ZeroStore::default();
+        let out = fetch_range(&store, &PauseState::default(), "f", 0..(2 * CAP + MIB))
+            .await
+            .unwrap();
+        assert_eq!(out.len(), usize::try_from(2 * CAP + MIB).unwrap());
+        assert_eq!(
+            *store.requested.lock(),
+            vec![0..CAP, CAP..2 * CAP, 2 * CAP..(2 * CAP + MIB)]
+        );
+    }
+}
