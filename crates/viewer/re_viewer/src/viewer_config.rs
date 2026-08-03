@@ -75,3 +75,32 @@ pub fn request() {
 pub fn get() -> Option<ViewerConfig> {
     CONFIG.lock().clone()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The config file is shared with the "Open from …" dialogs and the web deployment, and
+    /// grows keys over time: missing fields must default, unknown fields must be ignored.
+    #[test]
+    fn config_tolerates_partial_and_unknown_fields() {
+        let config: ViewerConfig = serde_json::from_slice(
+            br#"{"tos_endpoint":"https://tos.example.com","some_future_key":1}"#,
+        )
+        .unwrap();
+        assert_eq!(config.tos_endpoint, "https://tos.example.com");
+        assert_eq!(config.tos_region, "");
+        assert!(!config.has_tos_credentials());
+    }
+
+    #[test]
+    fn credentials_need_both_keys() {
+        let mut config = ViewerConfig {
+            tos_access_key: "ak".to_owned(),
+            ..Default::default()
+        };
+        assert!(!config.has_tos_credentials());
+        config.tos_secret_key = "sk".to_owned();
+        assert!(config.has_tos_credentials());
+    }
+}

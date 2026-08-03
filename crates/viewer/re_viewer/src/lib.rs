@@ -43,12 +43,12 @@ mod navigation;
 mod open_url_description;
 mod prefetch_chunks;
 mod recent_datasets;
-mod viewer_config;
 mod saving;
 mod screenshotter;
 mod startup_options;
 mod texture_readback;
 mod ui;
+mod viewer_config;
 
 #[cfg(feature = "analytics")]
 mod viewer_analytics;
