@@ -14,6 +14,9 @@ use anyhow::Context as _;
 pub struct TosDatasetSource {
     pub location: TosLocation,
     pub credentials: TosCredentials,
+
+    /// Where to look up / upload converted rrds; `None` disables the artifacts store.
+    pub rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 }
 
 /// [`DatasetStore`] over a TOS/S3-compatible bucket prefix.
@@ -37,6 +40,7 @@ impl DatasetStore for TosStore {
                     .map(|rel| ListedFile {
                         rel_path: rel.to_owned(),
                         size: obj.size,
+                        content_id: obj.etag.clone(),
                     })
             })
             .collect())
@@ -63,11 +67,13 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
     let TosDatasetSource {
         mut location,
         credentials,
+        rrd_artifacts,
     } = source;
     let client = TosClient::new(credentials, location.bucket.clone());
 
     // A path to a single file (e.g. tos://bucket/path/recording.mcap) is downloaded and run
     // through the regular importers instead of the LeRobot dataset pipeline.
+    // The rrd artifacts store only covers LeRobot episodes, not loose files.
     if let Some(file_name) = location.split_off_file_name() {
         let url = format!("{location}{file_name}");
         return crate::lerobot_remote::stream_remote_file(
@@ -77,5 +83,5 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
         );
     }
 
-    crate::lerobot_remote::stream_lerobot_dataset(TosStore { client, location })
+    crate::lerobot_remote::stream_lerobot_dataset(TosStore { client, location }, rrd_artifacts)
 }

@@ -22,6 +22,9 @@ pub struct HfDatasetSource {
 
     /// Access token (empty for anonymous access to public datasets).
     pub token: String,
+
+    /// Where to look up / upload converted rrds (a TOS bucket); `None` disables the artifacts store.
+    pub rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 }
 
 /// Parse user input into an HF dataset repo id plus an optional file path within the repo.
@@ -87,6 +90,10 @@ struct TreeEntry {
     path: String,
     #[serde(default)]
     size: u64,
+
+    /// Git blob id of the file — a real content hash, ideal for the rrd-artifacts fingerprint.
+    #[serde(default)]
+    oid: Option<String>,
 }
 
 /// [`DatasetStore`] over a Hugging Face dataset repo.
@@ -142,6 +149,7 @@ impl DatasetStore for HfStore {
                     .map(|entry| ListedFile {
                         rel_path: entry.path,
                         size: entry.size,
+                        content_id: entry.oid,
                     }),
             );
 
@@ -238,13 +246,14 @@ fn parse_next_link(link_header: &str) -> Option<String> {
 /// Open a `LeRobot` dataset (or a single data file) on Hugging Face as a streaming log source.
 pub fn stream_lerobot_dataset(source: HfDatasetSource) -> LogReceiver {
     // A file within the repo is downloaded and run through the regular importers instead of the
-    // LeRobot dataset pipeline.
+    // LeRobot dataset pipeline. The rrd artifacts store only covers LeRobot episodes, not loose files.
     if let Some(file_path) = source.file_path.clone() {
         let url = format!("hf://{}/{file_path}", source.repo);
         return crate::lerobot_remote::stream_remote_file(HfStore { source }, file_path, url);
     }
 
-    crate::lerobot_remote::stream_lerobot_dataset(HfStore { source })
+    let rrd_artifacts = source.rrd_artifacts.clone();
+    crate::lerobot_remote::stream_lerobot_dataset(HfStore { source }, rrd_artifacts)
 }
 
 #[cfg(test)]
@@ -268,6 +277,7 @@ mod tests {
                 repo: "cortexdatalabs/MCAP-Housing".to_owned(),
                 file_path: None,
                 token: String::new(),
+                rrd_artifacts: None,
             },
         };
         let size = store
@@ -339,6 +349,7 @@ mod tests {
                 repo: "org/name".to_owned(),
                 file_path: None,
                 token: token.to_owned(),
+                rrd_artifacts: None,
             },
         };
         assert_eq!(store("").auth_header(), None);
