@@ -145,6 +145,35 @@ mod tests {
     }
 
     #[test]
+    fn artifacts_store_defaults_on_but_needs_credentials() {
+        // An absent key resolves to the default bucket…
+        let mut config: ViewerConfig = serde_json::from_slice(b"{}").unwrap();
+        assert_eq!(
+            config.tos_rrd_artifacts_url,
+            re_data_source::rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL
+        );
+        // …but without TOS credentials there is no artifacts target.
+        assert!(config.rrd_artifacts(true).is_none());
+
+        config.tos_access_key = "ak".to_owned();
+        config.tos_secret_key = "sk".to_owned();
+        let artifacts = config.rrd_artifacts(true).unwrap();
+        assert_eq!(artifacts.location.bucket, "physical-ai-rerun-test");
+        assert!(artifacts.write_back);
+    }
+
+    #[test]
+    fn artifacts_store_off_switch_wins_over_credentials() {
+        let config = ViewerConfig {
+            tos_access_key: "ak".to_owned(),
+            tos_secret_key: "sk".to_owned(),
+            tos_rrd_artifacts_url: "off".to_owned(),
+            ..Default::default()
+        };
+        assert!(config.rrd_artifacts(false).is_none());
+    }
+
+    #[test]
     fn credentials_need_both_keys() {
         let mut config = ViewerConfig {
             tos_access_key: "ak".to_owned(),

@@ -1917,9 +1917,7 @@ fn episode_artifact_fingerprint(remote: &RemoteDataset, episode: EpisodeIndex) -
                      size_of: &dyn Fn(&str) -> u64,
                      content_id_of: &dyn Fn(&str) -> Option<String>| {
         let owned_ids: Vec<Option<String>> = rels.iter().map(|rel| content_id_of(rel)).collect();
-        let mut parts: Vec<FingerprintPart<'_>> = rels
-            .iter()
-            .zip(&owned_ids)
+        let mut parts: Vec<FingerprintPart<'_>> = std::iter::zip(rels, &owned_ids)
             .map(|(rel, id)| FingerprintPart {
                 rel_path: rel,
                 size: size_of(rel),
@@ -2547,5 +2545,36 @@ mod fetch_range_tests {
             *store.requested.lock(),
             vec![0..CAP, CAP..2 * CAP, 2 * CAP..(2 * CAP + MIB)]
         );
+    }
+}
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+
+    /// The artifacts-store format contract: an episode encoded for upload
+    /// ([`spawn_artifact_write_back`]) must decode back into the same messages
+    /// ([`fetch_and_replay_artifact`]) — possibly by a different viewer build.
+    #[test]
+    fn artifact_rrd_roundtrip() {
+        let application_id = ApplicationId::from("tos://bucket/dataset/");
+        let msgs = [recording_store_info_msg(&application_id, "episode_3")];
+
+        let encoded = re_log_encoding::Encoder::encode(msgs.iter().map(Ok)).unwrap();
+
+        let decoded: Vec<re_log_types::LogMsg> =
+            re_log_encoding::Decoder::decode_lazy(std::io::Cursor::new(encoded))
+                .collect::<Result<_, _>>()
+                .unwrap();
+
+        assert_eq!(decoded.len(), msgs.len());
+        let (
+            re_log_types::LogMsg::SetStoreInfo(original),
+            re_log_types::LogMsg::SetStoreInfo(round_tripped),
+        ) = (&msgs[0], &decoded[0])
+        else {
+            panic!("expected SetStoreInfo on both sides");
+        };
+        assert_eq!(original.info.store_id, round_tripped.info.store_id);
     }
 }
