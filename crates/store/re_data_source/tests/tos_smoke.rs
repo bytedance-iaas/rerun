@@ -86,6 +86,13 @@ fn tos_rrd_artifacts_roundtrip() {
             .unwrap();
         assert!(missing.is_none());
 
+        // DELETE removes the object; deleting an absent key is also fine (S3 semantics).
+        client.delete_object(&key).await.unwrap();
+        let gone = client.head_object(&key).await.unwrap();
+        assert!(gone.is_none(), "object must be gone after DELETE");
+        client.delete_object(&key).await.unwrap();
+        println!("DELETE ok: {key}");
+
         println!("rrd-artifacts roundtrip ok");
     });
 }

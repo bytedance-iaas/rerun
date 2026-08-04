@@ -34,9 +34,10 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
     let agent = agent();
 
     let mut response = match &request.method {
-        ehttp::Method::GET | ehttp::Method::HEAD => {
+        ehttp::Method::GET | ehttp::Method::HEAD | ehttp::Method::DELETE => {
             let mut builder = match &request.method {
                 ehttp::Method::GET => agent.get(&request.url),
+                ehttp::Method::DELETE => agent.delete(&request.url),
                 _ => agent.head(&request.url),
             };
             for (name, value) in &request.headers.headers {

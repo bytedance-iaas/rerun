@@ -913,6 +913,26 @@ pub fn entity_db_button_ui(
             re_log::info!("Copied {recording_name:?} to clipboard");
             ui.copy_text(recording_name);
         }
+
+        // Artifact management for remote-dataset episodes with a converted rrd in the store.
+        if let Some(artifact_url) =
+            re_data_source::lerobot_remote::episode_rrd_artifact_url(&store_id)
+        {
+            ui.separator();
+            if ui.button("Copy rrd artifact address").clicked() {
+                ui.copy_text(artifact_url.clone());
+            }
+            if ui.button("Delete rrd artifact…").clicked() {
+                // Only queues a request: the viewer shows a confirmation dialog first.
+                re_data_source::rrd_artifacts::request_deletion(
+                    re_data_source::rrd_artifacts::ArtifactDeletionRequest {
+                        dataset_url: store_id.application_id().to_string(),
+                        episode: re_data_source::lerobot_remote::episode_queue_index(&store_id),
+                        target_url: artifact_url,
+                    },
+                );
+            }
+        }
     });
 
     if response.clicked() {

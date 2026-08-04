@@ -462,6 +462,10 @@ struct StreamState {
     /// [`PauseState::item_progress`] slot) because artifacts prefetch several items at once.
     artifact_progress: Mutex<ahash::HashMap<usize, ItemProgress>>,
 
+    /// The artifacts-store config this stream runs with (for artifact management UI,
+    /// e.g. deleting artifacts of the open dataset).
+    artifacts_config: Mutex<Option<crate::rrd_artifacts::RrdArtifactsConfig>>,
+
     pause: PauseState,
 }
 
@@ -762,6 +766,45 @@ pub fn is_dataset_streaming(application_id: &str) -> bool {
 /// (an action row, not a real episode — it must never take focus).
 pub fn is_more_placeholder(store_id: &StoreId) -> bool {
     store_id.recording_id().as_str() == MORE_RECORDING_ID
+}
+
+/// The queue index of this recording within its dataset stream, if it is one.
+pub fn episode_queue_index(store_id: &StoreId) -> Option<usize> {
+    queue_index_from_recording_id(store_id.recording_id().as_str())
+}
+
+/// The artifacts-store config of an active dataset stream (for artifact management UI).
+pub fn dataset_artifacts_config(
+    application_id: &str,
+) -> Option<crate::rrd_artifacts::RrdArtifactsConfig> {
+    ACTIVE_STREAMS
+        .lock()
+        .get(application_id)?
+        .artifacts_config
+        .lock()
+        .clone()
+}
+
+/// How many items of this active dataset stream are known to have an rrd artifact.
+pub fn dataset_artifact_count(application_id: &str) -> usize {
+    ACTIVE_STREAMS
+        .lock()
+        .get(application_id)
+        .map_or(0, |state| state.rrd_artifact_urls.lock().len())
+}
+
+/// Forget known artifact URLs after a deletion (one episode, or the whole dataset),
+/// so tooltips and context menus stop offering them.
+pub fn forget_rrd_artifact_urls(application_id: &str, episode: Option<usize>) {
+    if let Some(state) = ACTIVE_STREAMS.lock().get(application_id) {
+        let mut urls = state.rrd_artifact_urls.lock();
+        match episode {
+            Some(index) => {
+                urls.remove(&index);
+            }
+            None => urls.clear(),
+        }
+    }
 }
 
 /// Whether the active stream of this application id is paused.
@@ -1261,6 +1304,7 @@ async fn stream_items<S: DatasetStore>(
 
     let guard = StreamGuard::new(&application_id);
     guard.state.n_items.store(total, Ordering::SeqCst);
+    *guard.state.artifacts_config.lock() = rrd_artifacts.clone();
 
     // One listing of this dataset's artifacts directory marks which items already have a converted
     // rrd (for the UI). Best-effort: per-episode lookups still run regardless.
