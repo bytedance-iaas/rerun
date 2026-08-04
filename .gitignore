@@ -117,3 +117,5 @@ secrets/
 *.pem
 .env
 !*.env.example
+/deploy/vke/*.local.yaml
+/deploy/vke/rerun-cloud.yaml
