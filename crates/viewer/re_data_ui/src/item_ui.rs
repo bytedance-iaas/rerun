@@ -666,6 +666,15 @@ pub fn entity_db_button_ui(
         None
     };
 
+    // Announced but not yet downloaded — such episodes hold only their ~1 KB properties
+    // chunk until real data arrives. Dimming them makes the ready-to-view ones stand out,
+    // instead of every row looking equally "done".
+    let episode_queued = !episode_loading
+        && episode_failure.is_none()
+        && re_data_source::lerobot_remote::is_dataset_streaming(store_id.application_id().as_str())
+        && !re_data_source::lerobot_remote::is_more_placeholder(&store_id)
+        && entity_db.byte_size_of_physical_chunks() <= 16 * 1024;
+
     // Live progress in the row itself: big downloads are agony without a sense of how far
     // along they are. The full name would push the numbers past the panel's truncation, so
     // while loading the row shows a compact "<name> · downloading mp4 43% · ~12s left" instead
@@ -737,7 +746,9 @@ pub fn entity_db_button_ui(
             );
         })
     } else {
-        list_item::LabelContent::new(title).with_icon(icon)
+        list_item::LabelContent::new(title)
+            .with_icon(icon)
+            .subdued(episode_queued)
     };
 
     if ui_layout.is_selection_panel() {
@@ -852,6 +863,11 @@ pub fn entity_db_button_ui(
 
     // A converted copy of this episode lives in the rrd artifacts store: show where. The address is
     // copyable via the context menu ("Copy rrd artifact address").
+    if episode_queued {
+        response = response
+            .on_hover_text("Not downloaded yet — click to move it to the front of the queue.");
+    }
+
     if let Some(artifact_url) = re_data_source::lerobot_remote::episode_rrd_artifact_url(&store_id)
     {
         response = response.on_hover_text(format!("Rrd artifact: {artifact_url}"));
