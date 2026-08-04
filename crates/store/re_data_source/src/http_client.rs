@@ -34,9 +34,10 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
     let agent = agent();
 
     let mut response = match &request.method {
-        ehttp::Method::GET | ehttp::Method::HEAD => {
+        ehttp::Method::GET | ehttp::Method::HEAD | ehttp::Method::DELETE => {
             let mut builder = match &request.method {
                 ehttp::Method::GET => agent.get(&request.url),
+                ehttp::Method::DELETE => agent.delete(&request.url),
                 _ => agent.head(&request.url),
             };
             for (name, value) in &request.headers.headers {
@@ -187,6 +188,19 @@ mod tests {
             .unwrap()
             .to_ascii_lowercase();
         assert!(head.contains("x-dataset-token: abc123"));
+    }
+
+    #[tokio::test]
+    async fn delete_method_is_forwarded() {
+        let (url, request_rx) =
+            serve_once(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n".to_vec());
+        let mut request = ehttp::Request::get(&url);
+        request.method = ehttp::Method::DELETE;
+        let response = super::fetch_async(request).await.unwrap();
+        assert!(response.ok);
+        assert_eq!(response.status, 204);
+        let head = String::from_utf8(request_rx.recv().unwrap()).unwrap();
+        assert!(head.starts_with("DELETE "));
     }
 
     #[tokio::test]

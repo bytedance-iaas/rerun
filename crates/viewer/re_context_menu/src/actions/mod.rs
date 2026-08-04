@@ -11,9 +11,11 @@ pub mod track_entity;
 
 mod copy_entity_path;
 mod copy_rrd_artifact_url;
+mod delete_rrd_artifacts;
 mod screenshot_action;
 
 pub use copy_entity_path::CopyEntityPathToClipboard;
 pub use copy_rrd_artifact_url::CopyRrdArtifactUrl;
+pub use delete_rrd_artifacts::{DeleteDatasetRrdArtifacts, DeleteRrdArtifact};
 pub use screenshot_action::ScreenshotAction;
 pub use track_entity::TrackEntity;

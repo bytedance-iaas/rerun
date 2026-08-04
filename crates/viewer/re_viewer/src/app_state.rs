@@ -95,6 +95,8 @@ pub struct AppState {
     #[serde(skip)]
     pub(crate) open_hf_modal: crate::ui::OpenHfModal,
     #[serde(skip)]
+    pub(crate) delete_artifacts_modal: crate::ui::DeleteArtifactsModal,
+    #[serde(skip)]
     pub(crate) share_modal: crate::ui::ShareModal,
 
     /// Test-only: single-shot callback to run at the end of the frame. Used in integration tests
@@ -169,6 +171,7 @@ impl Default for AppState {
             open_url_modal: Default::default(),
             open_tos_modal: Default::default(),
             open_hf_modal: Default::default(),
+            delete_artifacts_modal: Default::default(),
             share_modal: Default::default(),
             navigation: Default::default(),
             history: Default::default(),
@@ -842,6 +845,7 @@ impl AppState {
         self.open_url_modal.ui(ui);
         self.open_tos_modal.ui(ui, command_sender);
         self.open_hf_modal.ui(ui, command_sender);
+        self.delete_artifacts_modal.ui(ui);
 
         drag_and_drop_manager.payload_cursor_ui(&egui_ctx);
 
