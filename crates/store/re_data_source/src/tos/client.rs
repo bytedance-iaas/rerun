@@ -271,6 +271,11 @@ impl TosClient {
             .await?;
 
         // S3 answers 204 No Content for deletions, existing key or not.
+        if response.status == 403 {
+            anyhow::bail!(
+                "Deletion denied (HTTP 403) — these credentials have no delete permission\nObject: {key}"
+            );
+        }
         if response.status != 204 && response.status != 200 {
             anyhow::bail!(
                 "DELETE failed with HTTP {}: {}\nObject: {key}",

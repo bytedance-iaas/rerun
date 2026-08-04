@@ -132,6 +132,19 @@ fn add_button_ui(
                 {
                     ui.close();
                 }
+                if re_ui::UICommand::AddRedapServer
+                    .menu_button_ui(ui, ctx.command_sender())
+                    .clicked()
+                {
+                    ui.close();
+                }
+
+                // Our additions on top of stock rerun, set apart as their own section.
+                ui.separator();
+                ui.add_enabled(
+                    false,
+                    egui::Button::new(egui::RichText::new("Extended").italics()),
+                );
                 if re_ui::UICommand::OpenTosDataset
                     .menu_button_ui(ui, ctx.command_sender())
                     .clicked()
@@ -139,12 +152,6 @@ fn add_button_ui(
                     ui.close();
                 }
                 if re_ui::UICommand::OpenHfDataset
-                    .menu_button_ui(ui, ctx.command_sender())
-                    .clicked()
-                {
-                    ui.close();
-                }
-                if re_ui::UICommand::AddRedapServer
                     .menu_button_ui(ui, ctx.command_sender())
                     .clicked()
                 {
@@ -783,8 +790,20 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                 re_data_source::lerobot_remote::dataset_artifacts_config(app_id.as_str())
         {
             item_response.context_menu(|ui| {
+                let deleting =
+                    re_data_source::rrd_artifacts::deletion_in_flight(app_id.as_str(), None);
+                let no_permission =
+                    re_data_source::rrd_artifacts::delete_permission(&config) == Some(false);
                 if ui
-                    .button(format!("Delete all rrd artifacts ({artifact_count})…"))
+                    .add_enabled(
+                        !deleting && !no_permission,
+                        egui::Button::new(format!("Delete all rrd artifacts ({artifact_count})…")),
+                    )
+                    .on_disabled_hover_text(if no_permission {
+                        "These credentials have no delete permission"
+                    } else {
+                        "Deletion in progress…"
+                    })
                     .clicked()
                 {
                     // Only queues a request: the viewer shows a confirmation dialog first.

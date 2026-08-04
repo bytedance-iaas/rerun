@@ -918,16 +918,36 @@ pub fn entity_db_button_ui(
         if let Some(artifact_url) =
             re_data_source::lerobot_remote::episode_rrd_artifact_url(&store_id)
         {
+            let app_id_str = store_id.application_id().as_str();
+            let episode = re_data_source::lerobot_remote::episode_queue_index(&store_id);
+            let deleting = re_data_source::rrd_artifacts::deletion_in_flight(app_id_str, episode);
+            let no_permission =
+                re_data_source::lerobot_remote::dataset_artifacts_config(app_id_str)
+                    .as_ref()
+                    .and_then(re_data_source::rrd_artifacts::delete_permission)
+                    == Some(false);
+
             ui.separator();
             if ui.button("Copy rrd artifact address").clicked() {
                 ui.copy_text(artifact_url.clone());
             }
-            if ui.button("Delete rrd artifact…").clicked() {
+            if ui
+                .add_enabled(
+                    !deleting && !no_permission,
+                    egui::Button::new("Delete rrd artifact…"),
+                )
+                .on_disabled_hover_text(if no_permission {
+                    "These credentials have no delete permission"
+                } else {
+                    "Deletion in progress…"
+                })
+                .clicked()
+            {
                 // Only queues a request: the viewer shows a confirmation dialog first.
                 re_data_source::rrd_artifacts::request_deletion(
                     re_data_source::rrd_artifacts::ArtifactDeletionRequest {
                         dataset_url: store_id.application_id().to_string(),
-                        episode: re_data_source::lerobot_remote::episode_queue_index(&store_id),
+                        episode,
                         target_url: artifact_url,
                     },
                 );
