@@ -2427,18 +2427,27 @@ mod fetch_range_tests {
     use super::*;
     use std::collections::VecDeque;
 
-    /// A `DatasetStore` whose ranged reads follow a script: each entry is the byte count the next
-    /// `get_range_once` call returns — `Some(0)` is an empty response, more than requested is an
-    /// over-long response, `None` (and a spent script) answers honestly. Every requested range is
-    /// recorded for assertions.
+    /// What one scripted `get_range_once` call does (see [`ScriptedStore`]).
+    #[derive(Clone, Copy)]
+    enum Reply {
+        /// The first `n` bytes of the requested range — `0` is an empty response, more than
+        /// requested an over-long one.
+        Bytes(usize),
+
+        /// A transport error (timeout, connection reset, …).
+        Fail,
+    }
+
+    /// A `DatasetStore` whose ranged reads follow a script, one entry per `get_range_once`
+    /// call; a spent script answers honestly. Every requested range is recorded for assertions.
     struct ScriptedStore {
         file: Vec<u8>,
-        script: Mutex<VecDeque<Option<usize>>>,
+        script: Mutex<VecDeque<Reply>>,
         requested: Mutex<Vec<Range<u64>>>,
     }
 
     impl ScriptedStore {
-        fn new(file: Vec<u8>, script: &[Option<usize>]) -> Self {
+        fn new(file: Vec<u8>, script: &[Reply]) -> Self {
             Self {
                 file,
                 script: Mutex::new(script.iter().copied().collect()),
@@ -2468,12 +2477,11 @@ mod fetch_range_tests {
             self.requested.lock().push(range.clone());
             let start = usize::try_from(range.start).unwrap();
             let requested = usize::try_from(range.end - range.start).unwrap();
-            let len = self
-                .script
-                .lock()
-                .pop_front()
-                .flatten()
-                .unwrap_or(requested);
+            let len = match self.script.lock().pop_front() {
+                Some(Reply::Bytes(n)) => n,
+                Some(Reply::Fail) => anyhow::bail!("simulated transport error"),
+                None => requested,
+            };
             let end = (start + len).min(self.file.len());
             Ok(self.file[start.min(end)..end].to_vec())
         }
@@ -2496,7 +2504,7 @@ mod fetch_range_tests {
     #[tokio::test]
     async fn truncated_response_resumes_where_it_stopped() {
         // A proxy delivering 30 of the 80 requested bytes: the driver must re-request the rest.
-        let store = ScriptedStore::new(file_100(), &[Some(30)]);
+        let store = ScriptedStore::new(file_100(), &[Reply::Bytes(30)]);
         let out = fetch_range(&store, &PauseState::default(), "f", 10..90)
             .await
             .unwrap();
@@ -2507,7 +2515,7 @@ mod fetch_range_tests {
     #[tokio::test]
     async fn overlong_response_is_trimmed() {
         // A proxy turning the range request into (a prefix of) the whole file.
-        let store = ScriptedStore::new(file_100(), &[Some(90)]);
+        let store = ScriptedStore::new(file_100(), &[Reply::Bytes(90)]);
         let out = fetch_range(&store, &PauseState::default(), "f", 10..20)
             .await
             .unwrap();
@@ -2517,7 +2525,7 @@ mod fetch_range_tests {
 
     #[tokio::test]
     async fn a_few_empty_responses_are_tolerated() {
-        let store = ScriptedStore::new(file_100(), &[Some(0), Some(0), Some(0)]);
+        let store = ScriptedStore::new(file_100(), &[Reply::Bytes(0); 3]);
         let out = fetch_range(&store, &PauseState::default(), "f", 0..100)
             .await
             .unwrap();
@@ -2526,11 +2534,45 @@ mod fetch_range_tests {
 
     #[tokio::test]
     async fn persistent_empty_responses_fail() {
-        let store = ScriptedStore::new(file_100(), &[Some(0), Some(0), Some(0), Some(0)]);
+        let store = ScriptedStore::new(file_100(), &[Reply::Bytes(0); 4]);
         let err = fetch_range(&store, &PauseState::default(), "f", 0..100)
             .await
             .unwrap_err();
         assert!(err.to_string().contains("Empty byte-range response"));
+    }
+
+    #[tokio::test]
+    async fn transient_transport_errors_are_retried_from_the_same_offset() {
+        let store = ScriptedStore::new(file_100(), &[Reply::Fail, Reply::Fail]);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..90)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..90]);
+        assert_eq!(*store.requested.lock(), vec![10_u64..90; 3]);
+    }
+
+    #[tokio::test]
+    async fn persistent_transport_errors_fail() {
+        let store = ScriptedStore::new(file_100(), &[Reply::Fail; 4]);
+        let err = fetch_range(&store, &PauseState::default(), "f", 10..90)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("simulated transport error"));
+    }
+
+    #[tokio::test]
+    async fn progress_resets_the_transport_error_budget() {
+        // Three failures are tolerated *per request*, not per item: as long as bytes keep
+        // arriving in between, a long flaky download must not accumulate into a failure.
+        let mut script = vec![Reply::Fail; 3];
+        script.push(Reply::Bytes(30)); // progress: resumes at offset 40
+        script.extend([Reply::Fail; 3]);
+        // Spent script → the final request answers honestly.
+        let store = ScriptedStore::new(file_100(), &script);
+        let out = fetch_range(&store, &PauseState::default(), "f", 10..90)
+            .await
+            .unwrap();
+        assert_eq!(out, file_100()[10..90]);
     }
 
     #[tokio::test]
