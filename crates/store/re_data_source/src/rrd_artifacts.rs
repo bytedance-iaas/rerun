@@ -246,6 +246,56 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
     });
 }
 
+/// The local connection config for headless tools (`rerun rrd-convert`): same file as the
+/// native viewer (`$RERUN_TOS_CONFIG` or `~/.rerun/tos-config.json`), same env overrides.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Default, serde::Deserialize)]
+#[serde(default)]
+pub struct LocalConfig {
+    pub tos_endpoint: String,
+    pub tos_region: String,
+    pub tos_access_key: String,
+    pub tos_secret_key: String,
+    pub hf_token: String,
+    #[serde(default = "default_artifacts_url")]
+    pub tos_rrd_artifacts_url: String,
+}
+
+/// Load [`LocalConfig`] from disk + environment. Missing/broken file = empty settings.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_local_config() -> LocalConfig {
+    let path = std::env::var_os("RERUN_TOS_CONFIG")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+            Some(
+                std::path::PathBuf::from(home)
+                    .join(".rerun")
+                    .join("tos-config.json"),
+            )
+        });
+
+    let mut config: LocalConfig = path
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+
+    let env_override = |field: &mut String, key: &str| {
+        if let Ok(value) = std::env::var(key)
+            && !value.is_empty()
+        {
+            *field = value;
+        }
+    };
+    env_override(&mut config.tos_endpoint, "TOS_ENDPOINT");
+    env_override(&mut config.tos_region, "TOS_REGION");
+    env_override(&mut config.tos_access_key, "TOS_ACCESS_KEY");
+    env_override(&mut config.tos_secret_key, "TOS_SECRET_KEY");
+    env_override(&mut config.hf_token, "HF_TOKEN");
+    env_override(&mut config.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+    config
+}
+
 /// How many artifacts to prefetch concurrently, from the configured value
 /// (`rrd_artifacts_prefetch` / `RRD_ARTIFACTS_PREFETCH`).
 ///

@@ -12,7 +12,7 @@ pub(crate) mod client;
 mod lerobot_stream;
 
 pub use client::{TosClient, TosCredentials};
-pub use lerobot_stream::{TosDatasetSource, stream_lerobot_dataset};
+pub use lerobot_stream::{TosDatasetSource, convert_lerobot_dataset, stream_lerobot_dataset};
 
 /// A `tos://bucket/prefix/` dataset location.
 #[derive(Clone, Debug, PartialEq, Eq)]

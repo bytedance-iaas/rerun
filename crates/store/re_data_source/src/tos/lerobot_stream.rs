@@ -83,5 +83,25 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
         );
     }
 
-    crate::lerobot_remote::stream_lerobot_dataset(TosStore { client, location }, rrd_artifacts)
+    crate::lerobot_remote::stream_lerobot_dataset(
+        TosStore { client, location },
+        rrd_artifacts,
+        crate::lerobot_remote::StreamMode::Viewer,
+    )
+}
+
+/// Headless pre-conversion of a `LeRobot` dataset in TOS (`rerun rrd-convert`):
+/// convert every episode whose artifact is missing or stale, upload, finish.
+pub fn convert_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
+    let TosDatasetSource {
+        location,
+        credentials,
+        rrd_artifacts,
+    } = source;
+    let client = TosClient::new(credentials, location.bucket.clone());
+    crate::lerobot_remote::stream_lerobot_dataset(
+        TosStore { client, location },
+        rrd_artifacts,
+        crate::lerobot_remote::StreamMode::ConvertOnly,
+    )
 }

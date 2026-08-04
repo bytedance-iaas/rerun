@@ -657,6 +657,10 @@ enum Command {
     #[command(subcommand)]
     Rrd(RrdCommands),
 
+    /// Pre-convert remote `LeRobot` datasets into rrd artifacts, headlessly.
+    #[command(name = "rrd-convert")]
+    RrdConvert(crate::commands::RrdConvertCommand),
+
     /// In-memory Rerun data server
     #[cfg(feature = "oss_server")]
     #[command(name = "server")]
@@ -784,6 +788,8 @@ where
             Command::Reset => re_viewer::reset_viewer_persistence(),
 
             Command::Rrd(rrd) => rrd.run(),
+
+            Command::RrdConvert(convert) => convert.run(tokio_runtime.handle()),
 
             #[cfg(feature = "oss_server")]
             Command::Server(server) => tokio_runtime.block_on(server.run_async()),
@@ -2005,6 +2011,8 @@ fn record_cli_command_analytics(args: &Args) {
             // TODO(RR-4073): Re-enable analytics for RRD commands.
             return;
         }
+
+        Some(Command::RrdConvert(_)) => ("rrd-convert", None),
 
         #[cfg(feature = "oss_server")]
         Some(Command::Server(_)) => ("server", None),

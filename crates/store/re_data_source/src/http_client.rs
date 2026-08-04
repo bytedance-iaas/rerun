@@ -13,20 +13,47 @@
 //! On the web there is no such stack — the browser makes the request and already uses the
 //! OS/browser trust store — so we fall through to `ehttp`.
 
+/// The hard cap for requests without an explicit deadline — must accommodate the largest
+/// legitimate transfer (a 64 MiB range on a slow link).
+pub const DEFAULT_HARD_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(5);
+
 /// Perform an HTTP request, returning an [`ehttp::Response`] just like [`ehttp::fetch_async`].
-#[cfg(target_arch = "wasm32")]
 pub async fn fetch_async(request: ehttp::Request) -> Result<ehttp::Response, String> {
+    fetch_async_with_timeout(request, DEFAULT_HARD_TIMEOUT).await
+}
+
+/// [`fetch_async`] with an overall deadline (browser requests ignore it — the browser
+/// manages its own connections).
+#[cfg(target_arch = "wasm32")]
+pub async fn fetch_async_with_timeout(
+    request: ehttp::Request,
+    _hard_timeout: std::time::Duration,
+) -> Result<ehttp::Response, String> {
     ehttp::fetch_async(request).await
 }
 
-/// Perform an HTTP request, returning an [`ehttp::Response`] just like [`ehttp::fetch_async`], but
-/// validating certificates against the OS trust store rather than the bundled webpki roots.
+/// [`fetch_async`] with an overall deadline, validating certificates against the OS trust
+/// store rather than the bundled webpki roots.
+///
+/// The deadline is enforced OUTSIDE the HTTP stack: corporate middleboxes have been observed
+/// to blackhole a connection mid-request in ways ureq's own phase timeouts never notice
+/// (a `sendto` that blocks forever). When it fires, the caller gets an error to retry on;
+/// the stuck blocking thread is abandoned and dies once the OS gives up on the socket.
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn fetch_async(request: ehttp::Request) -> Result<ehttp::Response, String> {
+pub async fn fetch_async_with_timeout(
+    request: ehttp::Request,
+    hard_timeout: std::time::Duration,
+) -> Result<ehttp::Response, String> {
+    let url = request.url.clone();
     // `ureq` is blocking; run it on the blocking pool so we don't stall the async executor.
-    tokio::task::spawn_blocking(move || fetch_blocking(&request))
-        .await
-        .map_err(|err| format!("HTTP task failed to run: {err}"))?
+    let task = tokio::task::spawn_blocking(move || fetch_blocking(&request));
+    match tokio::time::timeout(hard_timeout, task).await {
+        Ok(result) => result.map_err(|err| format!("HTTP task failed to run: {err}"))?,
+        Err(_elapsed) => Err(format!(
+            "Request did not finish within {}s (stalled connection?)\nUrl: {url}",
+            hard_timeout.as_secs()
+        )),
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -118,9 +145,16 @@ fn agent() -> ureq::Agent {
                 // not an error — callers check `status` themselves (e.g. 404 = cache miss).
                 .http_status_as_error(false)
                 .timeout_connect(Some(Duration::from_secs(15)))
+                .timeout_send_request(Some(Duration::from_secs(30)))
                 .timeout_recv_response(Some(Duration::from_secs(30)))
                 .timeout_recv_body(Some(Duration::from_mins(3)))
                 .timeout_send_body(Some(Duration::from_mins(3)))
+                // No idle-connection reuse: middleboxes on corporate networks silently kill
+                // pooled connections without an RST, and a request written into such a corpse
+                // blocks until its timeout (observed: back-to-back HEADs hanging in send).
+                // A fresh connection per request costs a TLS handshake (~hundreds of ms) and
+                // buys immunity.
+                .max_idle_connections(0)
                 .build();
             ureq::Agent::new_with_config(config)
         })
