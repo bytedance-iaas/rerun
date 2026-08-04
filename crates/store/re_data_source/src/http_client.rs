@@ -167,6 +167,34 @@ mod tests {
 
     use std::io::{Read as _, Write as _};
 
+    /// A middlebox blackhole: the connection is accepted, the request never answered.
+    /// The stuck thread is parked; the test process's exit reaps it.
+    #[tokio::test]
+    async fn hard_timeout_turns_a_stalled_connection_into_an_error() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let server = std::thread::Builder::new()
+            .name("test_stalled_server".to_owned())
+            .spawn(move || {
+                let stream = listener.accept();
+                std::thread::park();
+                drop(stream);
+            })
+            .unwrap();
+
+        let err = super::fetch_async_with_timeout(
+            ehttp::Request::get(&url),
+            std::time::Duration::from_secs(1),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("did not finish"), "unexpected error: {err}");
+
+        // Unblock the abandoned ureq thread (the runtime waits for blocking tasks on
+        // shutdown — without this, the test lingers until ureq's own 30s timeout).
+        server.thread().unpark();
+    }
+
     /// Serves exactly one request on a fresh local port: captures the request head, then writes
     /// `response` verbatim and closes. Returns the server's URL and the captured request bytes.
     fn serve_once(response: Vec<u8>) -> (String, std::sync::mpsc::Receiver<Vec<u8>>) {

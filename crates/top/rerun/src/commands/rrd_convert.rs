@@ -106,7 +106,7 @@ impl RrdConvertCommand {
                     SmartMessagePayload::Flush { on_flush_done } => on_flush_done(),
                     SmartMessagePayload::Quit(err) => {
                         if let Some(err) = err {
-                            re_log::error!("Conversion failed: {err}\nDataset: {url}");
+                            re_log::error!(?url, "Conversion failed: {err}");
                             failed = true;
                         }
                         break;
