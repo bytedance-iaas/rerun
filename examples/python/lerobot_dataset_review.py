@@ -17,16 +17,18 @@ Verified on rerun-sdk 0.33.0. `aloha_static_coffee`: 50 eps, 50 fps,
 14-dim state/action, 4x 480x640 cameras (~1100 frames/episode).
 """
 from __future__ import annotations
-import glob, time
+
+import glob
+import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
 import rerun as rr
 from rerun.catalog import CatalogClient
-
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 REPO = "lerobot/aloha_static_coffee"
 DS = REPO.replace("/", "_")          # Rerun dataset names cannot contain "/"
