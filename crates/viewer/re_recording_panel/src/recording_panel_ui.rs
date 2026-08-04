@@ -132,6 +132,19 @@ fn add_button_ui(
                 {
                     ui.close();
                 }
+                if re_ui::UICommand::AddRedapServer
+                    .menu_button_ui(ui, ctx.command_sender())
+                    .clicked()
+                {
+                    ui.close();
+                }
+
+                // Our additions on top of stock rerun, set apart as their own section.
+                ui.separator();
+                ui.add_enabled(
+                    false,
+                    egui::Button::new(egui::RichText::new("Extended").italics()),
+                );
                 if re_ui::UICommand::OpenTosDataset
                     .menu_button_ui(ui, ctx.command_sender())
                     .clicked()
@@ -139,12 +152,6 @@ fn add_button_ui(
                     ui.close();
                 }
                 if re_ui::UICommand::OpenHfDataset
-                    .menu_button_ui(ui, ctx.command_sender())
-                    .clicked()
-                {
-                    ui.close();
-                }
-                if re_ui::UICommand::AddRedapServer
                     .menu_button_ui(ui, ctx.command_sender())
                     .clicked()
                 {
@@ -773,6 +780,48 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
     item_response = item_response.on_hover_ui(|ui| {
         app_id.app_ui(ctx, ui, UiLayout::Tooltip);
     });
+
+    // Whole-dataset artifact management (per-episode actions live on the episode rows).
+    if streaming {
+        let artifact_count =
+            re_data_source::lerobot_remote::dataset_artifact_count(app_id.as_str());
+        if artifact_count > 0
+            && let Some(config) =
+                re_data_source::lerobot_remote::dataset_artifacts_config(app_id.as_str())
+        {
+            item_response.context_menu(|ui| {
+                let deleting =
+                    re_data_source::rrd_artifacts::deletion_in_flight(app_id.as_str(), None);
+                let no_permission =
+                    re_data_source::rrd_artifacts::delete_permission(&config) == Some(false);
+                if ui
+                    .add_enabled(
+                        !deleting && !no_permission,
+                        egui::Button::new(format!("Delete all rrd artifacts ({artifact_count})…")),
+                    )
+                    .on_disabled_hover_text(if no_permission {
+                        "These credentials have no delete permission"
+                    } else {
+                        "Deletion in progress…"
+                    })
+                    .clicked()
+                {
+                    // Only queues a request: the viewer shows a confirmation dialog first.
+                    let dir = re_data_source::rrd_artifacts::dataset_artifacts_dir(
+                        &config.location.prefix,
+                        app_id.as_str(),
+                    );
+                    re_data_source::rrd_artifacts::request_deletion(
+                        re_data_source::rrd_artifacts::ArtifactDeletionRequest {
+                            dataset_url: app_id.to_string(),
+                            episode: None,
+                            target_url: format!("tos://{}/{dir}", config.location.bucket),
+                        },
+                    );
+                }
+            });
+        }
+    }
 
     ctx.handle_select_hover_drag_interactions(&item_response, item.clone(), false);
     ctx.handle_select_focus_sync(&item_response, item);

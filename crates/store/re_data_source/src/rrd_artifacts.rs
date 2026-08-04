@@ -54,6 +54,198 @@ pub struct RrdArtifactsConfig {
     pub prefetch_items: usize,
 }
 
+/// A "delete artifacts" request, waiting for the user to confirm it in the viewer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArtifactDeletionRequest {
+    /// The dataset URL (= application id) whose artifacts are affected.
+    pub dataset_url: String,
+
+    /// `Some(index)` deletes that one episode's artifact; `None` deletes the whole
+    /// dataset's artifacts directory.
+    pub episode: Option<usize>,
+
+    /// What will be deleted, for display and for key derivation:
+    /// the object URL (episode) or the directory URL (dataset), `tos://bucket/…`.
+    pub target_url: String,
+}
+
+static PENDING_DELETION: parking_lot::Mutex<Option<ArtifactDeletionRequest>> =
+    parking_lot::Mutex::new(None);
+
+/// Deletions currently running in the background: `(dataset_url, episode)`.
+static DELETIONS_IN_FLIGHT: parking_lot::Mutex<Vec<(String, Option<usize>)>> =
+    parking_lot::Mutex::new(Vec::new());
+
+/// Result of the delete-permission probe, keyed by access key + bucket.
+/// An entry with `None` means the probe is still in flight.
+static DELETE_PERMISSION: parking_lot::Mutex<Vec<(String, Option<bool>)>> =
+    parking_lot::Mutex::new(Vec::new());
+
+fn permission_key(config: &RrdArtifactsConfig) -> String {
+    format!(
+        "{}:{}",
+        config.credentials.access_key, config.location.bucket
+    )
+}
+
+/// Whether these credentials may delete from the artifacts bucket, once known.
+///
+/// `None` until a [`probe_delete_permission`] settles; the UI treats that optimistically
+/// (worst case, the actual deletion reports the failure).
+pub fn delete_permission(config: &RrdArtifactsConfig) -> Option<bool> {
+    let key = permission_key(config);
+    DELETE_PERMISSION
+        .lock()
+        .iter()
+        .find(|(cached_key, _)| *cached_key == key)
+        .and_then(|(_, allowed)| *allowed)
+}
+
+/// Find out — once per credentials+bucket — whether deletion is permitted, so the UI
+/// can grey delete entries out up front.
+///
+/// The probe DELETEs a key that does not exist: that mutates nothing (S3 deletion of an
+/// absent key is a no-op success), yet still requires — and thus reveals — the delete
+/// permission. Network trouble leaves the answer unknown and the probe re-armed.
+pub fn probe_delete_permission(config: &RrdArtifactsConfig) {
+    let key = permission_key(config);
+    {
+        let mut cache = DELETE_PERMISSION.lock();
+        if cache.iter().any(|(cached_key, _)| *cached_key == key) {
+            return; // Already probed (or probing).
+        }
+        cache.push((key.clone(), None));
+    }
+
+    let config = config.clone();
+    crate::data_source::spawn_future(async move {
+        let client =
+            crate::tos::TosClient::new(config.credentials.clone(), config.location.bucket.clone());
+        let probe_key = format!("{}_permission-probe-does-not-exist", config.location.prefix);
+        let allowed = match client.delete_object(&probe_key).await {
+            Ok(()) => Some(true),
+            Err(err) => {
+                if format!("{err:#}").contains("403") {
+                    Some(false)
+                } else {
+                    None // Network trouble: leave unknown, retry on the next stream start.
+                }
+            }
+        };
+
+        let mut cache = DELETE_PERMISSION.lock();
+        cache.retain(|(cached_key, _)| *cached_key != key);
+        if allowed.is_some() {
+            cache.push((key, allowed));
+        }
+    });
+}
+
+/// Whether a deletion is currently running that covers this target.
+///
+/// The UI greys the matching menu entries out. A dataset-wide deletion
+/// (`episode == None` in flight) covers every episode of that dataset; asking with
+/// `episode == None` matches any deletion of the dataset.
+pub fn deletion_in_flight(dataset_url: &str, episode: Option<usize>) -> bool {
+    DELETIONS_IN_FLIGHT
+        .lock()
+        .iter()
+        .any(|(in_flight_url, in_flight_episode)| {
+            in_flight_url == dataset_url
+                && match episode {
+                    None => true,
+                    Some(index) => in_flight_episode.is_none() || *in_flight_episode == Some(index),
+                }
+        })
+}
+
+/// Ask the viewer to confirm (and then perform) an artifact deletion.
+///
+/// Deletion is destructive, so it never runs directly from the requesting UI element:
+/// the viewer picks the request up via [`take_deletion_request`], shows a confirmation
+/// dialog, and only then calls [`spawn_deletion`].
+pub fn request_deletion(request: ArtifactDeletionRequest) {
+    *PENDING_DELETION.lock() = Some(request);
+}
+
+/// The confirmation UI polls this once per frame.
+pub fn take_deletion_request() -> Option<ArtifactDeletionRequest> {
+    PENDING_DELETION.lock().take()
+}
+
+/// Perform a confirmed deletion in the background: one object, or everything under the
+/// dataset's artifacts directory. Failures only log — nothing in the viewer depends on it.
+pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionRequest) {
+    {
+        let mut in_flight = DELETIONS_IN_FLIGHT.lock();
+        if in_flight
+            .iter()
+            .any(|(url, episode)| url == &request.dataset_url && *episode == request.episode)
+        {
+            re_log::debug!(
+                "Deletion already in progress\nTarget: {}",
+                request.target_url
+            );
+            return;
+        }
+        in_flight.push((request.dataset_url.clone(), request.episode));
+    }
+
+    crate::data_source::spawn_future(async move {
+        let client =
+            crate::tos::TosClient::new(config.credentials.clone(), config.location.bucket.clone());
+        let bucket_prefix = format!("tos://{}/", config.location.bucket);
+
+        let result = async {
+            if request.episode.is_some() {
+                let key = request
+                    .target_url
+                    .strip_prefix(&bucket_prefix)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Artifact URL is not in the configured bucket")
+                    })?;
+                client.delete_object(key).await?;
+                anyhow::Ok(1usize)
+            } else {
+                let dir = dataset_artifacts_dir(&config.location.prefix, &request.dataset_url);
+                let objects = client.list_objects(&dir).await?;
+                let mut deleted = 0usize;
+                for object in &objects {
+                    client.delete_object(&object.key).await?;
+                    deleted += 1;
+                }
+                anyhow::Ok(deleted)
+            }
+        }
+        .await;
+
+        match result {
+            Ok(deleted) => {
+                re_log::info!(
+                    "Deleted {deleted} rrd artifact(s) from the store\nTarget: {}",
+                    request.target_url
+                );
+                crate::lerobot_remote::forget_rrd_artifact_urls(
+                    &request.dataset_url,
+                    request.episode,
+                );
+            }
+            Err(err) => {
+                re_log::warn!(
+                    "Failed to delete rrd artifact(s): {err:#}\nTarget: {}",
+                    request.target_url
+                );
+            }
+        }
+
+        DELETIONS_IN_FLIGHT
+            .lock()
+            .retain(|(in_flight_url, in_flight_episode)| {
+                !(in_flight_url == &request.dataset_url && *in_flight_episode == request.episode)
+            });
+    });
+}
+
 /// How many artifacts to prefetch concurrently, from the configured value
 /// (`rrd_artifacts_prefetch` / `RRD_ARTIFACTS_PREFETCH`).
 ///
@@ -165,6 +357,20 @@ mod tests {
         assert_eq!(resolve_prefetch_items(0), 4, "0 = automatic (4 natively)");
         assert_eq!(resolve_prefetch_items(2), 2);
         assert_eq!(resolve_prefetch_items(100), 16, "typo guard: capped at 16");
+    }
+
+    /// The requesting UI element and the confirmation dialog communicate through a
+    /// single-slot queue: a request is delivered to the dialog exactly once.
+    #[test]
+    fn deletion_requests_are_consumed_exactly_once() {
+        let request = ArtifactDeletionRequest {
+            dataset_url: "tos://bucket/ds/".to_owned(),
+            episode: Some(3),
+            target_url: "tos://artifacts/rrd-data/tos/bucket/ds/episode_3.rrd".to_owned(),
+        };
+        request_deletion(request.clone());
+        assert_eq!(take_deletion_request(), Some(request));
+        assert_eq!(take_deletion_request(), None);
     }
 
     #[test]
