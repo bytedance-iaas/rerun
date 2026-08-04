@@ -96,10 +96,18 @@ impl App {
 
         UICommand::Open.menu_button_ui(ui, &self.command_sender);
         UICommand::OpenUrl.menu_button_ui(ui, &self.command_sender);
-        UICommand::OpenTosDataset.menu_button_ui(ui, &self.command_sender);
-        UICommand::OpenHfDataset.menu_button_ui(ui, &self.command_sender);
         UICommand::AddRedapServer.menu_button_ui(ui, &self.command_sender);
         UICommand::Import.menu_button_ui(ui, &self.command_sender);
+
+        // Our additions on top of stock rerun, set apart as their own section.
+        ui.separator();
+        ui.add_enabled(
+            false,
+            egui::Button::new(egui::RichText::new("Extended").italics()),
+        );
+        UICommand::OpenTosDataset.menu_button_ui(ui, &self.command_sender);
+        UICommand::OpenHfDataset.menu_button_ui(ui, &self.command_sender);
+        ui.separator();
 
         self.save_buttons_ui(ui, _store_context);
 
