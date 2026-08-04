@@ -31,6 +31,7 @@ Then:     rerun rerun+http://127.0.0.1:51234
 `aloha_static_coffee`: 50 eps, 50 fps, 14-dim state/action,
 4x 480x640 cameras (~1100 frames/episode).
 """
+
 from __future__ import annotations
 
 import glob
@@ -46,7 +47,7 @@ import rerun as rr
 from rerun.catalog import CatalogClient
 
 REPO = "lerobot/aloha_static_coffee"
-DS = REPO.replace("/", "_")          # Rerun dataset names cannot contain "/"
+DS = REPO.replace("/", "_")  # Rerun dataset names cannot contain "/"
 N_EPISODES = 5
 PORT = 51234
 INDEX = "frame_index"
@@ -54,24 +55,26 @@ INDEX = "frame_index"
 # --- size controls -----------------------------------------------------------
 # Raw decoded RGB is huge: 480*640*3 * 4 cams ~= 3.5 MB / frame. Logging every
 # frame of a ~1100-frame episode = multi-GB .rrd. Tune these down:
-LOG_IMAGES   = True   # set False for a tiny scalars-only .rrd (state/action plots)
-IMG_STRIDE   = 10     # log every Nth camera frame
-IMG_DOWNSCALE = 2     # integer factor; 2 -> 240x320 thumbnails (4x smaller)
+LOG_IMAGES = True  # set False for a tiny scalars-only .rrd (state/action plots)
+IMG_STRIDE = 10  # log every Nth camera frame
+IMG_DOWNSCALE = 2  # integer factor; 2 -> 240x320 thumbnails (4x smaller)
 
-OUT = Path("aloha_episodes"); OUT.mkdir(exist_ok=True)
+OUT = Path("aloha_episodes")
+OUT.mkdir(exist_ok=True)
 
 
 def to_numpy(x):
     return x.numpy() if hasattr(x, "numpy") else np.asarray(x)
 
+
 def img_to_uint8_hwc(x):
     a = to_numpy(x)
     if a.ndim == 3 and a.shape[0] in (1, 3) and a.shape[2] not in (1, 3):
-        a = np.transpose(a, (1, 2, 0))                 # CHW -> HWC
+        a = np.transpose(a, (1, 2, 0))  # CHW -> HWC
     if a.dtype != np.uint8:
         a = (np.clip(a, 0, 1) * 255).astype(np.uint8) if a.max() <= 1.0 else a.astype(np.uint8)
     if IMG_DOWNSCALE > 1:
-        a = a[::IMG_DOWNSCALE, ::IMG_DOWNSCALE]        # cheap, dependency-free downscale
+        a = a[::IMG_DOWNSCALE, ::IMG_DOWNSCALE]  # cheap, dependency-free downscale
     return a
 
 
@@ -99,11 +102,12 @@ def summarize(dataset, fps):
     }
 
     rows = []
-    for sid in sorted(dataset.segment_ids()):   # segment_ids() comes back unordered
+    for sid in sorted(dataset.segment_ids()):  # segment_ids() comes back unordered
         # One episode at a time, so memory stays flat regardless of episode count.
         # `filter_contents` keeps the camera blobs out of the result entirely.
         table = (
-            dataset.filter_segments([sid])
+            dataset
+            .filter_segments([sid])
             .filter_contents(["/state/**", "/action/**"])
             .reader(index=INDEX)
             .to_arrow_table()
@@ -112,7 +116,7 @@ def summarize(dataset, fps):
         A = episode_matrix(table, "action")
         n = extent.get(sid, len(S))
         rows.append({
-            "episode": sid,                     # matches the .rrd's recording_id
+            "episode": sid,  # matches the .rrd's recording_id
             "n_frames": n,
             "duration_s": round(n / fps, 2),
             "action_motion": round(float(np.abs(np.diff(A, axis=0)).sum()), 2),
@@ -145,7 +149,7 @@ def main() -> None:
         if LOG_IMAGES and fi % IMG_STRIDE == 0:
             for k in image_keys:
                 rec.log(f"cameras/{k.split('.')[-1]}", rr.Image(img_to_uint8_hwc(frame[k])))
-        state  = to_numpy(frame["observation.state"]).reshape(-1)
+        state = to_numpy(frame["observation.state"]).reshape(-1)
         action = to_numpy(frame["action"]).reshape(-1)
         for j, v in enumerate(state):
             rec.log(f"state/{j:02d}", rr.Scalars(float(v)))
@@ -170,7 +174,7 @@ def main() -> None:
 
     tbl = pa.Table.from_pandas(df, preserve_index=False)
     entry = client.create_table(f"{DS}_review", tbl.schema)
-    entry.append(tbl.to_batches())        # create_table registers the schema; append writes the rows
+    entry.append(tbl.to_batches())  # create_table registers the schema; append writes the rows
 
     print(f"\nServing {srv.url()}  | dataset '{DS}' | table '{DS}_review' ({entry.reader().count()} rows)")
     print(f"Open the Viewer:  rerun  {srv.url()}")
