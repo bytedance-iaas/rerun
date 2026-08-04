@@ -51,9 +51,9 @@ Example `~/.rerun/tos-config.json`:
 {
   "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
   "tos_region": "cn-beijing",
-  "tos_access_key": "AK...",
-  "tos_secret_key": "SK...",
-  "hf_token": "hf_...",
+  "tos_access_key": "AK…",
+  "tos_secret_key": "SK…",
+  "hf_token": "hf_…",
   "tos_rrd_artifacts_url": "tos://physical-ai-rerun-test/rrd-data/",
   "rrd_artifacts_prefetch": 0
 }
@@ -71,3 +71,9 @@ The credential fields are never shown in the dialog unless you opt into overridi
 
 > Note: this file can hold secrets (`tos_secret_key`, `hf_token`).
 > Keep it readable only by your user (`chmod 600 ~/.rerun/tos-config.json`) and do not commit it.
+
+## Corporate networks: `RERUN_HTTP_KEEP_ALIVE=0`
+
+By default the native HTTP client reuses connections between requests (normal keep-alive — saves a TLS handshake per request).
+Some corporate gateways silently kill idle connections without telling either side; a request sent into such a connection stalls until its timeout, felt as sporadic multi-second hangs between downloads.
+If you see that, set `RERUN_HTTP_KEEP_ALIVE=0` (values `0`/`false`/`off`/`no`): every request then opens a fresh connection, trading ~hundreds of ms of handshake per request for immunity.
