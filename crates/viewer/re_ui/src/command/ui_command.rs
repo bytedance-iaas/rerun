@@ -113,11 +113,11 @@ impl UICommand {
             ),
             Self::OpenTosDataset => (
                 "Open from Volcengine TOS…",
-                "Stream a LeRobot dataset directly from a Volcengine TOS (S3-compatible) bucket",
+                "Open a dataset from a Volcengine TOS bucket.",
             ),
             Self::OpenHfDataset => (
                 "Open from Hugging Face…",
-                "Stream a LeRobot dataset directly from Hugging Face",
+                "Open a dataset from Hugging Face.",
             ),
             Self::Import => (
                 "Import into current recording…",
