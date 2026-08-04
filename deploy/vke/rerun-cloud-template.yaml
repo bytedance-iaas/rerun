@@ -1,0 +1,188 @@
+# rerun 云端常驻服务(VKE):一个 Deployment(缺省 1 个 pod),pod 里跑两个容器 ——
+# rerun web server(nginx + wasm viewer)和 catalog server。前端一个公网 CLB。
+#
+# ============================== 使用前必改 ==============================
+# 搜索 "⚠️" 逐项替换:
+#   1. Secret 里的三个 base64 值(生成方法见 Secret 处注释)
+#   2. 两处 image 地址(你们镜像仓库里的 rerun 镜像 + tag)
+#   3. Service 注解里的 subnet-id(CLB 所在子网,VKE 控制台可查)
+#   4. (可选)PVC 的 storageClassName / 容量、资源 requests/limits、CLB 规格
+# =======================================================================
+#
+# 部署:
+#   kubectl apply -f rerun-cloud.yaml
+# 验证:
+#   kubectl -n rerun get pods                      # Running 即可
+#   kubectl -n rerun get svc rerun-cloud           # EXTERNAL-IP 就是公网地址
+#   浏览器打开   http://<EXTERNAL-IP>/              # web viewer
+#   Python 里    CatalogClient("rerun+http://<EXTERNAL-IP>:51234")
+#
+# 集群内访问(云内训练任务等)走 Service 域名,不出公网:
+#   web:    http://rerun-cloud.rerun.svc.cluster.local
+#   server: rerun+http://rerun-cloud.rerun.svc.cluster.local:51234
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rerun
+---
+# 所有 rerun pod 共用的凭证。stringData 直接写明文,apply 时 k8s 自动转 base64
+# (Secret 里 base64 只是编码不是加密,明文写这里安全性等价)。
+# 用法:复制本模板为 rerun-cloud.yaml(该文件名已被 .gitignore 挡住)再填真实值。
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rerun-viewer-secrets
+  namespace: rerun
+type: Opaque
+stringData:
+  tos_access_key: "⚠️REPLACE_TOS_ACCESS_KEY"
+  tos_secret_key: "⚠️REPLACE_TOS_SECRET_KEY"
+  hf_token: "⚠️REPLACE_HF_TOKEN"
+---
+# catalog 数据库 + catalog server 的远端文件缓存。丢了能自愈(server 重新从 TOS 拉),
+# 但 catalog 注册记录也在上面,建议保留。按数据集体量调大小。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rerun-server-data
+  namespace: rerun
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  # ⚠️ 按集群实际存储类调整:ebs-essd = 增强型 SSD,省钱可换 ebs-ssd。
+  storageClassName: ebs-essd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rerun-cloud
+  namespace: rerun
+  labels:
+    app: rerun-cloud
+spec:
+  replicas: 1
+  # PVC 是 ReadWriteOnce,滚动升级会出现新旧两个 pod 抢同一块盘 —— 用 Recreate(先停旧再起新)。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rerun-cloud
+  template:
+    metadata:
+      labels:
+        app: rerun-cloud
+    spec:
+      # 密钥挂在 /run/secrets;关掉 SA token 自动挂载,避免与只读密钥卷撞车。
+      automountServiceAccountToken: false
+      containers:
+        # ---- 容器 1:web viewer(nginx + wasm + /tos-config.json) ----
+        - name: web
+          # ⚠️ 换成你们镜像仓库里的 rerun 镜像(例:iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:<tag>)
+          image: "⚠️REPLACE_IMAGE"
+          env:
+            - name: MODE
+              value: web
+            # 注意:web 模式下这个 endpoint 会下发给用户的浏览器用,浏览器在公网,
+            # 所以必须用公网 endpoint,不能换内网域名。
+            - name: TOS_ENDPOINT
+              value: https://tos-s3-cn-beijing.volces.com
+            - name: TOS_REGION
+              value: cn-beijing
+            # 转换后 rrd 产物的存放桶;"off" 关闭。缺省 = 下面这个测试桶,建议换成你们自己的。
+            - name: TOS_RRD_ARTIFACTS_URL
+              value: tos://physical-ai-rerun-test/rrd-data/
+            # 打开数据集时同时并发下载几个现成 rrd 产物;0 = 自动(浏览器 3)。
+            - name: RRD_ARTIFACTS_PREFETCH
+              value: "0"
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: tos-secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: rrd-cache
+              mountPath: /rrd-cache
+
+        # ---- 容器 2:catalog server ----
+        - name: catalog
+          # ⚠️ 同一个镜像,同一个 tag
+          image: "⚠️REPLACE_IMAGE"
+          env:
+            - name: MODE
+              value: server
+            # server 在云内跑,拉 TOS 走内网 endpoint 更快且不计公网流量;
+            # 如果集群没开内网访问 TOS,换回公网 https://tos-s3-cn-beijing.volces.com。
+            - name: TOS_ENDPOINT
+              value: https://tos-s3-cn-beijing.ivolces.com
+            - name: TOS_REGION
+              value: cn-beijing
+          ports:
+            - containerPort: 51234
+          readinessProbe:
+            tcpSocket:
+              port: 51234
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          volumeMounts:
+            - name: tos-secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: server-data
+              mountPath: /server-data
+      volumes:
+        - name: tos-secrets
+          secret:
+            secretName: rerun-viewer-secrets # keys: tos_access_key, tos_secret_key, hf_token
+        - name: rrd-cache
+          emptyDir: {} # nginx 的 WebDAV 回写目录(备用通道),丢了无所谓
+        - name: server-data
+          persistentVolumeClaim:
+            claimName: rerun-server-data
+---
+# 公网入口:一个 CLB,两个监听(80 → web,51234 → catalog)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: rerun-cloud
+  namespace: rerun
+  annotations:
+    # ⚠️ CLB 所在子网 ID(VKE 控制台 → 网络 → 子网,选 pod 所在 VPC 里的子网)
+    service.beta.kubernetes.io/volcengine-loadbalancer-subnet-id: "⚠️REPLACE_SUBNET_ID"
+    # 公网型 CLB(会自动绑 EIP,产生公网费用);只要内网可达就改成 "PRIVATE"。
+    service.beta.kubernetes.io/volcengine-loadbalancer-address-type: "PUBLIC"
+    # (可选)CLB 规格,按并发量选;不写用默认。可选值见 VKE 文档,例:small_1 / medium_1
+    # service.beta.kubernetes.io/volcengine-loadbalancer-spec: "small_1"
+spec:
+  type: LoadBalancer
+  selector:
+    app: rerun-cloud
+  ports:
+    - name: web
+      port: 80
+      targetPort: 80
+    - name: catalog
+      port: 51234
+      targetPort: 51234
