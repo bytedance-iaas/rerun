@@ -1306,6 +1306,11 @@ async fn stream_items<S: DatasetStore>(
     let guard = StreamGuard::new(&application_id);
     guard.state.n_items.store(total, Ordering::SeqCst);
     *guard.state.artifacts_config.lock() = rrd_artifacts.clone();
+    if let Some(artifacts) = &rrd_artifacts {
+        // Settle "may these credentials delete?" up front, so the artifact-management
+        // menus can grey their delete entries out instead of failing on click.
+        crate::rrd_artifacts::probe_delete_permission(artifacts);
+    }
 
     // One listing of this dataset's artifacts directory marks which items already have a converted
     // rrd (for the UI). Best-effort: per-episode lookups still run regardless.
@@ -2067,6 +2072,9 @@ async fn try_load_rrd_artifact(
     );
 
     let Some(head) = client.head_object(key).await? else {
+        // The artifact is gone (e.g. deleted by someone else since our listing):
+        // stop advertising it in tooltips and menus.
+        state.rrd_artifact_urls.lock().remove(&index);
         return Ok(None);
     };
     let fingerprint = head
