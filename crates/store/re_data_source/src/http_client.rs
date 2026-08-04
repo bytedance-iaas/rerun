@@ -104,11 +104,22 @@ fn agent() -> ureq::Agent {
             let tls = ureq::tls::TlsConfig::builder()
                 .root_certs(ureq::tls::RootCerts::PlatformVerifier)
                 .build();
+            // ureq's defaults have NO timeouts at all: a connection that a middlebox
+            // (corporate gateway, flaky proxy) silently kills mid-stream would block its
+            // request forever — observed as a download stuck at e.g. 85% indefinitely.
+            // Phase timeouts turn such stalls into errors, which the chunked callers retry.
+            // The body budgets are sized for the largest single request (a 64 MiB range):
+            // they only fire below ~370 KB/s, where retrying is the right move anyway.
+            use std::time::Duration;
             let config = ureq::Agent::config_builder()
                 .tls_config(tls)
                 // Match `ehttp`'s (and the browser's) semantics: a 4xx/5xx is a response,
                 // not an error — callers check `status` themselves (e.g. 404 = cache miss).
                 .http_status_as_error(false)
+                .timeout_connect(Some(Duration::from_secs(15)))
+                .timeout_recv_response(Some(Duration::from_secs(30)))
+                .timeout_recv_body(Some(Duration::from_mins(3)))
+                .timeout_send_body(Some(Duration::from_mins(3)))
                 .build();
             ureq::Agent::new_with_config(config)
         })

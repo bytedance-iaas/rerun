@@ -491,8 +491,26 @@ impl App {
                 // updates the app-id when changing the recording.
                 match store_id.kind() {
                     StoreKind::Recording => {
-                        re_log::trace!("Opening a new recording: '{store_id:?}'");
-                        self.make_store_active_and_highlight(store_hub, egui_ctx, store_id);
+                        // A remote-dataset stream announces its whole episode list up front.
+                        // Letting every announcement grab focus would land the viewer on the
+                        // LAST episode of the batch — so within one dataset, only the first
+                        // announced episode takes focus; the rest (and the "⋯ more"
+                        // placeholder) just open in the background.
+                        let is_dataset_episode =
+                            re_data_source::lerobot_remote::is_dataset_streaming(
+                                store_id.application_id().as_str(),
+                            );
+                        let yields_focus = is_dataset_episode
+                            && (re_data_source::lerobot_remote::is_more_placeholder(store_id)
+                                || self.state.active_recording_id().is_some_and(|active| {
+                                    active.application_id() == store_id.application_id()
+                                }));
+                        if yields_focus {
+                            store_hub.set_opened(store_id, true);
+                        } else {
+                            re_log::trace!("Opening a new recording: '{store_id:?}'");
+                            self.make_store_active_and_highlight(store_hub, egui_ctx, store_id);
+                        }
                     }
                     StoreKind::Blueprint => {
                         // We wait with activating blueprints until they are fully loaded,

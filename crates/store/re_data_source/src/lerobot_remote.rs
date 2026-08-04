@@ -138,6 +138,7 @@ async fn fetch_range<S: DatasetStore>(
     let mut out: Vec<u8> = Vec::with_capacity(expected);
     let mut pos = range.start;
     let mut empty_responses = 0;
+    let mut transport_errors = 0;
 
     while pos < range.end {
         pause.wait_while_paused().await;
@@ -146,7 +147,24 @@ async fn fetch_range<S: DatasetStore>(
         }
 
         let chunk_end = range.end.min(pos + MAX_RANGE_REQUEST);
-        let bytes = store.get_range_once(rel_path, pos..chunk_end).await?;
+        // A transient transport failure (including a stalled connection hitting the client
+        // timeouts) re-requests from the current offset instead of failing the whole item.
+        let bytes = match store.get_range_once(rel_path, pos..chunk_end).await {
+            Ok(bytes) => {
+                transport_errors = 0;
+                bytes
+            }
+            Err(err) => {
+                transport_errors += 1;
+                if transport_errors > 3 {
+                    return Err(err);
+                }
+                re_log::debug!(
+                    "Range request at offset {pos} failed (retry {transport_errors}/3): {err:#}\nFile: {rel_path}"
+                );
+                continue;
+            }
+        };
         if bytes.is_empty() {
             empty_responses += 1;
             if empty_responses > 3 {
@@ -737,6 +755,12 @@ pub fn is_episode_loading(store_id: &StoreId) -> bool {
 /// The recording panel uses this to decide whether to offer pause/resume controls.
 pub fn is_dataset_streaming(application_id: &str) -> bool {
     ACTIVE_STREAMS.lock().contains_key(application_id)
+}
+
+/// Whether this recording is a dataset stream's trailing "⋯ N more" placeholder entry
+/// (an action row, not a real episode — it must never take focus).
+pub fn is_more_placeholder(store_id: &StoreId) -> bool {
+    store_id.recording_id().as_str() == MORE_RECORDING_ID
 }
 
 /// Whether the active stream of this application id is paused.
@@ -2053,16 +2077,33 @@ async fn fetch_and_replay_artifact(
     use futures_util::stream::StreamExt as _;
     let n_chunks = usize::try_from(size.div_ceil(CHUNK)).unwrap_or_default();
     let mut fetches = futures_util::stream::iter((0..n_chunks).map(|i| async move {
-        pause.wait_while_paused().await;
-        if pause.interrupted() || item_cancelled(state, index) {
-            anyhow::bail!("Download interrupted\nObject: {key}");
-        }
         let start = i as u64 * CHUNK;
-        // `get_object` re-requests short (proxy-truncated) responses, so the
-        // slice comes back complete or errors.
-        let slice = client
-            .get_object(key, Some(start..size.min(start + CHUNK)))
-            .await?;
+        let range = start..size.min(start + CHUNK);
+
+        // Transient transport failures (including a stalled connection hitting the client
+        // timeouts) only cost this one slice a retry, not the whole artifact.
+        const MAX_ATTEMPTS: u32 = 3;
+        let mut slice = Vec::new();
+        for attempt in 1..=MAX_ATTEMPTS {
+            pause.wait_while_paused().await;
+            if pause.interrupted() || item_cancelled(state, index) {
+                anyhow::bail!("Download interrupted\nObject: {key}");
+            }
+            // `get_object` re-requests short (proxy-truncated) responses, so the
+            // slice comes back complete or errors.
+            match client.get_object(key, Some(range.clone())).await {
+                Ok(bytes) => {
+                    slice = bytes;
+                    break;
+                }
+                Err(err) if attempt < MAX_ATTEMPTS => {
+                    re_log::debug!(
+                        "Artifact slice {range:?} failed (attempt {attempt}/{MAX_ATTEMPTS}, retrying): {err:#}\nObject: {key}"
+                    );
+                }
+                Err(err) => return Err(err),
+            }
+        }
         if let Some(progress) = state.artifact_progress.lock().get_mut(&index) {
             progress.bytes_done += slice.len() as u64;
         }
