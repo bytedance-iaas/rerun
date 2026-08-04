@@ -359,6 +359,20 @@ mod tests {
         assert_eq!(resolve_prefetch_items(100), 16, "typo guard: capped at 16");
     }
 
+    /// The requesting UI element and the confirmation dialog communicate through a
+    /// single-slot queue: a request is delivered to the dialog exactly once.
+    #[test]
+    fn deletion_requests_are_consumed_exactly_once() {
+        let request = ArtifactDeletionRequest {
+            dataset_url: "tos://bucket/ds/".to_owned(),
+            episode: Some(3),
+            target_url: "tos://artifacts/rrd-data/tos/bucket/ds/episode_3.rrd".to_owned(),
+        };
+        request_deletion(request.clone());
+        assert_eq!(take_deletion_request(), Some(request));
+        assert_eq!(take_deletion_request(), None);
+    }
+
     #[test]
     fn parse_artifacts_url_off_switch() {
         assert_eq!(parse_artifacts_url(""), None);

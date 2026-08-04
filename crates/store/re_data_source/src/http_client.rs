@@ -191,6 +191,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn delete_method_is_forwarded() {
+        let (url, request_rx) =
+            serve_once(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n".to_vec());
+        let mut request = ehttp::Request::get(&url);
+        request.method = ehttp::Method::DELETE;
+        let response = super::fetch_async(request).await.unwrap();
+        assert!(response.ok);
+        assert_eq!(response.status, 204);
+        let head = String::from_utf8(request_rx.recv().unwrap()).unwrap();
+        assert!(head.starts_with("DELETE "));
+    }
+
+    #[tokio::test]
     async fn non_2xx_status_is_a_response_not_an_error() {
         // `ehttp` semantics, which callers rely on: an HTTP error status must surface as a
         // response with `ok: false`, not as `Err` (ureq's default treats 4xx/5xx as errors).
