@@ -13,6 +13,13 @@ const EMPTY_PAYLOAD_SHA256: &str =
 /// Header prefix for S3 user metadata (where the rrd-artifacts fingerprint lives).
 pub const USER_METADATA_PREFIX: &str = "x-amz-meta-";
 
+/// Hard deadline for small metadata requests (HEAD/DELETE): fail fast so the callers'
+/// retry logic gets to act — a stalled connection must not stall a whole pipeline.
+const SMALL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Hard deadline for one listing page (up to 1000 keys of XML).
+const LIST_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(1);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TosCredentials {
     /// E.g. `https://tos-s3-cn-beijing.volces.com`.
@@ -142,7 +149,14 @@ impl TosClient {
         }
 
         let response = self
-            .signed_request("GET", &format!("/{key}"), &[], extra_headers, Vec::new())
+            .signed_request(
+                "GET",
+                &format!("/{key}"),
+                &[],
+                extra_headers,
+                Vec::new(),
+                crate::http_client::DEFAULT_HARD_TIMEOUT,
+            )
             .await?;
 
         if !(response.status == 200 || response.status == 206) {
@@ -173,7 +187,7 @@ impl TosClient {
             query.sort();
 
             let response = self
-                .signed_request("GET", "/", &query, Vec::new(), Vec::new())
+                .signed_request("GET", "/", &query, Vec::new(), Vec::new(), LIST_TIMEOUT)
                 .await?;
             if response.status != 200 {
                 anyhow::bail!(
@@ -202,7 +216,14 @@ impl TosClient {
     /// HEAD an object: its size and user metadata, or `None` if it does not exist.
     pub async fn head_object(&self, key: &str) -> anyhow::Result<Option<ObjectHead>> {
         let response = self
-            .signed_request("HEAD", &format!("/{key}"), &[], Vec::new(), Vec::new())
+            .signed_request(
+                "HEAD",
+                &format!("/{key}"),
+                &[],
+                Vec::new(),
+                Vec::new(),
+                SMALL_REQUEST_TIMEOUT,
+            )
             .await?;
 
         if response.status == 404 {
@@ -251,7 +272,14 @@ impl TosClient {
             .collect();
 
         let response = self
-            .signed_request("PUT", &format!("/{key}"), &[], extra_headers, bytes)
+            .signed_request(
+                "PUT",
+                &format!("/{key}"),
+                &[],
+                extra_headers,
+                bytes,
+                crate::http_client::DEFAULT_HARD_TIMEOUT,
+            )
             .await?;
 
         if response.status != 200 {
@@ -267,7 +295,14 @@ impl TosClient {
     /// DELETE an object. Deleting a key that does not exist also succeeds (S3 semantics).
     pub async fn delete_object(&self, key: &str) -> anyhow::Result<()> {
         let response = self
-            .signed_request("DELETE", &format!("/{key}"), &[], Vec::new(), Vec::new())
+            .signed_request(
+                "DELETE",
+                &format!("/{key}"),
+                &[],
+                Vec::new(),
+                Vec::new(),
+                SMALL_REQUEST_TIMEOUT,
+            )
             .await?;
 
         // S3 answers 204 No Content for deletions, existing key or not.
@@ -286,7 +321,7 @@ impl TosClient {
         Ok(())
     }
 
-    /// Fire a SigV4-signed request.
+    /// Fire a SigV4-signed request with an overall hard deadline.
     async fn signed_request(
         &self,
         method: &str,               // "GET", "HEAD", "PUT" or "DELETE"
@@ -294,6 +329,7 @@ impl TosClient {
         query: &[(String, String)], // must be sorted by key
         extra_headers: Vec<(String, String)>,
         body: Vec<u8>,
+        hard_timeout: std::time::Duration,
     ) -> anyhow::Result<ehttp::Response> {
         let host = self.host();
         let (amz_date, date) = amz_timestamps();
@@ -388,7 +424,7 @@ impl TosClient {
         }
         request.headers.insert("authorization", &authorization);
 
-        crate::http_client::fetch_async(request)
+        crate::http_client::fetch_async_with_timeout(request, hard_timeout)
             .await
             .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))
     }
