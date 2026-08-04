@@ -122,6 +122,24 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
 }
 
 /// A process-wide agent, so connections are pooled across requests.
+/// Should finished connections be kept for reuse (the HTTP norm), per `RERUN_HTTP_KEEP_ALIVE`?
+///
+/// Pooling saves a TCP + TLS handshake (~hundreds of ms) on every request after the first —
+/// on healthy networks (home, cloud pods) there is no reason to give that up, so the default
+/// is on. Corporate gateways however have been observed to silently kill idle connections
+/// without an RST; a request written into such a corpse blocks until its timeout
+/// (observed: back-to-back HEADs hanging in send). On such networks, set
+/// `RERUN_HTTP_KEEP_ALIVE=0` — a fresh connection per request buys immunity.
+#[cfg(not(target_arch = "wasm32"))]
+fn keep_alive(env_value: Option<&str>) -> bool {
+    !env_value.is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        )
+    })
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn agent() -> ureq::Agent {
     use std::sync::OnceLock;
@@ -139,7 +157,7 @@ fn agent() -> ureq::Agent {
             // The body budgets are sized for the largest single request (a 64 MiB range):
             // they only fire below ~370 KB/s, where retrying is the right move anyway.
             use std::time::Duration;
-            let config = ureq::Agent::config_builder()
+            let mut config = ureq::Agent::config_builder()
                 .tls_config(tls)
                 // Match `ehttp`'s (and the browser's) semantics: a 4xx/5xx is a response,
                 // not an error — callers check `status` themselves (e.g. 404 = cache miss).
@@ -148,15 +166,12 @@ fn agent() -> ureq::Agent {
                 .timeout_send_request(Some(Duration::from_secs(30)))
                 .timeout_recv_response(Some(Duration::from_secs(30)))
                 .timeout_recv_body(Some(Duration::from_mins(3)))
-                .timeout_send_body(Some(Duration::from_mins(3)))
-                // No idle-connection reuse: middleboxes on corporate networks silently kill
-                // pooled connections without an RST, and a request written into such a corpse
-                // blocks until its timeout (observed: back-to-back HEADs hanging in send).
-                // A fresh connection per request costs a TLS handshake (~hundreds of ms) and
-                // buys immunity.
-                .max_idle_connections(0)
-                .build();
-            ureq::Agent::new_with_config(config)
+                .timeout_send_body(Some(Duration::from_mins(3)));
+            if !keep_alive(std::env::var("RERUN_HTTP_KEEP_ALIVE").ok().as_deref()) {
+                // See [`keep_alive`]: no idle-connection reuse, one handshake per request.
+                config = config.max_idle_connections(0);
+            }
+            ureq::Agent::new_with_config(config.build())
         })
         .clone()
 }
@@ -166,6 +181,17 @@ mod tests {
     #![expect(clippy::unwrap_used)] // tests may panic
 
     use std::io::{Read as _, Write as _};
+
+    #[test]
+    fn keep_alive_defaults_on_and_recognizes_the_off_values() {
+        assert!(super::keep_alive(None), "unset = pooling on");
+        assert!(super::keep_alive(Some("1")));
+        assert!(super::keep_alive(Some("true")));
+        assert!(!super::keep_alive(Some("0")));
+        assert!(!super::keep_alive(Some("false")));
+        assert!(!super::keep_alive(Some("OFF")));
+        assert!(!super::keep_alive(Some(" no ")));
+    }
 
     /// A middlebox blackhole: the connection is accepted, the request never answered.
     /// The stuck thread is parked; the test process's exit reaps it.
