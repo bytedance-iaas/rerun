@@ -29,6 +29,7 @@ mod entrypoint;
 #[cfg(feature = "importers")]
 mod mcap;
 mod rrd;
+mod rrd_convert;
 mod stdio;
 
 #[cfg(feature = "analytics")]
@@ -41,6 +42,7 @@ pub use self::entrypoint::run;
 #[cfg(feature = "importers")]
 pub use self::mcap::McapCommands;
 pub use self::rrd::RrdCommands;
+pub use self::rrd_convert::RrdConvertCommand;
 pub use self::stdio::{
     InputSource, read_raw_rrd_streams_from_file_or_stdin, read_rrd_streams_from_file_or_stdin,
 };

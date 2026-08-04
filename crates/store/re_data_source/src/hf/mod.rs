@@ -253,7 +253,22 @@ pub fn stream_lerobot_dataset(source: HfDatasetSource) -> LogReceiver {
     }
 
     let rrd_artifacts = source.rrd_artifacts.clone();
-    crate::lerobot_remote::stream_lerobot_dataset(HfStore { source }, rrd_artifacts)
+    crate::lerobot_remote::stream_lerobot_dataset(
+        HfStore { source },
+        rrd_artifacts,
+        crate::lerobot_remote::StreamMode::Viewer,
+    )
+}
+
+/// Headless pre-conversion of a `LeRobot` dataset on Hugging Face (`rerun rrd-convert`):
+/// convert every episode whose artifact is missing or stale, upload, finish.
+pub fn convert_lerobot_dataset(source: HfDatasetSource) -> LogReceiver {
+    let rrd_artifacts = source.rrd_artifacts.clone();
+    crate::lerobot_remote::stream_lerobot_dataset(
+        HfStore { source },
+        rrd_artifacts,
+        crate::lerobot_remote::StreamMode::ConvertOnly,
+    )
 }
 
 #[cfg(test)]
