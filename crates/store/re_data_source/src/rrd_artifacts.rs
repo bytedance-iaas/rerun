@@ -54,6 +54,90 @@ pub struct RrdArtifactsConfig {
     pub prefetch_items: usize,
 }
 
+/// A "delete artifacts" request, waiting for the user to confirm it in the viewer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArtifactDeletionRequest {
+    /// The dataset URL (= application id) whose artifacts are affected.
+    pub dataset_url: String,
+
+    /// `Some(index)` deletes that one episode's artifact; `None` deletes the whole
+    /// dataset's artifacts directory.
+    pub episode: Option<usize>,
+
+    /// What will be deleted, for display and for key derivation:
+    /// the object URL (episode) or the directory URL (dataset), `tos://bucket/…`.
+    pub target_url: String,
+}
+
+static PENDING_DELETION: parking_lot::Mutex<Option<ArtifactDeletionRequest>> =
+    parking_lot::Mutex::new(None);
+
+/// Ask the viewer to confirm (and then perform) an artifact deletion.
+///
+/// Deletion is destructive, so it never runs directly from the requesting UI element:
+/// the viewer picks the request up via [`take_deletion_request`], shows a confirmation
+/// dialog, and only then calls [`spawn_deletion`].
+pub fn request_deletion(request: ArtifactDeletionRequest) {
+    *PENDING_DELETION.lock() = Some(request);
+}
+
+/// The confirmation UI polls this once per frame.
+pub fn take_deletion_request() -> Option<ArtifactDeletionRequest> {
+    PENDING_DELETION.lock().take()
+}
+
+/// Perform a confirmed deletion in the background: one object, or everything under the
+/// dataset's artifacts directory. Failures only log — nothing in the viewer depends on it.
+pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionRequest) {
+    crate::data_source::spawn_future(async move {
+        let client =
+            crate::tos::TosClient::new(config.credentials.clone(), config.location.bucket.clone());
+        let bucket_prefix = format!("tos://{}/", config.location.bucket);
+
+        let result = async {
+            if request.episode.is_some() {
+                let key = request
+                    .target_url
+                    .strip_prefix(&bucket_prefix)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Artifact URL is not in the configured bucket")
+                    })?;
+                client.delete_object(key).await?;
+                anyhow::Ok(1usize)
+            } else {
+                let dir = dataset_artifacts_dir(&config.location.prefix, &request.dataset_url);
+                let objects = client.list_objects(&dir).await?;
+                let mut deleted = 0usize;
+                for object in &objects {
+                    client.delete_object(&object.key).await?;
+                    deleted += 1;
+                }
+                anyhow::Ok(deleted)
+            }
+        }
+        .await;
+
+        match result {
+            Ok(deleted) => {
+                re_log::info!(
+                    "Deleted {deleted} rrd artifact(s) from the store\nTarget: {}",
+                    request.target_url
+                );
+                crate::lerobot_remote::forget_rrd_artifact_urls(
+                    &request.dataset_url,
+                    request.episode,
+                );
+            }
+            Err(err) => {
+                re_log::warn!(
+                    "Failed to delete rrd artifact(s): {err:#}\nTarget: {}",
+                    request.target_url
+                );
+            }
+        }
+    });
+}
+
 /// How many artifacts to prefetch concurrently, from the configured value
 /// (`rrd_artifacts_prefetch` / `RRD_ARTIFACTS_PREFETCH`).
 ///

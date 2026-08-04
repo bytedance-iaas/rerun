@@ -174,6 +174,8 @@ fn action_list(
                 Box::new(RemoveAction),
                 Box::new(CopyEntityPathToClipboard),
                 Box::new(actions::CopyRrdArtifactUrl),
+                Box::new(actions::DeleteRrdArtifact),
+                Box::new(actions::DeleteDatasetRrdArtifacts),
                 Box::new(TrackEntity),
             ],
             vec![

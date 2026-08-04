@@ -264,10 +264,27 @@ impl TosClient {
         Ok(())
     }
 
+    /// DELETE an object. Deleting a key that does not exist also succeeds (S3 semantics).
+    pub async fn delete_object(&self, key: &str) -> anyhow::Result<()> {
+        let response = self
+            .signed_request("DELETE", &format!("/{key}"), &[], Vec::new(), Vec::new())
+            .await?;
+
+        // S3 answers 204 No Content for deletions, existing key or not.
+        if response.status != 204 && response.status != 200 {
+            anyhow::bail!(
+                "DELETE failed with HTTP {}: {}\nObject: {key}",
+                response.status,
+                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
+            );
+        }
+        Ok(())
+    }
+
     /// Fire a SigV4-signed request.
     async fn signed_request(
         &self,
-        method: &str,               // "GET", "HEAD" or "PUT"
+        method: &str,               // "GET", "HEAD", "PUT" or "DELETE"
         path: &str,                 // must start with `/`
         query: &[(String, String)], // must be sorted by key
         extra_headers: Vec<(String, String)>,
@@ -349,6 +366,11 @@ impl TosClient {
             "PUT" => {
                 let mut request = ehttp::Request::post(&url, body);
                 request.method = ehttp::Method::PUT;
+                request
+            }
+            "DELETE" => {
+                let mut request = ehttp::Request::get(&url);
+                request.method = ehttp::Method::DELETE;
                 request
             }
             other => anyhow::bail!("Unsupported method: {other}"),
