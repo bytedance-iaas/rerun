@@ -8,7 +8,7 @@ One image (`rerun-viewer-unified`) built from this repo, three modes selected by
 
 Both viewers support "Open from Volcengine TOS…" and "Open from Hugging Face…" (streaming LeRobot v2/v3, MCAP/file repos, single files).
 
-The same image builds and runs both **locally** (throttled defaults survive an 8 GB Docker Desktop VM) and in the **cloud / CI** (lift the throttles, point downloads at mirrors — see below). Kubernetes manifests are intentionally not included here yet.
+The same image builds and runs both **locally** (throttled defaults survive an 8 GB Docker Desktop VM) and in the **cloud / CI** (lift the throttles, point downloads at mirrors — see below). Kubernetes (VKE) manifests live in [`vke/`](vke/README.md).
 
 ## Layout
 
@@ -21,7 +21,7 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 | `novnc-paste-bridge.js` | Appended into noVNC's `ui.js` at build time so Cmd+V / Ctrl+V pastes into the native session in one step. |
 | `.env.example` | Non-secret settings: endpoint, region. Copy to `.env` (gitignored). |
 | `gen-ca-bundle.sh` | Exports macOS keychain certs so cargo can download deps behind a corporate TLS-intercepting proxy. Optional; skip on Linux / no proxy. |
-| `enable-cors.sh` | One-time CORS setup for a new TOS bucket (so the browser reads the bucket directly). |
+| `enable-cors.sh` | CORS setup for the TOS bucket (so the browser reads the bucket directly). Must list **every origin the web viewer is served from** — re-run it whenever the viewer gets a new address (see "Bucket CORS"). |
 | `run-native.sh` | Runs a host-built native viewer with credentials from `secrets/` (dev convenience). |
 
 Credentials live in `deploy/secrets/` (`tos_access_key`, `tos_secret_key`, `hf_token`) — gitignored, mounted as docker secrets. `secrets/`, `.env`, and `ca-bundle.pem` are all gitignored.
@@ -37,7 +37,7 @@ open http://127.0.0.1:9091     # web viewer
 open "http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale"   # native session
 ```
 
-## Local native viewer (no cloud, no Docker)
+## Local native viewer (no cloud, no docker)
 
 The three modes above all run the viewer as a *service* (behind nginx / noVNC / gRPC).
 The same viewer also runs as a plain desktop app directly on your machine — no Docker, no VNC, no cloud — sharing the exact same `re_viewer` code and the same "Open from Volcengine TOS / Hugging Face" features.
@@ -92,6 +92,17 @@ Building inside mainland China, point every download at a mirror:
   --build-arg RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
   --build-arg CARGO_MIRROR=sparse+https://rsproxy.cn/index/
 ```
+
+## Bucket CORS — required for every new web-viewer address
+
+The web viewer talks to TOS **directly from the browser**, and browsers enforce CORS: the bucket only answers pages served from an origin on its `AllowedOrigin` whitelist.
+That whitelist lives in `enable-cors.sh`, so putting the web viewer at a new address is always two steps:
+
+1. Add the new origin (scheme + host + port, no trailing slash — e.g. `http://101.126.41.246` for a VKE LoadBalancer, `http://127.0.0.1:9091` for local docker) to the `AllowedOrigin` list in `enable-cors.sh`.
+2. Re-run `./enable-cors.sh` (needs `secrets/`) — it overwrites the bucket's CORS config and prints a verification preflight.
+
+Symptoms of a missing origin: the web viewer loads fine, but opening any `tos://` dataset fails in the browser (CORS errors in the dev console), and rrd-artifact lookups silently miss — while the native viewers (which are not subject to CORS) work normally.
+The `ExposeHeader` entries for `x-amz-meta-rerun-*` are equally load-bearing: without them the browser hides the fingerprint header and every artifact lookup misses.
 
 ## Credential model
 

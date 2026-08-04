@@ -1,0 +1,111 @@
+# 按需自助启动的云上 native viewer 会话(VKE):每人一个 pod + 一个公网 CLB,用完即删。
+# web viewer 提示文件太大装不下时,用这个开一个云上原生 viewer,在浏览器里远程操作。
+#
+# ============================== 使用前必改 ==============================
+#   1. 把文件里所有 <USERNAME> 换成你的名字(小写字母/数字/中划线,例:qian):
+#        sed 's/<USERNAME>/qian/g' native-viewer.yaml | kubectl apply -f -
+#   2. "⚠️" 两处:image 地址、Service 的 subnet-id
+#   前提:rerun namespace 和 rerun-viewer-secrets 已存在(见 rerun-cloud.yaml)。
+# =======================================================================
+#
+# 使用:
+#   kubectl -n rerun get svc rerun-native-<USERNAME>      # 等 EXTERNAL-IP 出来
+#   浏览器打开  http://<EXTERNAL-IP>:8080/vnc.html?autoconnect=true&resize=scale
+# 用完删掉(CLB 按小时计费,别忘了):
+#   sed 's/<USERNAME>/qian/g' native-viewer.yaml | kubectl delete -f -
+#
+# ⚠️ 安全提醒:noVNC 本身没有认证,谁拿到这个公网地址谁就能操作会话。
+#    建议二选一:
+#      a) 不建公网 LB,删掉下面的 Service,用 port-forward(最安全):
+#           kubectl -n rerun port-forward pod/rerun-native-<USERNAME> 9092:8080
+#           浏览器打开 http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
+#      b) 保留公网 LB,但在 CLB 控制台配访问控制(ACL)只放行办公网出口 IP。
+#
+# 能同时开多少个会话由 namespace 的资源配额说了算,软件层不做限制。
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rerun-native-<USERNAME>
+  namespace: rerun
+  labels:
+    app: rerun-native-session
+    session: rerun-native-<USERNAME>
+spec:
+  restartPolicy: Never
+  # 密钥挂在 /run/secrets;关掉 SA token 自动挂载,避免与只读密钥卷撞车。
+  automountServiceAccountToken: false
+  containers:
+    - name: viewer
+      # ⚠️ 换成你们镜像仓库里的 rerun 镜像(和 rerun-cloud.yaml 用同一个)
+      image: "iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:7548fe275b94421367a16c000d8b87609f4f9d00"
+      env:
+        - name: MODE
+          value: native
+        # 会话在云内跑,拉 TOS 走内网 endpoint,快且不计公网流量;
+        # 如果集群没开内网访问 TOS,换回公网 https://tos-s3-cn-beijing.volces.com。
+        - name: TOS_ENDPOINT
+          value: https://tos-s3-cn-beijing.ivolces.com
+        - name: TOS_REGION
+          value: cn-beijing
+        # 转换后 rrd 产物的存放桶;"off" 关闭。和其他 viewer 保持一致。
+        - name: TOS_RRD_ARTIFACTS_URL
+          value: tos://physical-ai-rerun-test/rrd-data/
+        # 云内带宽充裕,产物并发下载可以开大(上限 16;0 = 自动 4)。
+        - name: RRD_ARTIFACTS_PREFETCH
+          value: "8"
+        # 远程桌面分辨率,按需调。
+        - name: SESSION_GEOMETRY
+          value: 1280x800
+      ports:
+        - containerPort: 8080
+      readinessProbe:
+        httpGet:
+          path: /vnc.html
+          port: 8080
+        initialDelaySeconds: 3
+        periodSeconds: 5
+      resources:
+        requests:
+          cpu: "2"
+          memory: 8Gi
+        limits:
+          cpu: "4"
+          # native 会话就是为开几个 GB 的大文件存在的,内存给足。
+          memory: 16Gi
+      volumeMounts:
+        - name: tos-secrets
+          mountPath: /run/secrets
+          readOnly: true
+        # 软件渲染需要足量共享内存(等价于 docker 的 shm_size: 1gb)。
+        - name: dshm
+          mountPath: /dev/shm
+      # (视频播放要更流畅的话,以后可调度到 GPU 节点 + NVIDIA runtime class。)
+  volumes:
+    - name: tos-secrets
+      secret:
+        secretName: rerun-viewer-secrets # keys: tos_access_key, tos_secret_key, hf_token
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+---
+# 本会话专属的公网入口(一个会话一个 CLB;不想要公网就删掉这段,用 port-forward)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: rerun-native-<USERNAME>
+  namespace: rerun
+  annotations:
+    # ⚠️ CLB 所在子网 ID(和 rerun-cloud.yaml 用同一个即可)
+    service.beta.kubernetes.io/volcengine-loadbalancer-subnet-id: "subnet-vzqelh6514ow865ykaob4vjm" # 备选(同 VPC): subnet-1c0ekuqn81pfk5e8j71eieepw / subnet-iwf1y64j6mm876zdlc21q76b
+    # 公网型 CLB。强烈建议在 CLB 控制台加 ACL 只放行办公网 IP(见文件头的安全提醒)。
+    service.beta.kubernetes.io/volcengine-loadbalancer-address-type: "PUBLIC"
+spec:
+  type: LoadBalancer
+  # 只选中自己这个会话的 pod(session 标签是唯一的)。
+  selector:
+    session: rerun-native-<USERNAME>
+  ports:
+    - name: novnc
+      port: 8080
+      targetPort: 8080
