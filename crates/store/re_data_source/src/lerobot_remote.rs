@@ -915,6 +915,19 @@ pub fn stream_remote_file<S: DatasetStore + 'static>(
 // ----------------------------------------------------------------------------
 // Dataset streaming.
 
+/// What the dataset pipeline runs for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum StreamMode {
+    /// Feed a viewer: load on demand, prefetch artifacts, idle for user requests.
+    #[default]
+    Viewer,
+
+    /// Headless pre-conversion (`rerun rrd-convert`): walk every episode once, skip the
+    /// ones whose artifact is already fresh (checked by HEAD, nothing downloaded),
+    /// convert + upload the rest, then finish. Nothing waits for user input.
+    ConvertOnly,
+}
+
 /// Open a remote `LeRobot` dataset (or a repo of data files) as a streaming log source.
 ///
 /// Returns immediately; fetching and conversion run as a background task feeding the returned
@@ -923,12 +936,13 @@ pub fn stream_remote_file<S: DatasetStore + 'static>(
 pub fn stream_lerobot_dataset<S: DatasetStore + 'static>(
     store: S,
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
 ) -> LogReceiver {
     let url = store.url();
     let (tx, rx) = re_log_channel::log_channel(LogSource::HttpStream { url: url.clone() });
 
     crate::data_source::spawn_future(async move {
-        if let Err(err) = run_stream(&store, &tx, rrd_artifacts).await {
+        if let Err(err) = run_stream(&store, &tx, rrd_artifacts, mode).await {
             re_log::error!(?url, "Failed to stream dataset: {err:#}");
             tx.quit(Some(err.into())).ok();
         } else {
@@ -949,6 +963,7 @@ async fn run_stream<S: DatasetStore>(
     store: &S,
     tx: &LogSender,
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
 ) -> anyhow::Result<()> {
     let dataset_url = store.url();
 
@@ -960,6 +975,12 @@ async fn run_stream<S: DatasetStore>(
     let info_bytes = match fetch_full(store, &pause, "meta/info.json").await {
         Ok(bytes) => bytes,
         Err(err) => {
+            if mode == StreamMode::ConvertOnly {
+                anyhow::bail!(
+                    "Not a LeRobot dataset (no readable meta/info.json: {err:#}) — \
+                     only LeRobot v2/v3 episodes are converted to artifacts\nDataset: {dataset_url}"
+                );
+            }
             re_log::debug!(
                 "No readable meta/info.json ({err:#}); checking for loose data files…\nDataset: {dataset_url}"
             );
@@ -977,8 +998,8 @@ async fn run_stream<S: DatasetStore>(
     memfs.insert("meta/info.json", Blob::Full(Bytes::from(info_bytes)));
 
     match major {
-        "2" => run_stream_v2(store, &memfs, &dataset_url, tx, rrd_artifacts).await,
-        "3" => run_stream_v3(store, &memfs, &dataset_url, tx, rrd_artifacts).await,
+        "2" => run_stream_v2(store, &memfs, &dataset_url, tx, rrd_artifacts, mode).await,
+        "3" => run_stream_v3(store, &memfs, &dataset_url, tx, rrd_artifacts, mode).await,
         "1" => anyhow::bail!(
             "This is a LeRobot v1 dataset ({}), which is not supported. \
              Supported versions: v2 and v3.",
@@ -1048,6 +1069,7 @@ async fn run_stream_v2<S: DatasetStore>(
     dataset_url: &str,
     tx: &LogSender,
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
 ) -> anyhow::Result<()> {
     // v2 metadata is three small-ish files; episode files are derived from path templates,
     // so no listing is needed at all.
@@ -1093,6 +1115,7 @@ async fn run_stream_v2<S: DatasetStore>(
         dataset_url,
         tx,
         rrd_artifacts,
+        mode,
     )
     .await
 }
@@ -1103,6 +1126,7 @@ async fn run_stream_v3<S: DatasetStore>(
     dataset_url: &str,
     tx: &LogSender,
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
 ) -> anyhow::Result<()> {
     // v3 packs many episodes per file, so a full listing is cheap — and needed, both for the
     // episode-metadata parquet paths and for the video byte-range math.
@@ -1163,6 +1187,7 @@ async fn run_stream_v3<S: DatasetStore>(
         dataset_url,
         tx,
         rrd_artifacts,
+        mode,
     )
     .await
 }
@@ -1275,6 +1300,7 @@ async fn run_stream_files<S: DatasetStore>(
         dataset_url,
         tx,
         None, // The rrd artifacts store only covers LeRobot episodes, not loose files.
+        StreamMode::Viewer,
     )
     .await
 }
@@ -1290,6 +1316,7 @@ async fn stream_items<S: DatasetStore>(
     dataset_url: &str,
     tx: &LogSender,
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
 ) -> anyhow::Result<()> {
     let application_id: ApplicationId = dataset_url.to_owned().into();
     let noun = remote.item_noun();
@@ -1411,8 +1438,20 @@ async fn stream_items<S: DatasetStore>(
         return Ok(());
     }
 
+    // Headless conversion walks the whole dataset, not just the first announce batch.
+    if mode == StreamMode::ConvertOnly {
+        while announced < total {
+            if !announce_next_batch(&mut pending, &mut announced)? {
+                return Ok(());
+            }
+        }
+    }
+
     // ---- Artifact prefetch: pour in everything already converted, in parallel ----
-    if let Some(artifacts) = &rrd_artifacts
+    // (Not when converting: the per-item freshness check skips fresh episodes with a
+    // single HEAD each — downloading their artifacts would be pure waste.)
+    if mode == StreamMode::Viewer
+        && let Some(artifacts) = &rrd_artifacts
         && !prefetch_artifacts(
             &guard,
             &remote,
@@ -1490,6 +1529,20 @@ async fn stream_items<S: DatasetStore>(
                 pending.extend(deferred.drain(..));
                 continue;
             }
+            // Headless conversion: everything has been walked — report and finish.
+            if mode == StreamMode::ConvertOnly {
+                let failed = guard.state.failed.lock().len();
+                if failed > 0 {
+                    anyhow::bail!(
+                        "Conversion finished with {failed} of {total} items failed\nDataset: {dataset_url}"
+                    );
+                }
+                re_log::info!(
+                    "Conversion finished: all {total} items done\nDataset: {dataset_url}"
+                );
+                return Ok(());
+            }
+
             // Everything eligible is loaded or parked; idle until the user clicks something
             // ("load more", an unloaded item, resume, or re-download). Deliberately no exit
             // when the dataset is fully loaded: re-downloads must keep working.
@@ -1568,6 +1621,7 @@ async fn stream_items<S: DatasetStore>(
             recording_name,
             tx,
             rrd_artifacts.as_ref(),
+            mode,
         )
         .await;
 
@@ -1751,6 +1805,7 @@ async fn load_one_item<S: DatasetStore>(
     recording_name: &str,
     tx: &LogSender,
     rrd_artifacts: Option<&crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
 ) -> anyhow::Result<bool> {
     let pause = &state.pause;
 
@@ -1769,32 +1824,71 @@ async fn load_one_item<S: DatasetStore>(
     });
 
     if let Some((artifacts, key, expected)) = &artifact_ctx {
-        match try_load_rrd_artifact(
-            artifacts,
-            key,
-            expected,
-            state,
-            index,
-            ARTIFACT_SERIAL_CHUNKS,
-            tx,
-        )
-        .await
-        {
-            Ok(Some(sent_ok)) => {
-                state
-                    .rrd_artifact_urls
-                    .lock()
-                    .insert(index, format!("tos://{}/{key}", artifacts.location.bucket));
-                return Ok(sent_ok);
-            }
-            Ok(None) => {} // Miss or stale — download and convert below.
-            Err(err) => {
-                if pause.interrupted() {
-                    return Err(err);
+        if mode == StreamMode::ConvertOnly {
+            // Headless conversion only needs to know whether the artifact is fresh —
+            // one HEAD, no download.
+            let client = crate::tos::TosClient::new(
+                artifacts.credentials.clone(),
+                artifacts.location.bucket.clone(),
+            );
+            // An existing artifact with NO fingerprint metadata at all is suspicious —
+            // our uploads always carry it, and intercepting gateways have been observed
+            // stripping x-amz-meta-* headers intermittently. Re-check once before
+            // spending minutes on a needless re-conversion.
+            for attempt in 0..2 {
+                let Some(head) = client.head_object(key).await? else {
+                    break; // Truly absent: convert below.
+                };
+                let stored = head
+                    .metadata
+                    .iter()
+                    .find(|(name, _)| name == crate::rrd_artifacts::FINGERPRINT_METADATA_KEY)
+                    .map(|(_, value)| value.as_str());
+                match stored {
+                    Some(stored) if stored == expected => {
+                        re_log::info!(
+                            "{}{index}: artifact up to date — skipped",
+                            remote.recording_id_prefix()
+                        );
+                        return Ok(true);
+                    }
+                    None if attempt == 0 => {
+                        re_log::debug!(
+                            "Artifact HEAD came back without fingerprint metadata — re-checking\nObject: {key}"
+                        );
+                    }
+                    // A real fingerprint mismatch, or still no metadata: stale — convert below.
+                    _ => break,
                 }
-                re_log::debug!(
-                    "rrd-artifacts lookup failed (treating as a miss): {err:#}\nObject: {key}"
-                );
+            }
+        } else {
+            match try_load_rrd_artifact(
+                artifacts,
+                key,
+                expected,
+                state,
+                index,
+                ARTIFACT_SERIAL_CHUNKS,
+                tx,
+            )
+            .await
+            {
+                Ok(Some(sent_ok)) => {
+                    state
+                        .rrd_artifact_urls
+                        .lock()
+                        .insert(index, format!("tos://{}/{key}", artifacts.location.bucket));
+                    return Ok(sent_ok);
+                }
+                Ok(None) => {} // Miss or stale — download and convert below.
+                Err(err) => {
+                    if pause.interrupted() {
+                        return Err(err);
+                    }
+                    re_log::debug!(
+                        "rrd-artifacts lookup failed (treating as a miss): {err:#}\nObject: {key}"
+                    );
+                }
             }
         }
     }
@@ -1949,20 +2043,46 @@ async fn load_one_item<S: DatasetStore>(
     let msgs = msgs?;
 
     // ---- rrd artifacts store write-back ----
-    // Upload the conversion result in the background; viewing never waits for (or fails on) it.
+    // In the viewer, the upload runs in the background: viewing never waits for (or fails
+    // on) it. Headless conversion IS the upload — it runs inline, and a failed upload
+    // fails the item (so the retry rounds cover it).
     if let Some((artifacts, key, fingerprint)) = &artifact_ctx
         && artifacts.write_back
         && !msgs.is_empty()
     {
-        spawn_artifact_write_back(
-            artifacts,
-            key,
-            fingerprint,
-            application_id.as_str(),
-            &msgs,
-            state,
-            index,
-        );
+        match mode {
+            StreamMode::Viewer => {
+                spawn_artifact_write_back(
+                    artifacts,
+                    key,
+                    fingerprint,
+                    application_id.as_str(),
+                    &msgs,
+                    state,
+                    index,
+                );
+            }
+            StreamMode::ConvertOnly => {
+                let encoded = encode_artifact(&msgs)
+                    .ok_or_else(|| anyhow::anyhow!("Failed to encode the converted episode"))?;
+                let size = encoded.len();
+                upload_artifact(
+                    artifacts,
+                    key,
+                    fingerprint,
+                    application_id.as_str(),
+                    encoded,
+                    state,
+                    index,
+                )
+                .await?;
+                re_log::info!(
+                    "{}{index}: converted and uploaded ({})",
+                    remote.recording_id_prefix(),
+                    re_format::format_bytes(size as _)
+                );
+            }
+        }
     }
 
     for msg in msgs {
@@ -2198,23 +2318,27 @@ async fn fetch_and_replay_artifact(
 /// Encode the freshly converted episode and upload it to the artifacts store in the background.
 ///
 /// Failures only log — the artifacts store is an accelerator, never a dependency.
-fn spawn_artifact_write_back(
+/// Encode a converted episode into rrd bytes for upload; `None` on encoding failure.
+fn encode_artifact(msgs: &[re_log_types::LogMsg]) -> Option<Vec<u8>> {
+    match re_log_encoding::Encoder::encode(msgs.iter().map(Ok)) {
+        Ok(bytes) => Some(bytes),
+        Err(err) => {
+            re_log::warn_once!("Failed to encode an episode for the rrd artifacts store: {err}");
+            None
+        }
+    }
+}
+
+/// Upload an encoded episode to the artifacts store and record its display URL.
+async fn upload_artifact(
     artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
     key: &str,
     fingerprint: &str,
     source_url: &str,
-    msgs: &[re_log_types::LogMsg],
-    state: &Arc<StreamState>,
+    encoded: Vec<u8>,
+    state: &StreamState,
     index: usize,
-) {
-    let encoded = match re_log_encoding::Encoder::encode(msgs.iter().map(Ok)) {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            re_log::warn_once!("Failed to encode an episode for the rrd artifacts store: {err}");
-            return;
-        }
-    };
-
+) -> anyhow::Result<()> {
     let metadata = vec![
         (
             crate::rrd_artifacts::FINGERPRINT_METADATA_KEY.to_owned(),
@@ -2229,25 +2353,54 @@ fn spawn_artifact_write_back(
         artifacts.credentials.clone(),
         artifacts.location.bucket.clone(),
     );
-    let key = key.to_owned();
-    let display_url = format!("tos://{}/{key}", artifacts.location.bucket);
-    let state = Arc::clone(state);
     let size = encoded.len();
 
+    client.put_object(key, encoded, &metadata).await?;
+    re_log::debug!(
+        "Uploaded converted rrd to the artifacts store ({})\nObject: {key}",
+        re_format::format_bytes(size as _)
+    );
+    state
+        .rrd_artifact_urls
+        .lock()
+        .insert(index, format!("tos://{}/{key}", artifacts.location.bucket));
+    Ok(())
+}
+
+fn spawn_artifact_write_back(
+    artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
+    key: &str,
+    fingerprint: &str,
+    source_url: &str,
+    msgs: &[re_log_types::LogMsg],
+    state: &Arc<StreamState>,
+    index: usize,
+) {
+    let Some(encoded) = encode_artifact(msgs) else {
+        return;
+    };
+
+    let artifacts = artifacts.clone();
+    let key = key.to_owned();
+    let fingerprint = fingerprint.to_owned();
+    let source_url = source_url.to_owned();
+    let state = Arc::clone(state);
+
     crate::data_source::spawn_future(async move {
-        match client.put_object(&key, encoded, &metadata).await {
-            Ok(()) => {
-                re_log::debug!(
-                    "Uploaded converted rrd to the artifacts store ({})\nObject: {key}",
-                    re_format::format_bytes(size as _)
-                );
-                state.rrd_artifact_urls.lock().insert(index, display_url);
-            }
-            Err(err) => {
-                re_log::warn_once!(
-                    "Failed to upload a converted rrd to the artifacts store (viewing is unaffected): {err:#}"
-                );
-            }
+        if let Err(err) = upload_artifact(
+            &artifacts,
+            &key,
+            &fingerprint,
+            &source_url,
+            encoded,
+            &state,
+            index,
+        )
+        .await
+        {
+            re_log::warn_once!(
+                "Failed to upload a converted rrd to the artifacts store (viewing is unaffected): {err:#}"
+            );
         }
     });
 }
