@@ -42,6 +42,7 @@ impl PyServerInternal {
             latency_ms: 0, // no artificial latency
             bandwidth_limit: None,
             cors_allow_origin: vec![],
+            data_dir: None, // in-process servers are in-memory only
         };
 
         let host: std::net::IpAddr = host

@@ -417,6 +417,9 @@ async fn register_sources(
                     source.store_slot_id,
                     source.resolved,
                     on_duplicate,
+                    // memory:// is a synthetic runtime address, not a durable one; the
+                    // segment-table scan re-derives it from the live store slot instead.
+                    Some(source.storage_url.clone()).filter(|url| url.scheme() != "memory"),
                 )
                 .await;
 
