@@ -60,6 +60,22 @@ pub async fn fetch_async_with_timeout(
 fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
     let agent = agent();
 
+    let has_header = |name: &str| {
+        request
+            .headers
+            .headers
+            .iter()
+            .any(|(n, _)| n.eq_ignore_ascii_case(name))
+    };
+    // Byte-range requests must opt out of transparent compression: proxies that gzip on
+    // the fly (observed on hf-mirror.com's nginx) IGNORE the Range header for responses
+    // they compress, silently answering every chunk request with the whole file.
+    // HEAD requests opt out too: "how big is this file" only makes sense in identity
+    // terms, and when a response is marked gzip the HTTP stack strips Content-Length
+    // (the decompressed length would differ), leaving the caller with no size at all.
+    let force_identity = (has_header("range") || matches!(request.method, ehttp::Method::HEAD))
+        && !has_header("accept-encoding");
+
     let mut response = match &request.method {
         ehttp::Method::GET | ehttp::Method::HEAD | ehttp::Method::DELETE => {
             let mut builder = match &request.method {
@@ -69,6 +85,9 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
             };
             for (name, value) in &request.headers.headers {
                 builder = builder.header(name.as_str(), value.as_str());
+            }
+            if force_identity {
+                builder = builder.header("accept-encoding", "identity");
             }
             builder.call()
         }
@@ -102,14 +121,22 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
             .collect(),
     };
 
-    // `read_to_vec()` caps the body at 10 MB by default; remote LeRobot episodes and whole-file
-    // downloads are routinely larger, so lift the limit.
-    let bytes = response
-        .body_mut()
-        .with_config()
-        .limit(u64::MAX)
-        .read_to_vec()
-        .map_err(|err| format!("Failed to read response body: {err}"))?;
+    // A HEAD response has no body by definition — do not try to read one: when a server
+    // stamps `Content-Encoding: gzip` on a HEAD (hf-mirror.com's nginx does), the
+    // transparent decompressor would choke on the empty stream with
+    // "gzip decompression failed: unexpected end of file".
+    let bytes = if matches!(request.method, ehttp::Method::HEAD) {
+        Vec::new()
+    } else {
+        // `read_to_vec()` caps the body at 10 MB by default; remote LeRobot episodes and
+        // whole-file downloads are routinely larger, so lift the limit.
+        response
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_to_vec()
+            .map_err(|err| format!("Failed to read response body: {err}"))?
+    };
 
     Ok(ehttp::Response {
         url: request.url.clone(),
@@ -345,5 +372,77 @@ mod tests {
             .await
             .expect("TLS validation against the OS trust store failed");
         assert!(response.status > 0, "no HTTP status returned");
+    }
+
+    /// A HEAD answered with `Content-Encoding: gzip` and (per spec) no body must succeed —
+    /// reading the nonexistent body through a gzip decoder used to fail with
+    /// "unexpected end of file" (observed against hf-mirror.com).
+    #[tokio::test]
+    async fn head_with_gzip_content_encoding_succeeds() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let handle = std::thread::Builder::new()
+            .name("gzip-head-server".to_owned())
+            .spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap();
+                let request_head = String::from_utf8_lossy(&buf[..n]).to_lowercase();
+                stream
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\ncontent-encoding: gzip\r\ncontent-length: 602\r\nx-linked-size: 4692\r\n\r\n",
+                    )
+                    .unwrap();
+                request_head
+            })
+            .unwrap();
+
+        let mut request = ehttp::Request::get(&url);
+        request.method = ehttp::Method::HEAD;
+        let response = super::fetch_async(request)
+            .await
+            .expect("HEAD must succeed");
+        assert_eq!(response.status, 200);
+        assert!(response.bytes.is_empty(), "HEAD body must not be read");
+        assert_eq!(response.headers.get("x-linked-size"), Some("4692"));
+
+        let request_head = handle.join().unwrap();
+        assert!(
+            request_head.contains("accept-encoding: identity"),
+            "HEAD must ask for identity encoding so sizes stay meaningful, got:\n{request_head}"
+        );
+    }
+
+    /// Ranged requests must announce `Accept-Encoding: identity`: on-the-fly-compressing
+    /// proxies ignore Range for responses they gzip, so compression and byte ranges are
+    /// mutually exclusive in practice.
+    #[tokio::test]
+    async fn ranged_requests_opt_out_of_compression() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let handle = std::thread::Builder::new()
+            .name("range-echo-server".to_owned())
+            .spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap();
+                let request_head = String::from_utf8_lossy(&buf[..n]).to_lowercase();
+                stream
+                    .write_all(b"HTTP/1.1 206 Partial Content\r\ncontent-length: 2\r\n\r\nok")
+                    .unwrap();
+                request_head
+            })
+            .unwrap();
+
+        let mut request = ehttp::Request::get(&url);
+        request.headers.insert("Range", "bytes=0-1".to_owned());
+        let response = super::fetch_async(request).await.expect("GET must succeed");
+        assert_eq!(response.status, 206);
+
+        let request_head = handle.join().unwrap();
+        assert!(
+            request_head.contains("accept-encoding: identity"),
+            "ranged request must ask for identity encoding, got:\n{request_head}"
+        );
     }
 }
