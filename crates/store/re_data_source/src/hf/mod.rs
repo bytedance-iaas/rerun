@@ -97,6 +97,63 @@ struct TreeEntry {
 }
 
 /// [`DatasetStore`] over a Hugging Face dataset repo.
+/// Base URL of the Hugging Face hub, overridable via the `HF_ENDPOINT` environment
+/// variable — the same convention the official `huggingface_hub` tooling uses.
+///
+/// Needed wherever huggingface.co itself is unreachable (e.g. pods in mainland-China
+/// clouds): point it at a mirror such as `https://hf-mirror.com`. Native only — in the
+/// browser there is no process environment, and the browser's own network is in charge.
+fn hf_endpoint() -> String {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Ok(endpoint) = std::env::var("HF_ENDPOINT") {
+        let endpoint = endpoint.trim().trim_end_matches('/');
+        if !endpoint.is_empty() {
+            return endpoint.to_owned();
+        }
+    }
+    "https://huggingface.co".to_owned()
+}
+
+/// Perform an HF request. No retries here: rate limits and other HTTP failures surface
+/// immediately with precise, typed errors — see [`http_error`].
+async fn hf_fetch(request: ehttp::Request) -> anyhow::Result<ehttp::Response> {
+    let url = request.url.clone();
+    crate::http_client::fetch_async(request)
+        .await
+        .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))
+}
+
+/// A human hint for HTTP statuses users actually hit against Hugging Face hosts.
+fn status_hint(status: u16) -> &'static str {
+    match status {
+        401 => " (Unauthorized — an access token is required or the given one is invalid)",
+        403 => " (Forbidden — no access with these credentials; gated dataset?)",
+        404 => " (Not Found)",
+        429 => " (Too Many Requests — the host is rate-limiting this address; try again later)",
+        503 => " (Service Unavailable — the host is overloaded or throttling; try again later)",
+        _ => "",
+    }
+}
+
+/// A typed error for a failed HTTP response: carries [`HttpStatusError`] for callers and a
+/// message with the exact status, a human hint, and the server's own error body.
+fn http_error(response: &ehttp::Response, what: &str, context: &str) -> anyhow::Error {
+    use crate::lerobot_remote::HttpStatusError;
+
+    let status = response.status;
+    let body = String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]);
+    let body = body.trim().to_owned();
+    let server_says = if body.is_empty() {
+        String::new()
+    } else {
+        format!("\nServer response: {body}")
+    };
+    anyhow::Error::new(HttpStatusError(status)).context(format!(
+        "{what} failed with HTTP {status}{}{server_says}\n{context}",
+        status_hint(status),
+    ))
+}
+
 struct HfStore {
     source: HfDatasetSource,
 }
@@ -116,7 +173,8 @@ impl DatasetStore for HfStore {
     async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {
         let mut files = Vec::new();
         let mut url = format!(
-            "https://huggingface.co/api/datasets/{}/tree/main?recursive=true",
+            "{}/api/datasets/{}/tree/main?recursive=true",
+            hf_endpoint(),
             self.source.repo
         );
 
@@ -126,17 +184,14 @@ impl DatasetStore for HfStore {
                 request.headers.insert(&name, &value);
             }
 
-            let response = crate::http_client::fetch_async(request)
-                .await
-                .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))?;
+            let response = hf_fetch(request).await?;
 
             if response.status != 200 {
-                anyhow::bail!(
-                    "Failed to list Hugging Face dataset (HTTP {}): {}\nDataset: {}",
-                    response.status,
-                    String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
-                    self.source.repo,
-                );
+                return Err(http_error(
+                    &response,
+                    "Listing the Hugging Face dataset",
+                    &format!("Dataset: {}", self.source.repo),
+                ));
             }
 
             let entries: Vec<TreeEntry> = serde_json::from_slice(&response.bytes)
@@ -165,7 +220,8 @@ impl DatasetStore for HfStore {
     async fn file_size(&self, rel_path: &str) -> anyhow::Result<u64> {
         // Percent-encode the path: file names with spaces etc. are invalid in a raw URI.
         let url = format!(
-            "https://huggingface.co/datasets/{}/resolve/main/{}",
+            "{}/datasets/{}/resolve/main/{}",
+            hf_endpoint(),
             self.source.repo,
             crate::tos::client::uri_encode(rel_path, false)
         );
@@ -176,29 +232,47 @@ impl DatasetStore for HfStore {
             request.headers.insert(&name, &value);
         }
 
-        let response = crate::http_client::fetch_async(request)
-            .await
-            .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))?;
+        let response = hf_fetch(request).await?;
 
         if !response.ok {
-            anyhow::bail!(
-                "HEAD failed with HTTP {}\nFile: {rel_path}",
-                response.status
-            );
+            return Err(http_error(&response, "HEAD", &format!("File: {rel_path}")));
         }
 
-        response
+        if let Some(size) = response
             .headers
             .get("x-linked-size")
             .or_else(|| response.headers.get("content-length"))
             .and_then(|size| size.parse().ok())
-            .ok_or_else(|| anyhow::anyhow!("No size reported for file: {rel_path}"))
+        {
+            return Ok(size);
+        }
+
+        // Some mirrors/proxies mangle HEAD headers (gzip marking strips Content-Length,
+        // redirect chains drop X-Linked-Size). A one-byte ranged GET is immune: the total
+        // is in Content-Range, and ranged requests always travel with identity encoding.
+        let mut request = ehttp::Request::get(&url);
+        request.headers.insert("range", "bytes=0-0".to_owned());
+        if let Some((name, value)) = self.auth_header() {
+            request.headers.insert(&name, &value);
+        }
+        let response = hf_fetch(request).await?;
+        if response.status == 206
+            && let Some(total) = response
+                .headers
+                .get("content-range")
+                .and_then(parse_content_range_total)
+        {
+            return Ok(total);
+        }
+
+        anyhow::bail!("No size reported for file: {rel_path}")
     }
 
     async fn get_range_once(&self, rel_path: &str, range: Range<u64>) -> anyhow::Result<Vec<u8>> {
         // Percent-encode the path: file names with spaces etc. are invalid in a raw URI.
         let url = format!(
-            "https://huggingface.co/datasets/{}/resolve/main/{}",
+            "{}/datasets/{}/resolve/main/{}",
+            hf_endpoint(),
             self.source.repo,
             crate::tos::client::uri_encode(rel_path, false)
         );
@@ -213,20 +287,19 @@ impl DatasetStore for HfStore {
             request.headers.insert(&name, &value);
         }
 
-        let response = crate::http_client::fetch_async(request)
-            .await
-            .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))?;
+        let response = hf_fetch(request).await?;
 
         if !(response.status == 200 || response.status == 206) {
-            anyhow::bail!(
-                "GET failed with HTTP {}: {}\nFile: {rel_path}",
-                response.status,
-                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
-            );
+            return Err(http_error(&response, "GET", &format!("File: {rel_path}")));
         }
 
         Ok(response.bytes)
     }
+}
+
+/// The total length out of a `Content-Range: bytes X-Y/TOTAL` header.
+fn parse_content_range_total(value: &str) -> Option<u64> {
+    value.rsplit('/').next()?.trim().parse().ok()
 }
 
 /// Extract the `rel="next"` URL from a `Link` header.
@@ -372,5 +445,79 @@ mod tests {
         let expected = Some(("authorization".to_owned(), "Bearer hf_abc".to_owned()));
         assert_eq!(store("hf_abc").auth_header(), expected);
         assert_eq!(store("  hf_abc  ").auth_header(), expected); // trimmed
+    }
+
+    #[test]
+    fn http_errors_are_precise_and_typed() {
+        use crate::lerobot_remote::http_status_of;
+
+        let response = ehttp::Response {
+            url: "https://hf-mirror.com/x".to_owned(),
+            ok: false,
+            status: 429,
+            status_text: "Too Many Requests".to_owned(),
+            headers: ehttp::Headers::new(&[]),
+            bytes: b"rate limit exceeded, slow down".to_vec(),
+        };
+        let err = http_error(
+            &response,
+            "Listing the Hugging Face dataset",
+            "Dataset: org/name",
+        );
+        let msg = format!("{err:#}");
+        assert!(msg.contains("HTTP 429"), "carries the code: {msg}");
+        assert!(
+            msg.contains("Too Many Requests"),
+            "explains the code: {msg}"
+        );
+        assert!(
+            msg.contains("try again later"),
+            "tells the user what to do: {msg}"
+        );
+        assert!(
+            msg.contains("rate limit exceeded, slow down"),
+            "carries the server's own message: {msg}"
+        );
+        assert!(msg.contains("Dataset: org/name"), "names the target: {msg}");
+        assert_eq!(http_status_of(&err), Some(429), "typed for callers");
+
+        // An empty body (HEAD) adds no dangling "Server response:" line.
+        let head = ehttp::Response {
+            status: 404,
+            bytes: Vec::new(),
+            ..response
+        };
+        let msg = format!("{:#}", http_error(&head, "HEAD", "File: meta/info.json"));
+        assert!(msg.contains("HTTP 404 (Not Found)"), "{msg}");
+        assert!(!msg.contains("Server response"), "{msg}");
+    }
+
+    #[test]
+    fn typed_status_survives_context_chains() {
+        use crate::lerobot_remote::{HttpStatusError, http_status_of};
+
+        let err = anyhow::Error::new(HttpStatusError(404)).context("HEAD failed with HTTP 404");
+        assert_eq!(http_status_of(&err), Some(404));
+
+        let wrapped = err.context("while probing meta/info.json");
+        assert_eq!(http_status_of(&wrapped), Some(404));
+
+        let untyped = anyhow::anyhow!("some transport failure");
+        assert_eq!(http_status_of(&untyped), None);
+    }
+
+    #[test]
+    fn content_range_total_parsing() {
+        assert_eq!(parse_content_range_total("bytes 0-0/4692"), Some(4692));
+        assert_eq!(
+            parse_content_range_total("bytes 100-199/1072289"),
+            Some(1072289)
+        );
+        assert_eq!(
+            parse_content_range_total("bytes 0-0/*"),
+            None,
+            "unknown total"
+        );
+        assert_eq!(parse_content_range_total("garbage"), None);
     }
 }
