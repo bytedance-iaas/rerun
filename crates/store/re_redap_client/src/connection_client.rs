@@ -892,6 +892,95 @@ where
         Ok(segment_ids)
     }
 
+    /// Get the `(layer name, storage url)` pairs of a single segment, from the segment table.
+    ///
+    /// This is the metadata a client needs to read the segment's RRDs directly from their
+    /// storage (e.g. object storage), without the server in the data path.
+    #[tracing::instrument(level = "info", skip_all)]
+    pub async fn get_segment_layer_urls(
+        &self,
+        entry_id: EntryId,
+        segment_id: &SegmentId,
+    ) -> ApiResult<Vec<(String, String)>>
+    where
+        T: Clone,
+    {
+        // Retry only the *open*, same rationale as `get_dataset_segment_ids`.
+        let response = crate::with_retry_resource_exhausted("/ScanSegmentTable", || {
+            let mut client = self.clone();
+            async move {
+                client
+                    .inner()
+                    .scan_segment_table(
+                        tonic::Request::new(ScanSegmentTableRequest::with_columns([
+                            ScanSegmentTableDataframe::COLUMN_RERUN_SEGMENT_ID_NAME,
+                            ScanSegmentTableDataframe::COLUMN_RERUN_LAYER_NAMES_NAME,
+                            ScanSegmentTableDataframe::COLUMN_RERUN_STORAGE_URLS_NAME,
+                        ]))
+                        .with_entry_id(entry_id),
+                    )
+                    .await
+                    .map_err(|err| ApiError::tonic(err, "/ScanSegmentTable failed"))
+            }
+        })
+        .await?;
+
+        let mut stream = ApiResponseStream::from_tonic_response(response, "/ScanSegmentTable");
+        let trace_id = stream.trace_id();
+
+        let mut layer_urls = Vec::new();
+
+        while let Some(resp) = stream.next().await {
+            let record_batch: RecordBatch = resp?
+                .data()
+                .map_err(|err| {
+                    ApiError::deserialization_with_source(
+                        trace_id,
+                        err,
+                        "failed parsing item from /ScanSegmentTable stream",
+                    )
+                })?
+                .try_into()
+                .map_err(|err| {
+                    ApiError::deserialization_with_source(
+                        trace_id,
+                        err,
+                        "failed decoding item from /ScanSegmentTable stream",
+                    )
+                })?;
+
+            let segment_id_column = ScanSegmentTableDataframe::COLUMN_RERUN_SEGMENT_ID
+                .extract(&record_batch)
+                .map_err(|err| {
+                    ApiError::deserialization_quiver_from(trace_id, err, "/ScanSegmentTable stream")
+                })?;
+            let layer_names_column = ScanSegmentTableDataframe::COLUMN_RERUN_LAYER_NAMES
+                .extract(&record_batch)
+                .map_err(|err| {
+                    ApiError::deserialization_quiver_from(trace_id, err, "/ScanSegmentTable stream")
+                })?;
+            let storage_urls_column = ScanSegmentTableDataframe::COLUMN_RERUN_STORAGE_URLS
+                .extract(&record_batch)
+                .map_err(|err| {
+                    ApiError::deserialization_quiver_from(trace_id, err, "/ScanSegmentTable stream")
+                })?;
+
+            for (row, row_segment_id) in segment_id_column.iter().enumerate() {
+                if row_segment_id != segment_id.as_str() {
+                    continue;
+                }
+                let names = layer_names_column.value(row);
+                let urls = storage_urls_column.value(row);
+                layer_urls.extend(
+                    std::iter::zip(names, urls)
+                        .map(|(name, url)| (name.to_owned(), url.to_owned())),
+                );
+            }
+        }
+
+        Ok(layer_urls)
+    }
+
     //TODO(ab): accept entry name
     #[tracing::instrument(level = "info", skip_all)]
     pub async fn get_dataset_manifest_schema(

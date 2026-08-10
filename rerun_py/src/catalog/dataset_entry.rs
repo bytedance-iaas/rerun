@@ -10,7 +10,7 @@ use re_datafusion::{DatasetManifestProvider, SegmentTableProvider};
 use re_log_types::EntryId;
 use re_protos::cloud::v1alpha1::ext::{DatasetDetails, DatasetEntry, EntryDetails};
 use re_protos::common::v1alpha1::ext::{DatasetHandle, IfDuplicateBehavior, SegmentId};
-use re_redap_client::SegmentChunkProvider;
+use re_redap_client::{DirectSegmentChunkProvider, SegmentChunkProvider};
 use re_sorbet::SorbetColumnDescriptors;
 use re_types_core::LayerName;
 
@@ -542,25 +542,68 @@ impl PyDatasetEntryInternal {
     ///
     /// One round-trip on construction (the manifest); chunks are fetched on
     /// demand.
-    fn segment_store(self_: PyRef<'_, Self>, segment_id: String) -> PyResult<PyLazyStoreInternal> {
+    ///
+    /// With `direct=True`, chunk data is range-read straight from the segment's
+    /// storage (e.g. object storage) instead of being relayed through the
+    /// catalog server; the server is only consulted for the layer storage URLs.
+    /// `direct=None` (the default) reads the `RERUN_SEGMENT_DIRECT_READ`
+    /// environment variable.
+    #[pyo3(signature = (segment_id, *, direct = None))]
+    fn segment_store(
+        self_: PyRef<'_, Self>,
+        segment_id: String,
+        direct: Option<bool>,
+    ) -> PyResult<PyLazyStoreInternal> {
         let py = self_.py();
         let _span = read_trace_context_from_python(py, "DatasetEntry.segment_store").entered();
         let connection = self_.client.borrow(py).connection().clone();
         let dataset_id = self_.entry_details.id;
         let segment_id = SegmentId::from(segment_id);
 
-        let provider = wait_for_future(py, async {
-            SegmentChunkProvider::try_new(
-                connection.connection_registry().clone(),
-                connection.origin().clone(),
-                dataset_id,
-                segment_id,
-            )
-            .await
-            .map_err(to_py_err)
-        })?;
+        let direct = direct.unwrap_or_else(direct_read_default);
 
-        let lazy = LazyStore::new(Arc::new(provider));
+        let provider: Arc<dyn re_log_encoding::ChunkProvider> = if direct {
+            let registry = connection.connection_registry().clone();
+            let origin = connection.origin().clone();
+            wait_for_future(py, async move {
+                let client = registry.client(origin).await.map_err(to_py_err)?;
+                let layers = client
+                    .get_segment_layer_urls(dataset_id, &segment_id)
+                    .await
+                    .map_err(to_py_err)?;
+                if layers.is_empty() {
+                    return Err(crate::catalog::errors::NotFoundError::new_err(format!(
+                        "segment '{segment_id}' not found in dataset (or it has no layers)"
+                    )));
+                }
+                let layers = layers
+                    .into_iter()
+                    .map(|(name, url)| {
+                        url::Url::parse(&url).map(|url| (name, url)).map_err(|err| {
+                            PyValueError::new_err(format!("invalid storage URL: {err}: {url}"))
+                        })
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                let provider = DirectSegmentChunkProvider::try_new(segment_id, layers)
+                    .await
+                    .map_err(to_py_err)?;
+                Ok(Arc::new(provider) as Arc<dyn re_log_encoding::ChunkProvider>)
+            })?
+        } else {
+            let provider = wait_for_future(py, async {
+                SegmentChunkProvider::try_new(
+                    connection.connection_registry().clone(),
+                    connection.origin().clone(),
+                    dataset_id,
+                    segment_id,
+                )
+                .await
+                .map_err(to_py_err)
+            })?;
+            Arc::new(provider)
+        };
+
+        let lazy = LazyStore::new(provider);
         Ok(PyLazyStoreInternal::new(lazy))
     }
 
@@ -749,4 +792,14 @@ fn py_object_to_time_cell(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<re
 
     let nanos = py_object_to_i64(py, obj)?;
     Ok(re_sdk::TimeCell::new(TimeType::TimestampNs, nanos))
+}
+
+/// Default for `segment_store(direct=None)`: the `RERUN_SEGMENT_DIRECT_READ` environment variable.
+///
+/// Truthy values: anything non-empty except `0` / `false` (case-insensitive).
+fn direct_read_default() -> bool {
+    std::env::var("RERUN_SEGMENT_DIRECT_READ").is_ok_and(|v| {
+        let v = v.trim();
+        !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false")
+    })
 }

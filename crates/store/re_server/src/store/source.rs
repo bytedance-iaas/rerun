@@ -31,6 +31,12 @@ pub struct Source {
 
     /// All sources in the same layer share the same [`LayerInfo`].
     layer_info: Arc<LayerInfo>,
+
+    /// Where this source's data actually lives (`file://`, `tos://`, `s3://`, …), as registered.
+    ///
+    /// `None` for sources without a durable address (e.g. written over gRPC into memory).
+    /// Reported in the segment table so clients can read the data directly from its storage.
+    storage_url: Option<url::Url>,
 }
 
 impl Source {
@@ -39,6 +45,7 @@ impl Source {
         resolved: ResolvedStore,
         data_source_kind: DataSourceKind,
         layer_info: Arc<LayerInfo>,
+        storage_url: Option<url::Url>,
     ) -> Self {
         Self {
             store_slot_id,
@@ -46,7 +53,13 @@ impl Source {
             registration_time: jiff::Timestamp::now(),
             data_source_kind,
             layer_info,
+            storage_url,
         }
+    }
+
+    /// The registered storage location of this source's data, if it has one.
+    pub fn storage_url(&self) -> Option<&url::Url> {
+        self.storage_url.as_ref()
     }
 
     pub fn data_source_kind(&self) -> DataSourceKind {
@@ -377,6 +390,7 @@ mod tests {
             ResolvedStore::Eager(ChunkStoreHandle::new(eager_store)),
             DataSourceKind::Rrd,
             test_layer_info.clone(),
+            None,
         );
 
         // Lazy backend: same chunks, written to an RRD file with footer, then loaded lazily.
@@ -401,6 +415,7 @@ mod tests {
             ResolvedStore::Lazy(lazy),
             DataSourceKind::Rrd,
             test_layer_info,
+            None,
         );
 
         let lazy_manifest = lazy_layer

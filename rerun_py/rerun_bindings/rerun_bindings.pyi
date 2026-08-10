@@ -1083,7 +1083,7 @@ class DatasetEntryInternal:
 
     # ---
 
-    def segment_store(self, segment_id: str) -> LazyStoreInternal: ...
+    def segment_store(self, segment_id: str, *, direct: bool | None = None) -> LazyStoreInternal: ...
 
     # ---
 
