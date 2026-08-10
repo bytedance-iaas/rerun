@@ -9,6 +9,11 @@
 //! `TOS_ENDPOINT`, `TOS_REGION`, `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, and optionally
 //! `TOS_S3_PATH_STYLE=1` for path-style buckets (e.g. `MinIO`). Standard `AWS_*` variables are
 //! honored as a fallback, so plain `s3://` against AWS or `MinIO` works too.
+//!
+//! `RERUN_PRESIGN_ENDPOINT` (optional) overrides the endpoint used only for **pre-signing**
+//! direct-read URLs, so the host handed to clients can differ from the one the server reads
+//! over: sign the public endpoint for out-of-cloud clients while the server keeps reading over
+//! the internal one. Unset falls back to `TOS_ENDPOINT`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -58,7 +63,18 @@ fn env_non_empty(name: &str) -> Option<String> {
 }
 
 /// Build an S3-compatible client for the given bucket from the environment.
-fn client_for_bucket(bucket: &str) -> tonic::Result<Arc<dyn object_store::ObjectStore>> {
+///
+/// Returns the concrete client type because pre-signing ([`object_store::signer::Signer`])
+/// is only available on it, not on `dyn ObjectStore`.
+///
+/// `endpoint_override` replaces the `TOS_ENDPOINT` env for this client only. Pre-signing
+/// uses it so the signed URL's host can differ from the endpoint the server reads over
+/// (e.g. sign a public host for out-of-cloud clients while the server itself reads over the
+/// internal endpoint); all other callers pass `None` and read over `TOS_ENDPOINT`.
+fn client_for_bucket(
+    bucket: &str,
+    endpoint_override: Option<String>,
+) -> tonic::Result<Arc<object_store::aws::AmazonS3>> {
     // TOS's S3-compatible endpoint uses virtual-hosted style ({bucket}.{endpoint});
     // path-style is opt-in for MinIO-like setups.
     let path_style = env_non_empty("TOS_S3_PATH_STYLE").is_some_and(|v| v != "0");
@@ -66,7 +82,7 @@ fn client_for_bucket(bucket: &str) -> tonic::Result<Arc<dyn object_store::Object
     // Start from the standard AWS_* environment, then apply the TOS_* overrides.
     let mut builder = object_store::aws::AmazonS3Builder::from_env().with_bucket_name(bucket);
 
-    if let Some(endpoint) = env_non_empty("TOS_ENDPOINT") {
+    if let Some(endpoint) = endpoint_override.or_else(|| env_non_empty("TOS_ENDPOINT")) {
         // In virtual-hosted style `object_store` uses the endpoint as-is (it does not
         // prepend the bucket itself), so splice the bucket into the host here.
         let endpoint = if path_style {
@@ -93,15 +109,12 @@ fn client_for_bucket(bucket: &str) -> tonic::Result<Arc<dyn object_store::Object
 
     builder = builder.with_virtual_hosted_style_request(!path_style);
 
-    builder
-        .build()
-        .map(|store| Arc::new(store) as _)
-        .map_err(|err| {
-            tonic::Status::invalid_argument(format!(
-                "Failed to configure S3-compatible storage (check TOS_ENDPOINT/TOS_REGION/\
+    builder.build().map(Arc::new).map_err(|err| {
+        tonic::Status::invalid_argument(format!(
+            "Failed to configure S3-compatible storage (check TOS_ENDPOINT/TOS_REGION/\
              TOS_ACCESS_KEY/TOS_SECRET_KEY): {err:#}"
-            ))
-        })
+        ))
+    })
 }
 
 /// The local cache path of a remote file: stable across restarts for the same URL.
@@ -150,7 +163,7 @@ pub async fn ensure_cached(url: &Url) -> tonic::Result<PathBuf> {
             "remote URL has no object key: {url}"
         )));
     }
-    let client = client_for_bucket(&bucket)?;
+    let client = client_for_bucket(&bucket, None)?;
 
     re_log::info!("Downloading {url}…");
     let object = client
@@ -200,7 +213,7 @@ pub async fn ensure_cached(url: &Url) -> tonic::Result<PathBuf> {
 /// (same scheme as the input).
 pub async fn list_rrds(prefix_url: &Url) -> tonic::Result<Vec<Url>> {
     let (bucket, prefix) = bucket_and_key(prefix_url)?;
-    let client = client_for_bucket(&bucket)?;
+    let client = client_for_bucket(&bucket, None)?;
 
     let list_prefix = (!prefix.is_empty()).then(|| object_store::path::Path::from(prefix.as_str()));
 
@@ -221,6 +234,46 @@ pub async fn list_rrds(prefix_url: &Url) -> tonic::Result<Vec<Url>> {
 
     urls.sort_by(|a, b| a.as_str().cmp(b.as_str()));
     Ok(urls)
+}
+
+/// Pre-sign a `GET` for a remote object: anyone holding the returned URL can read that one
+/// object until the expiry — no credentials needed on their side.
+///
+/// The signed URL's host comes from `RERUN_PRESIGN_ENDPOINT` when set, else `TOS_ENDPOINT`.
+/// Set it to the **public** TOS endpoint (`…volces.com`) so out-of-cloud clients can reach the
+/// signed URLs — the deployment default. For clients running inside the same VPC, set it to the
+/// internal endpoint (`…ivolces.com`) so their reads stay off the public network. Only the
+/// signature host changes; the server's own reads still use `TOS_ENDPOINT`.
+pub async fn presign_get(url: &Url, expires_in: std::time::Duration) -> tonic::Result<(Url, i64)> {
+    use object_store::signer::Signer as _;
+
+    let (bucket, key) = bucket_and_key(url)?;
+    let client = client_for_bucket(&bucket, env_non_empty("RERUN_PRESIGN_ENDPOINT"))?;
+    let path = object_store::path::Path::from(key.as_str());
+
+    let signed = client
+        .signed_url(http::Method::GET, &path, expires_in)
+        .await
+        .map_err(|err| {
+            tonic::Status::internal(format!(
+                "failed to pre-sign object URL: {err:#}\nURL: {url}"
+            ))
+        })?;
+
+    let expires_at = jiff::Timestamp::now().as_second() + expires_in.as_secs().cast_signed();
+    Ok((signed, expires_at))
+}
+
+/// Size in bytes of a remote object (one `HEAD` request).
+pub async fn object_size(url: &Url) -> tonic::Result<u64> {
+    let (bucket, key) = bucket_and_key(url)?;
+    let client = client_for_bucket(&bucket, None)?;
+    let path = object_store::path::Path::from(key.as_str());
+
+    let head = client.head(&path).await.map_err(|err| {
+        tonic::Status::internal(format!("failed to stat object: {err:#}\nURL: {url}"))
+    })?;
+    Ok(head.size)
 }
 
 #[cfg(test)]

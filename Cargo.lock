@@ -9856,6 +9856,7 @@ dependencies = [
  "ahash",
  "arrow",
  "async-trait",
+ "axum",
  "bitflags 2.13.0",
  "bytes",
  "ehttp",
@@ -9887,6 +9888,7 @@ dependencies = [
  "re_uri",
  "rerun-tonic-web-wasm-client",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -9895,6 +9897,7 @@ dependencies = [
  "tonic-prost",
  "tower",
  "tracing",
+ "ureq 3.3.0",
  "url",
  "web-time",
 ]
