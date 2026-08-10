@@ -49,6 +49,30 @@ impl ServerTosConfig {
     }
 }
 
+/// Volcengine TOS regions, for the endpoint/region dropdowns. The bool marks regions that
+/// also have an S3-compatible *internal* endpoint (`…ivolces.com`, reachable only from
+/// inside the Volcengine network). Verified against live DNS + HTTPS probes of
+/// `tos-s3-<region>.[i]volces.com` (2026-08-07); manual entry stays available for
+/// anything not listed here.
+const TOS_REGIONS: &[(&str, bool)] = &[
+    ("cn-beijing", true),
+    ("cn-beijing2", false),
+    ("cn-shanghai", true),
+    ("cn-guangzhou", true),
+    ("cn-hongkong", false),
+    ("ap-southeast-1", true),
+    ("ap-southeast-2", false),
+    ("ap-southeast-3", false),
+];
+
+fn public_endpoint(region: &str) -> String {
+    format!("https://tos-s3-{region}.volces.com")
+}
+
+fn internal_endpoint(region: &str) -> String {
+    format!("https://tos-s3-{region}.ivolces.com")
+}
+
 /// Dialog for opening a `LeRobot` dataset stored in Volcengine TOS.
 #[derive(Default)]
 pub struct OpenTosModal {
@@ -68,7 +92,9 @@ pub struct OpenTosModal {
     artifact_upload_disabled: bool,
 
     /// Filled asynchronously from the server's `/tos-config.json` (web only).
-    server_config: Arc<Mutex<Option<ServerTosConfig>>>,
+    /// `Err` holds why the fetch failed — shown in the dialog, because a silently missing
+    /// config looks exactly like "this deployment has no credentials" and is undebuggable.
+    server_config: Arc<Mutex<Option<Result<ServerTosConfig, String>>>>,
     server_config_requested: bool,
     server_config_applied: bool,
 }
@@ -105,13 +131,28 @@ impl OpenTosModal {
         #[cfg(target_arch = "wasm32")]
         {
             let config = self.server_config.clone();
-            ehttp::fetch(ehttp::Request::get("tos-config.json"), move |result| {
-                if let Ok(response) = result
-                    && response.status == 200
-                    && let Ok(parsed) = serde_json::from_slice::<ServerTosConfig>(&response.bytes)
-                {
-                    *config.lock() = Some(parsed);
+            // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
+            // default (`Omit`) tells the browser to strip the authenticated session,
+            // turning every fetch into a 401.
+            let request = ehttp::Request::get("tos-config.json")
+                .with_credentials(ehttp::Credentials::SameOrigin);
+            ehttp::fetch(request, move |result| {
+                let outcome = match result {
+                    Ok(response) if response.status == 200 => {
+                        serde_json::from_slice::<ServerTosConfig>(&response.bytes)
+                            .map_err(|err| format!("invalid JSON: {err}"))
+                    }
+                    Ok(response) => {
+                        Err(format!("HTTP {} {}", response.status, response.status_text))
+                    }
+                    Err(err) => Err(err),
+                };
+                if let Err(err) = &outcome {
+                    re_log::warn!(
+                        "Failed to load server TOS defaults: {err}\nFile: tos-config.json"
+                    );
                 }
+                *config.lock() = Some(outcome);
             });
         }
 
@@ -139,7 +180,7 @@ impl OpenTosModal {
                 parsed.rrd_artifacts_prefetch = n;
             }
 
-            *self.server_config.lock() = Some(parsed);
+            *self.server_config.lock() = Some(Ok(parsed));
         }
     }
 
@@ -148,7 +189,7 @@ impl OpenTosModal {
         if self.server_config_applied {
             return;
         }
-        let Some(config) = self.server_config.lock().clone() else {
+        let Some(Ok(config)) = self.server_config.lock().clone() else {
             return;
         };
         self.server_config_applied = true;
@@ -170,7 +211,17 @@ impl OpenTosModal {
     pub fn ui(&mut self, ui: &egui::Ui, command_sender: &CommandSender) {
         self.apply_server_config();
 
-        let server_config = self.server_config.lock().clone().unwrap_or_default();
+        let fetched = self.server_config.lock().clone();
+        let config_resolved = fetched.is_some();
+        let config_error = fetched.as_ref().and_then(|r| r.as_ref().err().cloned());
+        let server_config = fetched.and_then(Result::ok).unwrap_or_default();
+
+        // Once we know there are no server-side credentials (config arrived without them, or
+        // the fetch failed), the user's own AK/SK are the only way forward — force the custom
+        // fields open instead of leaving both paths disabled.
+        if config_resolved && !server_config.has_credentials() {
+            self.use_custom_credentials = true;
+        }
 
         self.modal.ui(
             ui.ctx(),
@@ -193,20 +244,85 @@ impl OpenTosModal {
                         }
                         ui.end_row();
 
+                        // Endpoint and region: free text with a dropdown of known values.
+                        // The list may lag behind newly opened regions, so typing always works.
                         ui.label("Endpoint:");
-                        egui::TextEdit::singleline(&mut self.endpoint)
-                            .hint_text("https://tos-s3-cn-beijing.volces.com")
-                            .desired_width(f32::INFINITY)
-                            .show(ui);
+                        ui.horizontal(|ui| {
+                            let menu_width = 20.0;
+                            egui::TextEdit::singleline(&mut self.endpoint)
+                                .hint_text("https://tos-s3-cn-beijing.volces.com")
+                                .desired_width(
+                                    ui.available_width() - menu_width - ui.spacing().item_spacing.x,
+                                )
+                                .show(ui);
+                            ui.menu_button("⏷", |ui| {
+                                for (region, _) in TOS_REGIONS {
+                                    if ui.button(public_endpoint(region)).clicked() {
+                                        self.endpoint = public_endpoint(region);
+                                        self.region = (*region).to_owned();
+                                        ui.close();
+                                    }
+                                }
+                                ui.separator();
+                                for (region, has_internal) in TOS_REGIONS {
+                                    if *has_internal
+                                        && ui
+                                            .button(format!(
+                                                "{} (internal)",
+                                                internal_endpoint(region)
+                                            ))
+                                            .clicked()
+                                    {
+                                        self.endpoint = internal_endpoint(region);
+                                        self.region = (*region).to_owned();
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        });
                         ui.end_row();
 
                         ui.label("Region:");
-                        egui::TextEdit::singleline(&mut self.region)
-                            .hint_text("cn-beijing")
-                            .desired_width(f32::INFINITY)
-                            .show(ui);
+                        ui.horizontal(|ui| {
+                            let menu_width = 20.0;
+                            egui::TextEdit::singleline(&mut self.region)
+                                .hint_text("cn-beijing")
+                                .desired_width(
+                                    ui.available_width() - menu_width - ui.spacing().item_spacing.x,
+                                )
+                                .show(ui);
+                            ui.menu_button("⏷", |ui| {
+                                for (region, _) in TOS_REGIONS {
+                                    if ui.button(*region).clicked() {
+                                        self.region = (*region).to_owned();
+                                        if self.endpoint.is_empty() {
+                                            self.endpoint = public_endpoint(region);
+                                        }
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        });
                         ui.end_row();
                     });
+
+                // In the browser the requests go out from the user's machine, so internal
+                // endpoints (only routable inside the Volcengine network) won't work.
+                #[cfg(target_arch = "wasm32")]
+                if self.endpoint.contains(".ivolces.com") {
+                    ui.warning_label(
+                        "This is an internal endpoint (.ivolces.com), only reachable from \
+                         inside the Volcengine network. In a browser you most likely need \
+                         the public endpoint (.volces.com).",
+                    );
+                }
+
+                if let Some(err) = &config_error {
+                    ui.warning_label(format!(
+                        "Failed to load the server-side defaults (endpoint, credentials): \
+                         {err}\nFile: tos-config.json — enter the values manually below.",
+                    ));
+                }
 
                 // Credentials: the deployment's docker-secret defaults are used unless the user
                 // opts into providing their own.
