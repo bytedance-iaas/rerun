@@ -26,7 +26,7 @@ pub enum DirectReadError {
     #[error("failed to decode RRD: {source}\nURL: {url}")]
     Codec {
         url: Url,
-        source: re_log_encoding::CodecError,
+        source: Box<re_log_encoding::CodecError>,
     },
 
     #[error(
@@ -40,6 +40,12 @@ pub enum DirectReadError {
 
     #[error("unknown chunk id {0}")]
     UnknownChunkId(ChunkId),
+
+    #[error("failed to reach the pre-sign endpoint: {0}")]
+    PresignTransport(String),
+
+    #[error("pre-sign request failed (HTTP {status}): {body}")]
+    Presign { status: u16, body: String },
 }
 
 /// [`ChunkProvider`] over the RRDs of a single dataset segment, read **directly** from object
@@ -88,22 +94,51 @@ impl DirectSegmentChunkProvider {
         segment_id: SegmentId,
         layers: Vec<(String, Url)>,
     ) -> Result<Self, DirectReadError> {
-        if layers.is_empty() {
+        let mut readers = Vec::with_capacity(layers.len());
+        for (layer_name, url) in layers {
+            readers.push((layer_name, ObjectStoreReader::open(&url).await?));
+        }
+        Self::from_readers(segment_id, readers).await
+    }
+
+    /// Like [`Self::try_new`], but over pre-signed URLs from the catalog server's
+    /// `/catalog/presign` endpoint — no storage credentials are needed anywhere in
+    /// this process; each URL's embedded signature is the entire authorization.
+    pub async fn try_new_presigned(
+        segment_id: SegmentId,
+        layers: &[crate::PresignedLayer],
+    ) -> Result<Self, DirectReadError> {
+        let mut readers = Vec::with_capacity(layers.len());
+        for layer in layers {
+            readers.push(crate::presign::presigned_reader(layer)?);
+        }
+        Self::from_readers(segment_id, readers).await
+    }
+
+    /// Shared construction: index each reader's footer and merge the manifests.
+    async fn from_readers(
+        segment_id: SegmentId,
+        readers: Vec<(String, ObjectStoreReader)>,
+    ) -> Result<Self, DirectReadError> {
+        if readers.is_empty() {
             return Err(DirectReadError::NoLayers);
         }
+
+        let first_layer_url = readers[0].1.url().clone();
 
         let mut providers = Vec::new();
         let mut raw_manifests = Vec::new();
         let mut chunk_to_provider = HashMap::default();
 
-        for (layer_name, url) in &layers {
-            let mut reader = ObjectStoreReader::open(url).await?;
+        for (layer_name, mut reader) in readers {
+            let url = reader.url().clone();
+            let url = &url;
 
             let footer = re_log_encoding::read_rrd_footer(&mut reader)
                 .await
                 .map_err(|source| DirectReadError::Codec {
                     url: url.clone(),
-                    source,
+                    source: Box::new(source),
                 })?
                 .ok_or_else(|| DirectReadError::FooterRequired(url.clone()))?;
 
@@ -122,7 +157,7 @@ impl DirectSegmentChunkProvider {
                 )
                 .map_err(|source| DirectReadError::Codec {
                     url: url.clone(),
-                    source,
+                    source: Box::new(source),
                 })?;
 
                 let provider_idx = providers.len();
@@ -141,6 +176,7 @@ impl DirectSegmentChunkProvider {
 
         // Merge under a segment-scoped store id — same shape the server produces for
         // `GetRrdManifest`, so downstream consumers can't tell the difference.
+        let merge_err_url = first_layer_url;
         let application_id = "n/a"; // irrelevant, dropped immediately
         let segment_store_id =
             StoreId::new(StoreKind::Recording, application_id, segment_id.to_string());
@@ -150,14 +186,14 @@ impl DirectSegmentChunkProvider {
                 raw_manifests.iter().map(|m| (**m).clone()).collect(),
             )
             .map_err(|source| DirectReadError::Codec {
-                url: layers[0].1.clone(),
-                source,
+                url: merge_err_url.clone(),
+                source: Box::new(source),
             })?,
         );
         let manifest = Arc::new(RrdManifest::try_new(&raw_manifest).map_err(|source| {
             DirectReadError::Codec {
-                url: layers[0].1.clone(),
-                source,
+                url: merge_err_url,
+                source: Box::new(source),
             }
         })?);
 
@@ -368,5 +404,66 @@ mod tests {
             .await
             .expect_err("unknown chunk id must fail");
         assert!(err.to_string().contains("unknown chunk id"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn presigned_file_layers_load_all_chunks() {
+        // The file:// passthrough shape of a /catalog/presign response (local/test setups).
+        let dir = tempfile::tempdir().expect("tempdir");
+        let rrd = dir.path().join("base.rrd");
+        write_rrd(&rrd, 3, true);
+        let size_bytes = std::fs::metadata(&rrd).expect("metadata").len();
+
+        let layers = vec![crate::PresignedLayer {
+            layer: "base".to_owned(),
+            url: file_url(&rrd).to_string(),
+            size_bytes,
+            expires_at_unix: None,
+        }];
+
+        let provider =
+            DirectSegmentChunkProvider::try_new_presigned(SegmentId::from("seg_pf"), &layers)
+                .await
+                .expect("provider should build");
+
+        let ids = provider.manifest().col_chunk_ids().to_vec();
+        assert_eq!(ids.len(), 3);
+        let chunks = provider
+            .load_chunks(&ids)
+            .await
+            .expect("chunks should load");
+        assert_eq!(chunks.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn presigned_http_layers_load_all_chunks() {
+        // The real cloud shape: the RRD is behind a pre-signed HTTP URL; the provider
+        // reads footer + chunks via ranged GETs with no credentials anywhere.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let rrd = dir.path().join("base.rrd");
+        write_rrd(&rrd, 4, true);
+        let bytes = std::fs::read(&rrd).expect("read rrd");
+        let size_bytes = bytes.len() as u64;
+
+        let base = crate::object_store_reader::spawn_range_server(bytes).await;
+        let layers = vec![crate::PresignedLayer {
+            layer: "base".to_owned(),
+            url: format!("{base}/bucket/base.rrd?X-Amz-Signature=test"),
+            size_bytes,
+            expires_at_unix: Some(4_102_444_800), // far future
+        }];
+
+        let provider =
+            DirectSegmentChunkProvider::try_new_presigned(SegmentId::from("seg_ph"), &layers)
+                .await
+                .expect("provider should build");
+
+        let ids = provider.manifest().col_chunk_ids().to_vec();
+        assert_eq!(ids.len(), 4);
+        let chunks = provider
+            .load_chunks(&ids)
+            .await
+            .expect("chunks should load");
+        assert_eq!(chunks.len(), 4);
     }
 }

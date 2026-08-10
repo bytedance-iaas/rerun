@@ -472,6 +472,33 @@ decl_stream!(ScanTableResponseStream<rerun_cloud:ScanTableResponse>);
 decl_stream!(UnregisterFromDatasetResponseStream<manifest:UnregisterFromDatasetResponse>);
 
 impl RerunCloudHandler {
+    /// The `(layer name, registered storage url)` pairs of one segment.
+    ///
+    /// For the pre-sign endpoint: which objects would a client need to read this segment
+    /// directly? Layers without a durable storage address (data written over gRPC into
+    /// memory) are skipped — they can only be served by this server.
+    ///
+    /// Returns `None` if the dataset or segment doesn't exist.
+    pub async fn segment_storage_urls(
+        &self,
+        dataset_id: EntryId,
+        segment_id: &re_types_core::SegmentId,
+    ) -> Option<Vec<(String, url::Url)>> {
+        let store = self.store.read().await;
+        let dataset = store.dataset(dataset_id).ok()?;
+        let segment = dataset.segment(segment_id).ok()?;
+        Some(
+            segment
+                .iter_sources()
+                .filter_map(|(layer_name, source)| {
+                    source
+                        .storage_url()
+                        .map(|url| (layer_name.to_string(), url.clone()))
+                })
+                .collect(),
+        )
+    }
+
     async fn find_datasets(
         &self,
         entry_id: Option<EntryId>,

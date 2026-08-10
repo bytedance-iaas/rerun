@@ -26,6 +26,8 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use futures::FutureExt as _;
+use futures::future::BoxFuture;
 use object_store::path::Path as ObjectPath;
 use object_store::{ObjectStore, ObjectStoreExt as _};
 use url::Url;
@@ -49,17 +51,83 @@ pub enum ObjectStoreReaderError {
     },
 }
 
-/// An async, read-only view of a single object in an object store.
+/// Where the bytes come from.
+#[derive(Clone)]
+enum Backend {
+    /// An object store accessed with credentials (S3-compatible, local filesystem, …).
+    ObjectStore {
+        store: Arc<dyn ObjectStore>,
+        location: ObjectPath,
+    },
+
+    /// Plain HTTP(S) with ranged `GET`s and no credentials — e.g. a pre-signed
+    /// object-store URL: the signature in the URL is the whole authorization.
+    Http { url: Url },
+}
+
+impl Backend {
+    fn fetch(&self, range: std::ops::Range<u64>) -> BoxFuture<'static, Result<Bytes, String>> {
+        match self {
+            Self::ObjectStore { store, location } => {
+                let store = Arc::clone(store);
+                let location = location.clone();
+                async move {
+                    store
+                        .get_range(&location, range)
+                        .await
+                        .map_err(|err| err.to_string())
+                }
+                .boxed()
+            }
+
+            Self::Http { url } => {
+                let mut request = ehttp::Request::get(url.as_str());
+                request.headers.insert(
+                    "Range",
+                    format!("bytes={}-{}", range.start, range.end.saturating_sub(1)),
+                );
+                async move {
+                    let response = crate::http_fetch::fetch_async(request).await?;
+                    match response.status {
+                        206 => Ok(Bytes::from(response.bytes)),
+                        // Server ignored the Range header and sent the whole object.
+                        200 => {
+                            let start = usize::try_from(range.start)
+                                .map_err(|_ignored| "range start overflows usize".to_owned())?;
+                            let end = usize::try_from(range.end)
+                                .map_err(|_ignored| "range end overflows usize".to_owned())?;
+                            if response.bytes.len() >= end {
+                                Ok(Bytes::copy_from_slice(&response.bytes[start..end]))
+                            } else {
+                                Err(format!(
+                                    "server returned HTTP 200 with {} bytes, needed at least {end}",
+                                    response.bytes.len()
+                                ))
+                            }
+                        }
+                        status => Err(format!("range request failed: HTTP {status}")),
+                    }
+                }
+                .boxed()
+            }
+        }
+    }
+}
+
+/// An async, seekable, read-only view of a single object in an object store, or behind a
+/// pre-signed HTTP(S) URL.
 ///
 /// Implements [`re_async::AsyncReadAt`]: stateless positional reads, one ranged `GET` per
-/// requested span. The object's size is fetched once (a `HEAD` request) at construction.
+/// requested span. The object's size is fetched once (a `HEAD` request) at construction —
+/// or supplied by the caller for pre-signed URLs.
 pub struct ObjectStoreReader {
-    store: Arc<dyn ObjectStore>,
-    location: ObjectPath,
+    backend: Backend,
     url: Url,
 
-    /// Total object size, from the `HEAD` request at construction.
+    /// Total object size: from a `HEAD` request at construction, or caller-provided for
+    /// pre-signed URLs (a pre-signed `GET` cannot be `HEAD`ed).
     size: u64,
+
 }
 
 impl std::fmt::Debug for ObjectStoreReader {
@@ -102,21 +170,47 @@ impl ObjectStoreReader {
         })?;
 
         Ok(Self {
-            store,
-            location,
+            backend: Backend::ObjectStore { store, location },
             url,
             size: head.size,
         })
     }
 
-    /// A second, independent handle to the same object (shared client).
+    /// Like [`Self::open_in`], but with a caller-known size — skips the `HEAD` request.
+    pub fn open_in_with_size(
+        store: Arc<dyn ObjectStore>,
+        location: ObjectPath,
+        url: Url,
+        size: u64,
+    ) -> Self {
+        Self {
+            backend: Backend::ObjectStore { store, location },
+            url,
+            size,
+        }
+    }
+
+    /// Open a pre-signed (or otherwise directly fetchable) HTTP(S) URL.
     ///
-    /// Reads are stateless, so this is a plain clone. No extra `HEAD` request — objects are
-    /// immutable for the lifetime of a registration, so the size is reused.
+    /// No credentials are read from anywhere — the URL itself is the authorization.
+    /// The object size must be supplied by whoever handed out the URL, because a URL
+    /// pre-signed for `GET` cannot be `HEAD`ed.
+    pub fn open_presigned(url: Url, size: u64) -> Self {
+        Self {
+            backend: Backend::Http { url: url.clone() },
+            url,
+            size,
+        }
+    }
+
+    /// A second, independent handle to the same object (own cursor, shared client).
+    ///
+    /// Each consumer (e.g. one `RrdChunkProvider` per store in the RRD) gets its own reader so
+    /// their cursors never interfere. No extra `HEAD` request — objects are immutable for the
+    /// lifetime of a registration, so the size is reused.
     pub fn reopen(&self) -> Self {
         Self {
-            store: Arc::clone(&self.store),
-            location: self.location.clone(),
+            backend: self.backend.clone(),
             url: self.url.clone(),
             size: self.size,
         }
@@ -151,16 +245,12 @@ impl re_async::AsyncReadAt for ObjectStoreReader {
             ));
         }
 
-        let bytes = self
-            .store
-            .get_range(&self.location, offset..end)
-            .await
-            .map_err(|err| {
-                std::io::Error::other(format!(
-                    "range read at {offset} failed: {err}\nURL: {}",
-                    self.url
-                ))
-            })?;
+        let bytes = self.backend.fetch(offset..end).await.map_err(|err| {
+            std::io::Error::other(format!(
+                "range read at {offset} failed: {err}\nURL: {}",
+                self.url
+            ))
+        })?;
 
         if bytes.len() != len {
             return Err(std::io::Error::new(
@@ -299,6 +389,47 @@ fn env_non_empty(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
+/// Test-only: serve `data` over HTTP with `Range` support on any path; returns the base URL.
+#[cfg(test)]
+pub(crate) async fn spawn_range_server(data: Vec<u8>) -> String {
+    use axum::http::{HeaderMap, StatusCode, header};
+
+    let data = std::sync::Arc::new(data);
+    let app = axum::Router::new().fallback(axum::routing::get({
+        let data = std::sync::Arc::clone(&data);
+        move |headers: HeaderMap| {
+            let data = std::sync::Arc::clone(&data);
+            async move {
+                let range = headers
+                    .get(header::RANGE)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.strip_prefix("bytes="))
+                    .and_then(|v| v.split_once('-'))
+                    .and_then(|(start, end)| {
+                        Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                    });
+                match range {
+                    Some((start, end)) if start < data.len() => {
+                        let end = end.min(data.len() - 1);
+                        (StatusCode::PARTIAL_CONTENT, data[start..=end].to_vec())
+                    }
+                    Some(_) => (StatusCode::RANGE_NOT_SATISFIABLE, Vec::new()),
+                    None => (StatusCode::OK, data.to_vec()),
+                }
+            }
+        }
+    }));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind failed");
+    let addr = listener.local_addr().expect("local addr");
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve failed");
+    });
+    format!("http://{addr}")
+}
+
 #[cfg(test)]
 mod tests {
     use object_store::memory::InMemory;
@@ -395,5 +526,57 @@ mod tests {
             err,
             ObjectStoreReaderError::UnsupportedScheme { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn presigned_http_reads() {
+        let data: Vec<u8> = (0..=255).collect();
+        let base = super::spawn_range_server(data.clone()).await;
+
+        // A "pre-signed" URL is just an HTTP URL with a query string; no credentials.
+        let url = Url::parse(&format!("{base}/bucket/object.rrd?signature=abc")).expect("url");
+        let reader = ObjectStoreReader::open_presigned(url, data.len() as u64);
+
+        let buf = reader.read_exact_at(0, 10).await.expect("read failed");
+        assert_eq!(&buf[..], &data[0..10]);
+
+        let buf = reader.read_exact_at(100, 10).await.expect("read failed");
+        assert_eq!(&buf[..], &data[100..110]);
+
+        let buf = reader.read_exact_at(252, 4).await.expect("read failed");
+        assert_eq!(&buf[..], &data[252..]);
+
+        // Reading past EOF is an error; a reopened handle reads the same object.
+        let err = reader
+            .read_exact_at(252, 10)
+            .await
+            .expect_err("must not read past EOF");
+        assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+        let fresh = reader.reopen();
+        let buf = fresh.read_exact_at(0, 10).await.expect("read failed");
+        assert_eq!(&buf[..], &data[0..10]);
+    }
+
+    #[tokio::test]
+    async fn presigned_http_error_status_surfaces() {
+        // A server that 403s everything (an expired signature would look like this).
+        let app = axum::Router::new().fallback(axum::routing::get(async || {
+            (axum::http::StatusCode::FORBIDDEN, "expired")
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind failed");
+        let addr = listener.local_addr().expect("local addr");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("serve failed");
+        });
+
+        let url = Url::parse(&format!("http://{addr}/x?sig=old")).expect("url");
+        let reader = ObjectStoreReader::open_presigned(url, 100);
+        let err = reader
+            .read_exact_at(0, 10)
+            .await
+            .expect_err("must fail");
+        assert!(err.to_string().contains("403"), "got: {err}");
     }
 }
