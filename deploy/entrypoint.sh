@@ -22,6 +22,24 @@ HF_TOKEN_VALUE="$(read_secret hf_token HF_TOKEN)"
 
 case "$MODE" in
 web)
+    # Optional Basic auth: a `web_htpasswd` secret (htpasswd format, e.g. from
+    # `htpasswd -nbB user pass`) locks the whole site — viewer, /tos-config.json,
+    # /rrd-cache. Without it everything stays open (local dev). /healthz is always open.
+    WEB_HTPASSWD_VALUE="$(read_secret web_htpasswd WEB_HTPASSWD)"
+    if [ -n "$WEB_HTPASSWD_VALUE" ]; then
+        printf '%s\n' "$WEB_HTPASSWD_VALUE" > /run/htpasswd
+        chmod 640 /run/htpasswd
+        chown root:www-data /run/htpasswd
+        cat > /run/nginx-auth.conf <<'AUTH'
+auth_basic "rerun";
+auth_basic_user_file /run/htpasswd;
+AUTH
+        echo "web: Basic auth enabled"
+    else
+        : > /run/nginx-auth.conf
+        echo "web: no web_htpasswd secret — serving without authentication"
+    fi
+
     # Server-side defaults for the browser dialogs. The default credentials are used
     # unless the user opts into "Use non-default AK/SK" in the dialog.
     cat > /run/tos-config.json <<EOF
@@ -49,14 +67,29 @@ native)
 
     GEOMETRY="${SESSION_GEOMETRY:-1280x800}"
 
-    # Virtual X server with built-in VNC output (no auth: front it with your
-    # platform's ingress/port-forward; never expose the raw VNC port).
+    # Optional session password: with a `session_password` secret (or SESSION_PASSWORD
+    # env), the VNC handshake requires it — noVNC prompts for it in the browser before
+    # the desktop is shown. Without one the session is open (port-forward / local use
+    # only; never expose an unauthenticated session on a public address).
+    SESSION_PASSWORD_VALUE="$(read_secret session_password SESSION_PASSWORD)"
+    if [ -n "$SESSION_PASSWORD_VALUE" ]; then
+        printf '%s' "$SESSION_PASSWORD_VALUE" | vncpasswd -f > /run/vncpasswd
+        chmod 600 /run/vncpasswd
+        SECURITY_ARGS="-SecurityTypes VncAuth -rfbauth /run/vncpasswd"
+        echo "native: VNC password enabled"
+    else
+        SECURITY_ARGS="-SecurityTypes None"
+        echo "native: no session_password secret — session is unauthenticated"
+    fi
+
+    # Virtual X server with built-in VNC output. $SECURITY_ARGS is intentionally
+    # unquoted: it is two-to-four space-separated flags, none of which contain spaces.
     Xvnc :1 \
         -geometry "$GEOMETRY" \
         -depth 24 \
-        -SecurityTypes None \
         -rfbport 5901 \
         -AlwaysShared \
+        $SECURITY_ARGS \
         &
 
     i=0
@@ -74,6 +107,13 @@ native)
     # Clipboard bridge: copies text between the VNC clipboard (what the browser sends)
     # and the X selections the viewer reads. Paste is dead without it.
     vncconfig -nowin &
+
+    # Kiosk window manager: keeps the viewer maximized to whatever the desktop size
+    # currently is. This is what makes noVNC's resize=remote mode work end to end —
+    # the browser resizes the remote desktop (RandR), and matchbox re-fits the window.
+    # Without a WM the window keeps its default size: on a large desktop it huddles
+    # in the top-left corner, and scaling makes everything blurry.
+    matchbox-window-manager -use_titlebar no &
     # Software rendering: Vulkan/lavapipe (needs Mesa >= 24; see Dockerfile).
     export WGPU_BACKEND="${SESSION_WGPU_BACKEND:-vulkan}"
 
@@ -82,21 +122,6 @@ native)
     while true; do
         rerun "$@" &
         rerun_pid=$!
-
-        # No window manager runs in this session, so nothing ever grants the viewer
-        # window X input focus — and without it, text fields ignore the keyboard.
-        # Focus the window once it appears.
-        (
-            i=0
-            while [ "$i" -lt 100 ]; do
-                i=$((i + 1))
-                sleep 0.3
-                window_id="$(xdotool search --onlyvisible --name '^Rerun' 2>/dev/null | head -n1)"
-                if [ -n "$window_id" ]; then
-                    xdotool windowfocus "$window_id" 2>/dev/null && break
-                fi
-            done
-        ) &
 
         wait "$rerun_pid" || true
         echo "viewer exited; restarting in 2s…"

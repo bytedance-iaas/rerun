@@ -1,5 +1,7 @@
 # rerun 云端常驻服务(VKE):一个 Deployment(缺省 1 个 pod),pod 里跑两个容器 ——
-# rerun web server(nginx + wasm viewer)和 catalog server。前端一个公网 CLB。
+# rerun web server(nginx + wasm viewer)和 catalog server。
+# 公网入口分两条:web 走 APIG 网关(HTTPS + 域名,见 apig-template.yaml),
+# catalog 走专用四层 CLB(51234,建议配 IP 白名单)。
 #
 # ============================== 使用前必改 ==============================
 # 搜索 "⚠️" 逐项替换:
@@ -13,12 +15,13 @@
 #   kubectl apply -f rerun-cloud.yaml
 # 验证:
 #   kubectl -n rerun get pods                      # Running 即可
-#   kubectl -n rerun get svc rerun-cloud           # EXTERNAL-IP 就是公网地址
-#   浏览器打开   http://<EXTERNAL-IP>/              # web viewer
+#   kubectl -n rerun get svc rerun-cloud           # EXTERNAL-IP = catalog 的公网地址
 #   Python 里    CatalogClient("rerun+http://<EXTERNAL-IP>:51234")
+#   web viewer 的公网地址是 APIG 分配的 https 域名(apig-template.yaml 里有查法);
+#   浏览器打开后会弹用户名/密码框(web_htpasswd 里的账号)。
 #
 # 集群内访问(云内训练任务等)走 Service 域名,不出公网:
-#   web:    http://rerun-cloud.rerun.svc.cluster.local
+#   web:    http://rerun-web.rerun.svc.cluster.local
 #   server: rerun+http://rerun-cloud.rerun.svc.cluster.local:51234
 apiVersion: v1
 kind: Namespace
@@ -38,6 +41,24 @@ stringData:
   tos_access_key: "⚠️REPLACE_TOS_ACCESS_KEY"
   tos_secret_key: "⚠️REPLACE_TOS_SECRET_KEY"
   hf_token: "⚠️REPLACE_HF_TOKEN"
+  # web viewer 的 Basic auth 密码表。格式 = 每行「用户名:密码哈希」,冒号在生成命令的
+  # 【输出】里,例如 `htpasswd -nbB alice 'pw123'` 会打印:
+  #   alice:$2y$05$N9qo8uLOickgx2ZMRZoMye…
+  # 把打印出来的整行原样填进来(YAML 里 $ 不用转义)。多个用户用 | 块写法,一行一个:
+  #   web_htpasswd: |
+  #     alice:$2y$05$…
+  #     bob:$apr1$…
+  # 没装 htpasswd 工具就用:printf 'alice:%s\n' "$(openssl passwd -apr1 'pw123')"
+  # 加/删用户 = 改这里再重启 web pod。删掉整个 key = 关闭认证(仅限内网/本地调试;公网必须开)。
+  web_htpasswd: "⚠️REPLACE_WEB_HTPASSWD"
+  # catalog server 的 token 签名密钥(生成:rerun server generate-secret,只生成一次)。
+  # 关系:密钥 = 印章,token = 盖了章的通行证。server 拿这里的密钥"验章";
+  # 给用户签发 token 时必须用【同一个】密钥(一人一条命令,离线签,不用碰 server):
+  #   rerun server generate-token --secret <这个密钥> --user zhang \
+  #       --permission read --expiration 90d \
+  #       --server-host <CLB公网IP> --server-host rerun-cloud.rerun.svc.cluster.local
+  # 密钥保管好:拿到它的人能签任意权限的 token。删掉这个 key = 关闭认证(服务裸奔)。
+  server_token_secret: "⚠️REPLACE_SERVER_TOKEN_SECRET"
 ---
 # catalog 数据库 + catalog server 的远端文件缓存。丢了能自愈(server 重新从 TOS 拉),
 # 但 catalog 注册记录也在上面,建议保留。按数据集体量调大小。
@@ -101,7 +122,7 @@ spec:
             - containerPort: 80
           readinessProbe:
             httpGet:
-              path: /
+              path: /healthz # 免认证的健康检查端点(开 Basic auth 后 / 会 401)
               port: 80
             initialDelaySeconds: 2
             periodSeconds: 5
@@ -132,6 +153,22 @@ spec:
               value: https://tos-s3-cn-beijing.ivolces.com
             - name: TOS_REGION
               value: cn-beijing
+            # dataloader 直读的预签名 URL 用哪个 endpoint 签(只影响给客户端的 URL,
+            # server 自己读 TOS 仍走上面的 TOS_ENDPOINT 内网)。
+            # 缺省填公网:云外的训练客户端才连得上签出来的 URL(happy path)。
+            # 客户端在【同一 VPC 内】跑时,把这行改成内网 https://tos-s3-cn-beijing.ivolces.com,
+            # 让直读走内网(更快、不计公网流量)。
+            - name: RERUN_PRESIGN_ENDPOINT
+              value: https://tos-s3-cn-beijing.volces.com
+            # 国内云直连 huggingface.co 不通,HF 相关操作走镜像(不用 HF 可删)。
+            - name: HF_ENDPOINT
+              value: https://hf-mirror.com
+            # token 认证:去掉这个 env(或 Secret 里删掉该 key)= 关闭认证,服务裸奔。
+            - name: RERUN_SERVER_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: rerun-viewer-secrets
+                  key: server_token_secret
           ports:
             - containerPort: 51234
           readinessProbe:
@@ -162,14 +199,39 @@ spec:
           persistentVolumeClaim:
             claimName: rerun-server-data
 ---
-# 公网入口:一个 CLB,两个监听(80 → web,51234 → catalog)。
+# web viewer 的集群内 service:APIG Ingress 的后端(见 apig-template.yaml)。
+# 公网 HTTP 流量全部走网关(HTTPS + Basic auth),web 不再直接挂公网 CLB。
+# 集群内(训练任务等)直接访问:http://rerun-web.rerun.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: rerun-web
+  namespace: rerun
+spec:
+  type: ClusterIP
+  selector:
+    app: rerun-cloud
+  ports:
+    - name: web
+      port: 80
+      targetPort: 80
+---
+# catalog server 的公网入口:专用四层 CLB,只留 51234。
+# gRPC(HTTP/2)过不了 APIG(APIG 只支持 HTTP/1.1 和 WebSocket),所以 catalog 走
+# 自己的 CLB。四层转发不解密不认证,安全靠两道:
+#   1. CLB 控制台 → 该 CLB → 访问控制:配 IP 白名单(ACL),只放行办公网/VPN 出口 IP。
+#   2. catalog server 的 token 认证(部署侧无须配置,见 token 管理文档)。
+# 集群内访问不变:rerun+http://rerun-cloud.rerun.svc.cluster.local:51234
 apiVersion: v1
 kind: Service
 metadata:
   name: rerun-cloud
   namespace: rerun
   annotations:
-    # ⚠️ CLB 所在子网 ID(VKE 控制台 → 网络 → 子网,选 pod 所在 VPC 里的子网)
+    # ⚠️ CLB 所在子网 ID —— 必须是【当前集群】VPC 里的子网(跨集群抄会报
+    # InvalidVPC.NotFound / cannot be found from VPC,且永远 Pending 不自愈)。最快查法:
+    #   kubectl get svc -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.service\.beta\.kubernetes\.io/volcengine-loadbalancer-subnet-id}{"\n"}{end}' | grep subnet-
+    # 抄本集群任何一个正常工作的 LoadBalancer Service 的值即可;没有就去 VKE 控制台 → 网络 → 子网。
     service.beta.kubernetes.io/volcengine-loadbalancer-subnet-id: "⚠️REPLACE_SUBNET_ID"
     # 公网型 CLB(会自动绑 EIP,产生公网费用);只要内网可达就改成 "PRIVATE"。
     service.beta.kubernetes.io/volcengine-loadbalancer-address-type: "PUBLIC"
@@ -180,9 +242,6 @@ spec:
   selector:
     app: rerun-cloud
   ports:
-    - name: web
-      port: 80
-      targetPort: 80
     - name: catalog
       port: 51234
       targetPort: 51234
