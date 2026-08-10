@@ -127,6 +127,7 @@ web-sys = { workspace = true, features = [
 [dev-dependencies]
 re_chunk.workspace = true
 re_protos.workspace = true
+serde_json.workspace = true
 re_chunk_store.workspace = true
 # `encoder` (decoder comes transitively via re_chunk_store) lets tests author RRDs
 # with and without footers to cross-check store enumeration vs lazy loading.

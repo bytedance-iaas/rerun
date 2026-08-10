@@ -115,3 +115,33 @@ def test_segment_store_direct_read_unknown_segment_raises(readonly_test_dataset:
     """The direct path reports unknown segments as NotFoundError, like the relayed path."""
     with pytest.raises(NotFoundError, match=r"does-not-exist"):
         readonly_test_dataset.segment_store("does-not-exist", direct=True)
+
+
+@pytest.mark.local_only
+def test_segment_store_presigned_matches_relay(entry_factory: EntryFactory, resource_prefix: str) -> None:
+    """
+    `direct="presigned"` exchanges the segment id for server-issued URLs and reads the
+    data with no storage credentials in this process; the result must be identical to
+    the relayed path.
+    """
+    ds = entry_factory.create_dataset("presigned_read")
+    handle = ds.register([resource_prefix + "dataset/file1.rrd"])
+    handle.wait(timeout_secs=50)
+    (segment_id,) = ds.segment_ids()
+
+    relay = ds.segment_store(segment_id)
+    presigned = ds.segment_store(segment_id, direct="presigned")
+
+    assert presigned.schema() == relay.schema()
+    assert len(presigned) == len(relay)
+
+    relay_chunks = {c.id: c for c in relay.stream().to_chunks()}
+    presigned_chunks = {c.id: c for c in presigned.stream().to_chunks()}
+    assert set(presigned_chunks) == set(relay_chunks)
+    for chunk_id, presigned_chunk in presigned_chunks.items():
+        assert presigned_chunk.num_rows == relay_chunks[chunk_id].num_rows
+
+
+def test_segment_store_direct_rejects_bad_mode(readonly_test_dataset: DatasetEntry) -> None:
+    with pytest.raises(ValueError, match="direct mode"):
+        readonly_test_dataset.segment_store("whatever", direct="sideways")
