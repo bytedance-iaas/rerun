@@ -236,17 +236,19 @@ impl ServerBuilder {
 
     pub fn with_service<S>(mut self, svc: S) -> Self
     where
+        // Mirrors `tonic::service::Routes::add_service` so wrapped services (e.g.
+        // `InterceptedService`, whose response body differs from `tonic::body::Body`)
+        // are accepted too.
         S: tower_service::Service<
                 http::Request<tonic::body::Body>,
-                Response = http::Response<tonic::body::Body>,
                 Error = std::convert::Infallible,
             > + tonic::server::NamedService
             + Clone
             + Send
             + Sync
             + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
-        S::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
     {
         self.routes_builder.add_service(svc);
         self

@@ -819,6 +819,7 @@ impl RerunCloudService for RerunCloudHandler {
         request: tonic::Request<re_protos::cloud::v1alpha1::CreateDatasetEntryRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::CreateDatasetEntryResponse>>
     {
+        crate::auth::require_write_permission(&request)?;
         let CreateDatasetEntryRequest {
             name: dataset_name,
             id: dataset_id,
@@ -869,6 +870,7 @@ impl RerunCloudService for RerunCloudHandler {
         request: tonic::Request<re_protos::cloud::v1alpha1::UpdateDatasetEntryRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::UpdateDatasetEntryResponse>>
     {
+        crate::auth::require_write_permission(&request)?;
         let request: UpdateDatasetEntryRequest = request.into_inner().try_into()?;
 
         request
@@ -940,6 +942,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: tonic::Request<re_protos::cloud::v1alpha1::UpdateTableEntryRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::UpdateTableEntryResponse>> {
+        crate::auth::require_write_permission(&request)?;
         let request: UpdateTableEntryRequest = request.into_inner().try_into()?;
 
         let mut store = self.store.write().await;
@@ -987,6 +990,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: tonic::Request<re_protos::cloud::v1alpha1::DeleteEntryRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::DeleteEntryResponse>> {
+        crate::auth::require_write_permission(&request)?;
         let entry_id = request.into_inner().try_into()?;
 
         self.store.write().await.delete_entry(entry_id)?;
@@ -1009,6 +1013,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: tonic::Request<re_protos::cloud::v1alpha1::UpdateEntryRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::UpdateEntryResponse>> {
+        crate::auth::require_write_permission(&request)?;
         let UpdateEntryRequest {
             id: entry_id,
             entry_details_update: EntryDetailsUpdate { name },
@@ -1034,6 +1039,7 @@ impl RerunCloudService for RerunCloudHandler {
         request: tonic::Request<re_protos::cloud::v1alpha1::RegisterWithDatasetRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::RegisterWithDatasetResponse>>
     {
+        crate::auth::require_write_permission(&request)?;
         let mut store = self.store.write().await;
 
         let dataset_id = get_entry_id_from_headers(&store, &request)?;
@@ -1121,6 +1127,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: tonic::Request<re_protos::cloud::v1alpha1::UnregisterFromDatasetRequest>,
     ) -> tonic::Result<Response<Self::UnregisterFromDatasetStream>> {
+        crate::auth::require_write_permission(&request)?;
         let mut store = self.store.write().await;
 
         let entry_id = get_entry_id_from_headers(&store, &request)?;
@@ -1176,6 +1183,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: tonic::Request<tonic::Streaming<re_protos::cloud::v1alpha1::WriteChunksRequest>>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::WriteChunksResponse>> {
+        crate::auth::require_write_permission(&request)?;
         let entry_id = get_entry_id_from_headers(&*self.store.read().await, &request)?;
 
         let mut request = request.into_inner();
@@ -1267,6 +1275,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: tonic::Request<tonic::Streaming<re_protos::cloud::v1alpha1::WriteTableRequest>>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::WriteTableResponse>> {
+        crate::auth::require_write_permission(&request)?;
         // Limit the scope of the lock here to prevent deadlocks
         // when reading and writing to the same table
         let entry_id = {
@@ -1971,6 +1980,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: tonic::Request<RegisterTableRequest>,
     ) -> tonic::Result<tonic::Response<RegisterTableResponse>> {
+        crate::auth::require_write_permission(&request)?;
         #[cfg(target_arch = "wasm32")]
         {
             let _ = request;
@@ -2179,6 +2189,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         _request: tonic::Request<CancelTasksRequest>,
     ) -> tonic::Result<tonic::Response<CancelTasksResponse>> {
+        crate::auth::require_write_permission(&_request)?;
         // Cancelling tasks is a noop in the OSS server
         Ok(tonic::Response::new(CancelTasksResponse {}))
     }
@@ -2187,6 +2198,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         _request: tonic::Request<re_protos::cloud::v1alpha1::DoMaintenanceRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::DoMaintenanceResponse>> {
+        crate::auth::require_write_permission(&_request)?;
         Err(tonic::Status::unimplemented(
             "do_maintenance not implemented",
         ))
@@ -2197,6 +2209,7 @@ impl RerunCloudService for RerunCloudHandler {
         _request: tonic::Request<re_protos::cloud::v1alpha1::DoGlobalMaintenanceRequest>,
     ) -> tonic::Result<tonic::Response<re_protos::cloud::v1alpha1::DoGlobalMaintenanceResponse>>
     {
+        crate::auth::require_write_permission(&_request)?;
         Err(tonic::Status::unimplemented(
             "do_global_maintenance not implemented",
         ))
@@ -2206,6 +2219,7 @@ impl RerunCloudService for RerunCloudHandler {
         &self,
         request: Request<re_protos::cloud::v1alpha1::CreateTableEntryRequest>,
     ) -> tonic::Result<Response<re_protos::cloud::v1alpha1::CreateTableEntryResponse>> {
+        crate::auth::require_write_permission(&request)?;
         let request: CreateTableEntryRequest = request.into_inner().try_into()?;
         let table_name = request.name;
 

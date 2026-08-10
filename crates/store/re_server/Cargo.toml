@@ -70,6 +70,7 @@ tonic.workspace = true
 url.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+re_auth.workspace = true
 re_format.workspace = true
 re_grpc_server.workspace = true
 
@@ -81,6 +82,7 @@ http-body.workspace = true
 lance = { workspace = true, optional = true }
 object_store.workspace = true
 opentelemetry.workspace = true
+rand.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
@@ -124,6 +126,7 @@ web-sys = { workspace = true, features = [
 
 [dev-dependencies]
 re_chunk.workspace = true
+re_protos.workspace = true
 re_chunk_store.workspace = true
 # `encoder` (decoder comes transitively via re_chunk_store) lets tests author RRDs
 # with and without footers to cross-check store enumeration vs lazy loading.
@@ -135,8 +138,13 @@ ehttp = { workspace = true, features = ["native-async"] }
 wasm-bindgen-test.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+re_auth.workspace = true
+re_redap_client.workspace = true
 re_redap_tests.workspace = true
+re_uri.workspace = true
+rand.workspace = true
 tempfile.workspace = true
+tonic = { workspace = true, default-features = false, features = ["transport"] }
 
 [build-dependencies]
 re_build_tools.workspace = true
