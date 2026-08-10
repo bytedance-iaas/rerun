@@ -179,6 +179,11 @@ class CatalogClient:
         """Returns the catalog URL."""
         return self._internal.url
 
+    @property
+    def token(self) -> str | None:
+        """The authentication token this client was created with, if any."""
+        return self._internal.token
+
     def version_info(self) -> VersionInfo:
         """
         Returns version and deployment information from the server.

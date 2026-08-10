@@ -106,6 +106,14 @@ Against real TOS (needs `TOS_*` credentials):
 2. Open the same segment twice — `segment_store(seg)` and `segment_store(seg, direct=True)` — and compare `schema()`, chunk ids, and row counts: they must match exactly.
 3. Confirm the bytes bypass the server: watch the server's network I/O (or its logs — no `FetchChunks` calls appear for the direct read), or point `TOS_ENDPOINT` at the internal endpoint from an in-cluster pod and watch the EIP traffic graphs stay flat while the dataloader streams.
 
+For a step-by-step, demo-grade proof against the VKE deployment — including the most convincing variant, "kill the server after the metadata call and watch the direct read finish anyway" — see [`deploy/vke/direct-read-demo.md`](../deploy/vke/direct-read-demo.md).
+
+## The DataFusion / dataloader path
+
+`dataset.reader()` (the DataFusion query path, which the PyTorch dataloader in `rerun.experimental.dataloader` is built on) reads direct too, over a different mechanism: the server pre-signs each queried chunk's RRD object and returns the chunk's `(url, offset, length)` in the response, and the client range-reads the bytes straight from object storage — falling back to a gRPC relay for any chunk the server didn't sign (in-memory sources, non-object-store schemes).
+
+Unlike `segment_store(direct=True)`, this needs no change at the call site: the client already requests direct URLs (`generate_direct_urls`), and query planning — latest-at, `using_index_values`, keyframe anchoring, entity projection — still happens server-side, so only the chunk bytes move direct. It takes effect for TOS/S3-backed datasets once the catalog server is built with this support.
+
 ## Not in scope (yet)
 
-- The DataFusion path (`dataset.reader()`) still relays through the server; the protocol's `chunk_direct_urls` slot is the designated route for it later.
+- `file://`-registered layers on the DataFusion path still relay: the client's direct fetch is HTTP(S)-only, so local/test setups keep using gRPC there.

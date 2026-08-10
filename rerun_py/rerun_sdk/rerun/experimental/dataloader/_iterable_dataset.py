@@ -87,6 +87,7 @@ class RerunIterableDataset(torch.utils.data.IterableDataset[dict[str, torch.Tens
             catalog_url=source.dataset.catalog.url,
             dataset_name=source.dataset.name,
             fields=fields,
+            token=source.dataset.catalog.token,
         )
 
     @property

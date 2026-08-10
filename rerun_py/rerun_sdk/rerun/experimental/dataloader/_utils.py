@@ -79,10 +79,15 @@ class _WorkerConnection:
         catalog_url: str,
         dataset_name: str,
         fields: dict[str, Field],
+        token: str | None = None,
     ) -> None:
         self._catalog_url = catalog_url
         self._dataset_name = dataset_name
         self._fields = fields
+        # A plain string, so it survives pickling to `spawn`ed DataLoader workers, which
+        # rebuild their own client below. Without it a worker can't authenticate to a
+        # secured catalog server and its first query fails with Unauthenticated.
+        self._token = token
         self._initialized: bool = False
         self._init_pid: int = -1
         self._view: Any = None
@@ -95,7 +100,7 @@ class _WorkerConnection:
         if self._initialized and self._init_pid == pid:
             return self._view, self._decoders
 
-        client = CatalogClient(self._catalog_url)
+        client = CatalogClient(self._catalog_url, token=self._token)
         dataset = client.get_dataset(self._dataset_name)
         self._decoders = {k: f.decode for k, f in self._fields.items()}
         # Leave the dataset unscoped here: each read group narrows contents to its own
