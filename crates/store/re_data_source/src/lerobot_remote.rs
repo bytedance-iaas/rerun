@@ -122,6 +122,29 @@ pub trait DatasetStore {
 /// delivered of a 17 MB range in the browser), so short responses are re-requested from where the
 /// previous one stopped. Over-long responses (e.g. a proxy turning a range request into a
 /// full-body 200) are trimmed. Respects the dataset's pause switch between requests.
+/// A typed HTTP status carried inside `anyhow` error chains from [`DatasetStore`] requests.
+///
+/// Lets callers tell "the file definitively does not exist" (404 — e.g. a repo that simply
+/// is not a `LeRobot` dataset) apart from "the host could not be asked right now" (429 rate
+/// limits, 5xx, transport failures), which must never be silently misread as an absent file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HttpStatusError(pub u16);
+
+impl std::fmt::Display for HttpStatusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HTTP {}", self.0)
+    }
+}
+
+impl std::error::Error for HttpStatusError {}
+
+/// The typed HTTP status in `err`'s chain, if any.
+pub fn http_status_of(err: &anyhow::Error) -> Option<u16> {
+    err.chain() // NOLINT: anyhow's error-chain iterator, not `Iterator::chain`
+        .find_map(|e| e.downcast_ref::<HttpStatusError>())
+        .map(|status| status.0)
+}
+
 async fn fetch_range<S: DatasetStore>(
     store: &S,
     pause: &PauseState,
@@ -156,6 +179,15 @@ async fn fetch_range<S: DatasetStore>(
                 bytes
             }
             Err(err) => {
+                // Deterministic HTTP failures (4xx: not found, auth, RATE LIMITS) and
+                // explicit throttling (503) are not transient: instant retries can't fix
+                // them and hammering a rate-limiting host escalates the block. Surface
+                // them immediately so the user sees the precise cause.
+                if let Some(status) = http_status_of(&err)
+                    && ((400..500).contains(&status) || status == 503)
+                {
+                    return Err(err);
+                }
                 transport_errors += 1;
                 if transport_errors > 3 {
                     return Err(err);
@@ -975,14 +1007,24 @@ async fn run_stream<S: DatasetStore>(
     let info_bytes = match fetch_full(store, &pause, "meta/info.json").await {
         Ok(bytes) => bytes,
         Err(err) => {
+            // Only a definitive 404 means "this repo is not a LeRobot dataset". Anything
+            // else (rate limits, auth, network trouble, 5xx) is a fetch problem and must
+            // fail LOUDLY — misreading it as "no info.json" used to silently drop into
+            // loose-files mode and die there without a visible error.
+            let definitively_absent = http_status_of(&err) == Some(404);
+            if !definitively_absent {
+                anyhow::bail!(
+                    "Could not fetch the dataset's meta/info.json: {err:#}\nDataset: {dataset_url}"
+                );
+            }
             if mode == StreamMode::ConvertOnly {
                 anyhow::bail!(
-                    "Not a LeRobot dataset (no readable meta/info.json: {err:#}) — \
+                    "Not a LeRobot dataset (no meta/info.json) — \
                      only LeRobot v2/v3 episodes are converted to artifacts\nDataset: {dataset_url}"
                 );
             }
             re_log::debug!(
-                "No readable meta/info.json ({err:#}); checking for loose data files…\nDataset: {dataset_url}"
+                "No meta/info.json (HTTP 404); checking for loose data files…\nDataset: {dataset_url}"
             );
             return run_stream_files(store, &dataset_url, tx).await;
         }
@@ -2190,21 +2232,52 @@ async fn try_load_rrd_artifact(
         artifacts.location.bucket.clone(),
     );
 
-    let Some(head) = client.head_object(key).await? else {
-        // The artifact is gone (e.g. deleted by someone else since our listing):
-        // stop advertising it in tooltips and menus.
-        state.rrd_artifact_urls.lock().remove(&index);
+    // An artifact HEAD with NO fingerprint metadata at all is suspicious — our uploads
+    // always carry it, and intercepting gateways (corporate networks) have been observed
+    // stripping x-amz-meta-* headers intermittently. Re-check once before falling back to
+    // a full download-and-convert. (Same defense as the headless converter's skip check.)
+    let mut head = None;
+    for attempt in 0..2 {
+        let Some(candidate) = client.head_object(key).await? else {
+            // The artifact is gone (e.g. deleted by someone else since our listing):
+            // stop advertising it in tooltips and menus.
+            state.rrd_artifact_urls.lock().remove(&index);
+            return Ok(None);
+        };
+        let fingerprint = candidate
+            .metadata
+            .iter()
+            .find(|(name, _)| name == crate::rrd_artifacts::FINGERPRINT_METADATA_KEY)
+            .map(|(_, value)| value.as_str());
+        match fingerprint {
+            Some(stored) if stored == expected_fingerprint => {
+                head = Some(candidate);
+                break;
+            }
+            Some(_) => {
+                re_log::debug!(
+                    "Stale rrd artifact (source changed) — re-converting\nObject: {key}"
+                );
+                return Ok(None);
+            }
+            None if attempt == 0 => {
+                re_log::debug!(
+                    "Artifact HEAD came back without fingerprint metadata — re-checking\nObject: {key}"
+                );
+            }
+            None => {
+                re_log::warn_once!(
+                    "An rrd artifact exists but its fingerprint metadata is unreadable \
+                     (a proxy or gateway on this network may be stripping x-amz-meta-* \
+                     headers) — re-converting from source instead\nObject: {key}"
+                );
+                return Ok(None);
+            }
+        }
+    }
+    let Some(head) = head else {
         return Ok(None);
     };
-    let fingerprint = head
-        .metadata
-        .iter()
-        .find(|(name, _)| name == crate::rrd_artifacts::FINGERPRINT_METADATA_KEY)
-        .map(|(_, value)| value.as_str());
-    if fingerprint != Some(expected_fingerprint) {
-        re_log::debug!("Stale rrd artifact (source changed) — re-converting\nObject: {key}");
-        return Ok(None);
-    }
 
     if head.size == 0 {
         return Ok(None); // A truncated upload — treat as a miss and re-convert.
@@ -2640,6 +2713,9 @@ mod fetch_range_tests {
 
         /// A transport error (timeout, connection reset, …).
         Fail,
+
+        /// An HTTP failure with a typed status (rate limit, not-found, …).
+        FailStatus(u16),
     }
 
     /// A `DatasetStore` whose ranged reads follow a script, one entry per `get_range_once`
@@ -2684,6 +2760,10 @@ mod fetch_range_tests {
             let len = match self.script.lock().pop_front() {
                 Some(Reply::Bytes(n)) => n,
                 Some(Reply::Fail) => anyhow::bail!("simulated transport error"),
+                Some(Reply::FailStatus(status)) => {
+                    return Err(anyhow::Error::new(HttpStatusError(status))
+                        .context(format!("simulated HTTP {status}")));
+                }
                 None => requested,
             };
             let end = (start + len).min(self.file.len());
@@ -2753,6 +2833,20 @@ mod fetch_range_tests {
             .unwrap();
         assert_eq!(out, file_100()[10..90]);
         assert_eq!(*store.requested.lock(), vec![10_u64..90; 3]);
+    }
+
+    #[tokio::test]
+    async fn rate_limits_fail_fast_without_retries() {
+        let store = ScriptedStore::new(file_100(), &[Reply::FailStatus(429)]);
+        let err = fetch_range(&store, &PauseState::default(), "f", 0..100)
+            .await
+            .expect_err("a 429 must fail the fetch");
+        assert_eq!(http_status_of(&err), Some(429));
+        assert_eq!(
+            store.requested.lock().len(),
+            1,
+            "no retries: exactly one request must have been made"
+        );
     }
 
     #[tokio::test]

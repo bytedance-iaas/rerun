@@ -7,7 +7,6 @@ use re_log_channel::LogReceiver;
 use super::TosLocation;
 use super::client::{TosClient, TosCredentials};
 use crate::lerobot_remote::{DatasetStore, ListedFile};
-use anyhow::Context as _;
 
 /// Everything needed to open a `LeRobot` dataset stored in TOS.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,7 +52,12 @@ impl DatasetStore for TosStore {
             .iter()
             .find(|obj| obj.key == key)
             .map(|obj| obj.size)
-            .with_context(|| format!("No such object: {key}"))
+            .ok_or_else(|| {
+                // The listing itself succeeded, so the object definitively does not exist —
+                // callers use the typed 404 to tell this apart from transient fetch trouble.
+                anyhow::Error::new(crate::lerobot_remote::HttpStatusError(404))
+                    .context(format!("No such object: {key}"))
+            })
     }
 
     async fn get_range_once(&self, rel_path: &str, range: Range<u64>) -> anyhow::Result<Vec<u8>> {
