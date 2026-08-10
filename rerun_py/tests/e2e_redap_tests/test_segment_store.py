@@ -79,3 +79,39 @@ def test_segment_store_compile_twice_works(first_segment_store: LazyStore) -> No
     second = stream.to_chunks()
     assert len(first) == len(second)
     assert {c.id for c in first} == {c.id for c in second}
+
+
+@pytest.mark.local_only
+def test_segment_store_direct_read_matches_relay(entry_factory: EntryFactory, resource_prefix: str) -> None:
+    """
+    `direct=True` bypasses the server for chunk data (range reads against the segment's
+    storage URL) and must yield exactly what the server-relayed path yields.
+
+    Local-only: the direct path reads the registered `file://` RRDs from this machine's
+    filesystem; against a remote deployment it would need object-store credentials.
+    """
+    ds = entry_factory.create_dataset("direct_read")
+    handle = ds.register([resource_prefix + "dataset/file1.rrd"])
+    handle.wait(timeout_secs=50)
+    (segment_id,) = ds.segment_ids()
+
+    relay = ds.segment_store(segment_id)
+    direct = ds.segment_store(segment_id, direct=True)
+
+    # Same manifest…
+    assert direct.schema() == relay.schema()
+    assert len(direct) == len(relay)
+
+    # …and the same chunks, byte-identical rows, without the server in the data path.
+    relay_chunks = {c.id: c for c in relay.stream().to_chunks()}
+    direct_chunks = {c.id: c for c in direct.stream().to_chunks()}
+    assert set(direct_chunks) == set(relay_chunks)
+    for chunk_id, direct_chunk in direct_chunks.items():
+        assert direct_chunk.num_rows == relay_chunks[chunk_id].num_rows
+
+
+@pytest.mark.local_only
+def test_segment_store_direct_read_unknown_segment_raises(readonly_test_dataset: DatasetEntry) -> None:
+    """The direct path reports unknown segments as NotFoundError, like the relayed path."""
+    with pytest.raises(NotFoundError, match=r"does-not-exist"):
+        readonly_test_dataset.segment_store("does-not-exist", direct=True)

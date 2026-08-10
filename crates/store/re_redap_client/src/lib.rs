@@ -8,8 +8,16 @@ mod connection_registry;
 mod grpc;
 
 #[cfg(not(target_arch = "wasm32"))]
+mod direct_segment_chunk_provider;
+#[cfg(not(target_arch = "wasm32"))]
+mod object_store_reader;
+#[cfg(not(target_arch = "wasm32"))]
 mod segment_chunk_provider;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use self::direct_segment_chunk_provider::{DirectReadError, DirectSegmentChunkProvider};
+#[cfg(not(target_arch = "wasm32"))]
+pub use self::object_store_reader::{ObjectStoreReader, ObjectStoreReaderError, build_store};
 #[cfg(not(target_arch = "wasm32"))]
 pub use self::segment_chunk_provider::SegmentChunkProvider;
 

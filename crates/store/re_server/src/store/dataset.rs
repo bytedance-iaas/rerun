@@ -248,7 +248,10 @@ impl Dataset {
 
             for (layer_name, layer) in segment.iter_sources() {
                 layer_names_row.push(layer_name.clone());
-                storage_urls_row.push(format!("memory:///store/{}", layer.store_slot_id()));
+                storage_urls_row.push(layer.storage_url().map_or_else(
+                    || format!("memory:///store/{}", layer.store_slot_id()),
+                    ToString::to_string,
+                ));
 
                 let layer_properties = layer.compute_properties().await?;
 
@@ -418,6 +421,11 @@ impl Dataset {
 
         for (layer_name, segment_id, source) in layers {
             layer_names.push(layer_name.clone());
+            // Deliberately the runtime memory:// slot, NOT the registered storage URL:
+            // the dataset manifest's URL is the input to cross-dataset re-registration
+            // (register an existing store into another dataset without reloading).
+            // Clients that want the durable address (e.g. for direct object-store
+            // reads) get it from the segment table, which reports the registered URL.
             storage_urls.push(format!("memory:///store/{}", source.store_slot_id()));
             segment_ids.push(segment_id.into());
             layer_types.push(source.data_source_kind().to_string());
@@ -539,6 +547,7 @@ impl Dataset {
         store_slot_id: StoreSlotId,
         resolved: ResolvedStore,
         on_duplicate: IfDuplicateBehavior,
+        storage_url: Option<url::Url>,
     ) -> Result<(), Error> {
         let layer_name = &layer_info.name;
         re_log::debug!(?segment_id, ?layer_name, "add_layer");
@@ -576,6 +585,7 @@ impl Dataset {
             resolved,
             DataSourceKind::Rrd,
             layer_info,
+            storage_url,
         ));
 
         self.enforce_limits(&segment_id, &source)?;
@@ -691,6 +701,7 @@ impl Dataset {
                 slot_id,
                 resolved,
                 on_duplicate,
+                url::Url::from_file_path(path).ok(),
             )
             .await?;
             new_segment_ids.insert(segment_id);

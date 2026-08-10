@@ -71,7 +71,9 @@ web-time.workspace = true
 # Native dependencies:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 re_perf_telemetry = { workspace = true, optional = true }
+bytes.workspace = true
 http-body.workspace = true
+object_store = { workspace = true, features = ["fs"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "fs"] }
 tonic = { workspace = true, default-features = false, features = ["transport", "tls-native-roots"] }
 
@@ -79,3 +81,8 @@ tonic = { workspace = true, default-features = false, features = ["transport", "
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tonic-web-wasm-client.workspace = true
 tonic = { workspace = true, default-features = false }
+
+[dev-dependencies]
+re_build_info.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros"] }

@@ -87,6 +87,9 @@ enum ExternalError {
 
     #[error(transparent)]
     InvalidLayerNameError(#[from] re_types_core::InvalidLayerNameError),
+
+    #[error(transparent)]
+    DirectReadError(Box<re_redap_client::DirectReadError>),
 }
 
 const _: () = assert!(
@@ -156,6 +159,7 @@ impl From<datafusion::error::DataFusionError> for ExternalError {
 }
 
 impl_from_boxed!(re_protos::TypeConversionError, TypeConversionError);
+impl_from_boxed!(re_redap_client::DirectReadError, DirectReadError);
 
 impl From<ExternalError> for PyErr {
     fn from(err: ExternalError) -> Self {
@@ -224,6 +228,13 @@ impl From<ExternalError> for PyErr {
             }
 
             ExternalError::InvalidLayerNameError(err) => PyValueError::new_err(err.to_string()),
+
+            ExternalError::DirectReadError(err) => match *err {
+                re_redap_client::DirectReadError::Reader(
+                    re_redap_client::ObjectStoreReaderError::NotFound { .. },
+                ) => NotFoundError::new_err(err.to_string()),
+                _ => PyRuntimeError::new_err(format!("Direct segment read failed: {err}")),
+            },
         }
     }
 }
