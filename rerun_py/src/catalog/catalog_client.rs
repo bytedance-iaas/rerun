@@ -130,6 +130,15 @@ impl PyCatalogClientInternal {
         self.origin.to_string()
     }
 
+    /// The access token this client was created with, if any.
+    ///
+    /// Exposed so callers that rebuild a client from the URL (e.g. the dataloader's
+    /// per-worker connection) can re-authenticate with the same token.
+    #[getter(token)]
+    pub fn token_py(&self) -> Option<String> {
+        self.token.clone()
+    }
+
     /// Returns version and deployment information as (version, cloud_provider, cloud_region).
     fn version_info(
         self_: Py<Self>,

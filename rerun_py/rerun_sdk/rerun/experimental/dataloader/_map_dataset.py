@@ -83,6 +83,7 @@ class RerunMapDataset(torch.utils.data.Dataset[dict[str, torch.Tensor | None]]):
             catalog_url=source.dataset.catalog.url,
             dataset_name=source.dataset.name,
             fields=fields,
+            token=source.dataset.catalog.token,
         )
 
     @property
