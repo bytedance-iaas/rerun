@@ -50,12 +50,21 @@ spec:
         # 转换后 rrd 产物的存放桶;"off" 关闭。和其他 viewer 保持一致。
         - name: TOS_RRD_ARTIFACTS_URL
           value: tos://physical-ai-rerun-test/rrd-data/
+        # 国内云直连 huggingface.co 不通(实测 Network is unreachable),走镜像。
+        # 不用 HF 数据集可删;海外集群也删掉(直连官方更快)。
+        - name: HF_ENDPOINT
+          value: https://hf-mirror.com
         # 云内带宽充裕,产物并发下载可以开大(上限 16;0 = 自动 4)。
         - name: RRD_ARTIFACTS_PREFETCH
           value: "8"
-        # 远程桌面分辨率,按需调。
+        # 远程桌面的【初始】分辨率。用 resize=remote 连接时会被浏览器实际窗口
+        # 尺寸接管,不必调大;只有 port-forward + 固定尺寸场景才需要改它。
         - name: SESSION_GEOMETRY
           value: 1280x800
+        # 会话密码:noVNC 连接时要求输入(VNC 协议层认证)。走公网(Ingress)必须设;
+        # 只用 port-forward 也建议留着。
+        - name: SESSION_PASSWORD
+          value: "<SESSION_PASSWORD>"
       ports:
         - containerPort: 8080
       readinessProbe:
@@ -89,19 +98,14 @@ spec:
         medium: Memory
         sizeLimit: 1Gi
 ---
-# 本会话专属的公网入口(一个会话一个 CLB;不想要公网就删掉这段,用 port-forward)。
+# 会话的集群内 service:APIG Ingress 的后端。
 apiVersion: v1
 kind: Service
 metadata:
   name: rerun-native-<USERNAME>
   namespace: rerun
-  annotations:
-    # ⚠️ CLB 所在子网 ID(和 rerun-cloud.yaml 用同一个即可)
-    service.beta.kubernetes.io/volcengine-loadbalancer-subnet-id: "subnet-vzqelh6514ow865ykaob4vjm" # 备选(同 VPC): subnet-1c0ekuqn81pfk5e8j71eieepw / subnet-iwf1y64j6mm876zdlc21q76b
-    # 公网型 CLB。强烈建议在 CLB 控制台加 ACL 只放行办公网 IP(见文件头的安全提醒)。
-    service.beta.kubernetes.io/volcengine-loadbalancer-address-type: "PUBLIC"
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   # 只选中自己这个会话的 pod(session 标签是唯一的)。
   selector:
     session: rerun-native-<USERNAME>
@@ -109,3 +113,25 @@ spec:
     - name: novnc
       port: 8080
       targetPort: 8080
+---
+# 本会话的公网入口:挂共享 APIG 网关,host 独享一个自动分配的 *.volceapi.com 域名
+#(HTTPS 证书平台自带;noVNC 的 WebSocket 走 HTTP/1.1,网关可正常转发)。
+# 不想走公网就删掉这段,用 port-forward。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rerun-native-<USERNAME>
+  namespace: rerun
+spec:
+  ingressClassName: rerun-apig # = apig-template.yaml 里网关声明的 class
+  rules:
+    - host: rerun-native-<USERNAME>.apig.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rerun-native-<USERNAME>
+                port:
+                  number: 8080

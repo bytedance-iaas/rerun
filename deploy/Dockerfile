@@ -214,6 +214,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # native mode — no window manager runs, so the entrypoint uses xdotool to hand the
     # viewer window X input focus (without it, text fields never receive the keyboard):
     xdotool \
+    # native mode — kiosk window manager: keeps the viewer window maximized to the
+    # current desktop size (incl. noVNC remote-resize changes) and hands it focus.
+    matchbox-window-manager \
+    # native mode — H.264/H.265 playback: the native viewer decodes video by invoking
+    # the FFmpeg executable (the browser viewer uses WebCodecs instead, so only the
+    # native session needs this; without it every video panel shows "Couldn't find an
+    # installation of the FFmpeg executable").
+    ffmpeg \
     # native mode — software GPU (Vulkan via lavapipe) for wgpu:
     mesa-vulkan-drivers \
     libgl1-mesa-dri \
@@ -245,6 +253,11 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 # Web viewer artifacts + nginx config.
 COPY --from=builder-web /rerun/crates/viewer/re_web_viewer_server/web_viewer/ /usr/share/nginx/html/
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+# Precompress the big static assets once at build time (the wasm is tens of MiB; gzip
+# cuts it to roughly a third). nginx's gzip_static serves the .gz next to the original,
+# so no per-request CPU and no reliance on the gateway's compression behavior.
+RUN find /usr/share/nginx/html -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.css' -o -name '*.html' \) \
+    -exec gzip -9 -k {} +
 RUN rm -f /etc/nginx/sites-enabled/default && mkdir -p /rrd-cache && chown www-data:www-data /rrd-cache
 
 # Native viewer binary.
