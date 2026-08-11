@@ -81,14 +81,37 @@ pub fn request() {
 
     #[cfg(target_arch = "wasm32")]
     {
-        ehttp::fetch(ehttp::Request::get("tos-config.json"), move |result| {
+        // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
+        // default (`Omit`) tells the browser to strip the authenticated session,
+        // turning every fetch into a 401.
+        let request =
+            ehttp::Request::get("tos-config.json").with_credentials(ehttp::Credentials::SameOrigin);
+        ehttp::fetch(request, move |result| {
             // A missing/broken config file resolves to empty settings (not an error):
             // the viewer works without defaults, credentials are just not pre-resolved.
-            let parsed = result
-                .ok()
-                .filter(|response| response.status == 200)
-                .and_then(|response| serde_json::from_slice::<ViewerConfig>(&response.bytes).ok())
-                .unwrap_or_default();
+            // Still worth a console line — a 401 here looks exactly like "no defaults".
+            let parsed = match &result {
+                Ok(response) if response.status == 200 => {
+                    serde_json::from_slice::<ViewerConfig>(&response.bytes).unwrap_or_else(|err| {
+                        re_log::warn!(
+                            "Failed to parse viewer defaults: {err}\nFile: tos-config.json"
+                        );
+                        ViewerConfig::default()
+                    })
+                }
+                Ok(response) => {
+                    re_log::warn!(
+                        "Failed to load viewer defaults: HTTP {} {}\nFile: tos-config.json",
+                        response.status,
+                        response.status_text
+                    );
+                    ViewerConfig::default()
+                }
+                Err(err) => {
+                    re_log::warn!("Failed to load viewer defaults: {err}\nFile: tos-config.json");
+                    ViewerConfig::default()
+                }
+            };
             *CONFIG.lock() = Some(parsed);
         });
     }

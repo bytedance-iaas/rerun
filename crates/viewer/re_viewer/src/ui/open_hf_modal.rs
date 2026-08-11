@@ -88,7 +88,9 @@ pub struct OpenHfModal {
     artifact_upload_disabled: bool,
 
     /// Filled asynchronously from the server's `/tos-config.json` (web only).
-    server_config: Arc<Mutex<Option<ServerHfConfig>>>,
+    /// `Err` holds why the fetch failed — shown in the dialog: without this config the
+    /// rrd artifacts store has no credentials and silently degrades to mp4 conversion.
+    server_config: Arc<Mutex<Option<Result<ServerHfConfig, String>>>>,
     server_config_requested: bool,
 }
 
@@ -118,13 +120,28 @@ impl OpenHfModal {
         #[cfg(target_arch = "wasm32")]
         {
             let config = self.server_config.clone();
-            ehttp::fetch(ehttp::Request::get("tos-config.json"), move |result| {
-                if let Ok(response) = result
-                    && response.status == 200
-                    && let Ok(parsed) = serde_json::from_slice::<ServerHfConfig>(&response.bytes)
-                {
-                    *config.lock() = Some(parsed);
+            // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
+            // default (`Omit`) tells the browser to strip the authenticated session,
+            // turning every fetch into a 401.
+            let request = ehttp::Request::get("tos-config.json")
+                .with_credentials(ehttp::Credentials::SameOrigin);
+            ehttp::fetch(request, move |result| {
+                let outcome = match result {
+                    Ok(response) if response.status == 200 => {
+                        serde_json::from_slice::<ServerHfConfig>(&response.bytes)
+                            .map_err(|err| format!("invalid JSON: {err}"))
+                    }
+                    Ok(response) => {
+                        Err(format!("HTTP {} {}", response.status, response.status_text))
+                    }
+                    Err(err) => Err(err),
+                };
+                if let Err(err) = &outcome {
+                    re_log::warn!(
+                        "Failed to load server TOS defaults: {err}\nFile: tos-config.json"
+                    );
                 }
+                *config.lock() = Some(outcome);
             });
         }
 
@@ -153,12 +170,14 @@ impl OpenHfModal {
                 parsed.rrd_artifacts_prefetch = n;
             }
 
-            *self.server_config.lock() = Some(parsed);
+            *self.server_config.lock() = Some(Ok(parsed));
         }
     }
 
     pub fn ui(&mut self, ui: &egui::Ui, command_sender: &CommandSender) {
-        let server_config = self.server_config.lock().clone().unwrap_or_default();
+        let fetched = self.server_config.lock().clone();
+        let config_error = fetched.as_ref().and_then(|r| r.as_ref().err().cloned());
+        let server_config = fetched.and_then(Result::ok).unwrap_or_default();
 
         self.modal.ui(
             ui.ctx(),
@@ -199,6 +218,14 @@ impl OpenHfModal {
                                 .show(ui);
                             ui.end_row();
                         });
+                }
+
+                if let Some(err) = &config_error {
+                    ui.warning_label(format!(
+                        "Failed to load the server-side defaults (HF token, artifact-store \
+                         credentials): {err}\nFile: tos-config.json — episodes will be \
+                         converted locally instead of loading from the artifacts store.",
+                    ));
                 }
 
                 // Converted episodes are uploaded to a shared rrd artifacts store (a TOS bucket) by
