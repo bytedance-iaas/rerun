@@ -280,12 +280,20 @@ impl RerunCloudHandler {
     /// Returns all the chunk stores of the specified dataset and segment ids. If `segment_ids`
     /// is `None`, return stores of all segments.
     ///
-    /// Returns (segment id, layer name, store) tuples.
+    /// Returns (segment id, layer name, store slot, resolved store, storage url) tuples.
     async fn get_chunk_stores(
         &self,
         dataset_id: EntryId,
         segment_ids: Option<&[SegmentId]>,
-    ) -> tonic::Result<Vec<(SegmentId, LayerName, StoreSlotId, ResolvedStore)>> {
+    ) -> tonic::Result<
+        Vec<(
+            SegmentId,
+            LayerName,
+            StoreSlotId,
+            ResolvedStore,
+            Option<url::Url>,
+        )>,
+    > {
         let store = self.store.read().await;
         let dataset = store.dataset(dataset_id)?;
 
@@ -298,6 +306,9 @@ impl RerunCloudHandler {
                         layer_name.clone(),
                         source.store_slot_id(),
                         source.resolved_store().clone(),
+                        // The registered storage URL (`tos://`, `s3://`, …), used to
+                        // pre-sign direct chunk URLs. `None` for memory-only sources.
+                        source.storage_url().cloned(),
                     )
                 })
             })
@@ -1621,7 +1632,7 @@ impl RerunCloudService for RerunCloudHandler {
             exclude_temporal_data,
             scan_parameters,
             query,
-            generate_direct_urls: _,
+            generate_direct_urls,
         } = request.into_inner().try_into()?;
 
         if scan_parameters.is_some() {
@@ -1685,7 +1696,7 @@ impl RerunCloudService for RerunCloudHandler {
         // don't contain.
         let all_timelines: BTreeMap<String, arrow::datatypes::DataType> = chunk_stores
             .iter()
-            .flat_map(|(_, _, _, resolved)| {
+            .flat_map(|(_, _, _, resolved, _)| {
                 resolved
                     .schema()
                     .timelines()
@@ -1695,8 +1706,29 @@ impl RerunCloudService for RerunCloudHandler {
             })
             .collect();
 
-        let stream = futures::stream::iter(chunk_stores.into_iter().map(
-            move |(segment_id, layer_name, store_slot_id, resolved)| {
+        // Direct chunk URLs: when the client asks for them, pre-sign each TOS/S3-backed
+        // layer's RRD object up front (once per store — all its chunks share one object and
+        // one signature). The stream closure below is synchronous, so the async signing has
+        // to happen here. A store that can't be signed (memory-only, or a presign failure)
+        // just gets `None` and its chunks fall back to the relayed gRPC path client-side.
+        let direct_url_ttl = std::time::Duration::from_secs(
+            std::env::var("RERUN_PRESIGN_EXPIRY_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3600),
+        );
+        let mut prepared_stores = Vec::with_capacity(chunk_stores.len());
+        for (segment_id, layer_name, store_slot_id, resolved, storage_url) in chunk_stores {
+            let direct = if generate_direct_urls {
+                presign_layer_for_direct_read(&resolved, storage_url.as_ref(), direct_url_ttl).await
+            } else {
+                None
+            };
+            prepared_stores.push((segment_id, layer_name, store_slot_id, resolved, direct));
+        }
+
+        let stream = futures::stream::iter(prepared_stores.into_iter().map(
+            move |(segment_id, layer_name, store_slot_id, resolved, direct)| {
                 // Build metadata for all relevant chunks (physical + virtual).
 
                 let metadata_vec: Vec<ChunkMetadata> = if let Some(query) = &query {
@@ -1873,16 +1905,41 @@ impl RerunCloudService for RerunCloudHandler {
                     // OSS server stores decoded data, so compressed == uncompressed.
                     chunk_byte_sizes_uncompressed.push(Some(meta.byte_size));
 
-                    chunk_keys.push(
-                        ChunkKey {
+                    // Direct read when we pre-signed this store's object AND this chunk has an
+                    // on-disk span. The chunk key then carries the source URL + byte range
+                    // (`RrdChunkLocation`), which the client range-reads from the pre-signed
+                    // URL; anything else keeps the memory-slot key and relays over gRPC.
+                    if let (Some((storage_url, signed_url, expiry)), Some((offset, length))) =
+                        (&direct, meta.rrd_span)
+                    {
+                        let location = re_protos::cloud::v1alpha1::ext::RrdChunkLocation {
+                            url: storage_url.clone(),
+                            offset,
+                            length,
+                        };
+                        let key = re_protos::cloud::v1alpha1::ext::ChunkKey {
                             chunk_id: meta.chunk_id,
-                            store_slot_id,
-                        }
-                        .encode()?,
-                    );
-
-                    chunk_direct_urls.push(None);
-                    chunk_direct_url_expiry.push(None);
+                            data_source_kind: re_protos::cloud::v1alpha1::ext::DataSourceKind::Rrd,
+                            location: location.as_bytes(),
+                            // Drift detection is best-effort; the OSS server doesn't track
+                            // per-chunk etags/registration times here.
+                            etag: None,
+                            registration_time: None,
+                        };
+                        chunk_keys.push(key.as_bytes());
+                        chunk_direct_urls.push(Some(signed_url.clone()));
+                        chunk_direct_url_expiry.push(Some(*expiry));
+                    } else {
+                        chunk_keys.push(
+                            ChunkKey {
+                                chunk_id: meta.chunk_id,
+                                store_slot_id,
+                            }
+                            .encode()?,
+                        );
+                        chunk_direct_urls.push(None);
+                        chunk_direct_url_expiry.push(None);
+                    }
                 }
 
                 let chunk_layer_names = vec![layer_name.clone(); chunk_ids.len()];
@@ -2356,6 +2413,13 @@ struct ChunkMetadata {
     entity_path: EntityPath,
     is_static: bool,
     byte_size: u64,
+
+    /// The chunk's `(offset, length)` byte span within its RRD object — the exact range a
+    /// direct client range-reads from the pre-signed URL. Both come from the footer manifest's
+    /// on-disk columns (so `length` is the on-disk size, not `byte_size`'s uncompressed value).
+    /// `None` for in-memory (eager) chunks, which have no on-disk location and can't be read
+    /// directly.
+    rrd_span: Option<(u64, u64)>,
     timelines: IntMap<TimelineName, AbsoluteTimeRange>,
 }
 
@@ -2371,6 +2435,8 @@ impl ChunkMetadata {
             entity_path: chunk.entity_path().clone(),
             is_static: chunk.is_static(),
             byte_size: re_byte_size::SizeBytes::total_size_bytes(chunk),
+            // In-memory chunk: no on-disk RRD location, so never eligible for direct reads.
+            rrd_span: None,
             timelines,
         }
     }
@@ -2386,8 +2452,65 @@ impl ChunkMetadata {
             entity_path: EntityPath::from(manifest.col_chunk_entity_path_raw().value(row_idx)),
             is_static: manifest.col_chunk_is_static_raw().value(row_idx),
             byte_size: manifest.col_chunk_byte_size_uncompressed()[row_idx],
+            // The chunk's on-disk `(offset, length)` in its RRD object, for direct range reads.
+            //
+            // The direct-read client reads a whole RRD frame — a 16-byte `MessageHeader`
+            // followed by the `ArrowMsg` payload — but the footer manifest's offset/size
+            // EXCLUDE that header (the header sits immediately before the payload in the file).
+            // So extend the span back over the header, mirroring `Source::size_bytes`. If the
+            // offset somehow sits within the first header (corrupt manifest), skip direct for
+            // this chunk and let it relay.
+            rrd_span: {
+                let header = re_log_encoding::MessageHeader::ENCODED_SIZE_BYTES as u64;
+                manifest.col_chunk_byte_offset()[row_idx]
+                    .checked_sub(header)
+                    .map(|start| (start, manifest.col_chunk_byte_size()[row_idx] + header))
+            },
             timelines: chunk_timelines.cloned().unwrap_or_default(),
         }
+    }
+}
+
+/// Pre-sign a layer's RRD object so a client can read its chunks directly from object storage.
+///
+/// Returns `(storage_url, signed_url, expiry_unix)` when the store is a footered RRD on
+/// object storage (`tos://` / `s3://`) that we could sign. Returns `None` for anything that
+/// can't be read directly — an in-memory (eager) source, a non-object-store scheme, or a
+/// signing failure — in which case the caller keeps the memory-slot chunk key and the client
+/// relays those chunks over gRPC. Always `None` on wasm: the browser build has no object-store
+/// signing (`cloud_storage` is native-only), so in-browser servers just relay.
+// On wasm the `.await`ed presign call is cfg'd out, leaving no await; the caller still
+// awaits this and it stays async for the native path.
+#[cfg_attr(target_arch = "wasm32", expect(clippy::unused_async))]
+async fn presign_layer_for_direct_read(
+    resolved: &ResolvedStore,
+    storage_url: Option<&url::Url>,
+    ttl: std::time::Duration,
+) -> Option<(url::Url, String, i64)> {
+    // Only lazy (footered-RRD) stores have on-disk chunk spans to range-read.
+    if !matches!(resolved, ResolvedStore::Lazy(_)) {
+        return None;
+    }
+    let url = storage_url?;
+    if !matches!(url.scheme(), "tos" | "s3") {
+        return None;
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    match crate::cloud_storage::presign_get(url, ttl).await {
+        Ok((signed, expiry)) => Some((url.clone(), signed.to_string(), expiry)),
+        Err(err) => {
+            re_log::warn!(
+                "Failed to pre-sign direct chunk URL, falling back to relay: {err}\nUrl: {url}"
+            );
+            None
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = ttl;
+        None
     }
 }
 
