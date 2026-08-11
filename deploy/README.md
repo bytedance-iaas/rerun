@@ -34,7 +34,7 @@ cd deploy
 cp .env.example .env           # then edit; create secrets/ with your AK/SK
 docker compose up --build -d   # first build compiles both viewers: expect ~45-60 min
 open http://127.0.0.1:9091     # web viewer
-open "http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale"   # native session
+open "http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=remote"   # native session
 ```
 
 ## Local native viewer (no cloud, no docker)
@@ -54,9 +54,9 @@ cat > ~/.rerun/tos-config.json <<'EOF'
 {
   "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
   "tos_region": "cn-beijing",
-  "tos_access_key": "AK...",
-  "tos_secret_key": "SK...",
-  "hf_token": "hf_..."
+  "tos_access_key": "AK…",
+  "tos_secret_key": "SK…",
+  "hf_token": "hf_…"
 }
 EOF
 chmod 600 ~/.rerun/tos-config.json
@@ -106,4 +106,11 @@ The `ExposeHeader` entries for `x-amz-meta-rerun-*` are equally load-bearing: wi
 
 ## Credential model
 
-`entrypoint.sh` reads AK/SK/token from docker/k8s secrets (`/run/secrets/*`), falling back to `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` env vars. In `web` mode these are baked into `/tos-config.json` for the browser dialogs; in `native` and `server` modes they are exported into the viewer's environment. Anyone who can reach the web viewer can read `/tos-config.json` — acceptable for the PoC; a later phase replaces it with server-side URL pre-signing.
+`entrypoint.sh` reads AK/SK/token from docker/k8s secrets (`/run/secrets/*`), falling back to `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` env vars. In `web` mode these are baked into `/tos-config.json` for the browser dialogs; in `native` and `server` modes they are exported into the viewer's environment.
+
+Two more optional secrets gate access to the browser-facing modes (see the auth commit / `vke/README.md`):
+
+- `web_htpasswd` (htpasswd format) — enables nginx Basic auth for the whole web mode, including `/tos-config.json`. Without it the site (and the default credentials) is readable by anyone who can reach it — fine locally, not on a public address. `/healthz` stays open for probes.
+- `session_password` / `SESSION_PASSWORD` env — enables the VNC password prompt on native sessions.
+
+With Basic auth on, `/tos-config.json` is only readable by authenticated users; the endgame (server-side URL pre-signing, so browsers never hold AK/SK at all) is a later phase.

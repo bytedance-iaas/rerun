@@ -1,0 +1,71 @@
+# APIG(API 网关)接入:一个网关实例 + web viewer 的 Ingress。「单 instance 多域名」拓扑 ——
+# 整个 rerun 云服务共享这一个网关/一个公网 IP,靠域名(Host 头)分流;native 会话的 Ingress
+# 在 native-viewer-template.yaml 里,挂同一个网关。
+#
+# 网关做什么:HTTPS 终结(自带 *.volceapi.com 域名和证书)+ 按域名分流。
+# 认证不在网关做(网关 JWT 会挡浏览器直接打开页面),在后端做:
+#   web = nginx Basic auth(web_htpasswd secret),native = VNC 密码(见各自模板)。
+# catalog server(gRPC/HTTP2)不走 APIG —— APIG 只支持 HTTP/1.1 和 WebSocket,
+# 它保留自己的四层 CLB(见 rerun-cloud-template.yaml,建议在 CLB 控制台配 IP 白名单)。
+#
+# ============================== 使用前必改 ==============================
+#   1. "⚠️" 处:subnet-id(和 rerun-cloud.yaml 用同一个即可)
+#   前提:rerun namespace 已存在(见 rerun-cloud-template.yaml)。
+# =======================================================================
+#
+# 部署与验证:
+#   kubectl apply -f apig.yaml
+#   kubectl get apiginstance -A          # PHASE=Running + LOADBALANCERID 出现即就绪
+#     (偶尔会因集群 API 抖动返回空列表 items: [] —— 重试确认,不要据此断言实例不存在)
+#   kubectl -n rerun get ingress -o wide # ADDRESS = 网关 CLB 的公网 IP
+#
+# ⚠️ 自动分配的 *.volceapi.com 域名只能在 APIG 控制台看:
+#   https://console.volcengine.com/veapig → 服务列表,每个 host 对应一个域名。
+#   kubectl 查不到。拿到域名后记得把 https://<域名> 加进 TOS 桶的 CORS 白名单
+#   (../enable-cors.sh),否则浏览器打不开 tos:// 数据集。
+apiVersion: loadbalancer.vke.volcengine.com/v1beta1
+kind: APIGInstance
+metadata:
+  name: rerun-apig-instance
+  namespace: rerun
+spec:
+  # 省略 spec.id => 新建一个全新网关 + 前置 CLB。
+  # (适配已有实例才写 spec.id: <平台实例id>。)
+  name: rerun-apig
+  common:
+    network:
+      # ⚠️ 必须是【当前集群】VPC 里的子网(跨集群抄会报 cannot be found from VPC,永远 Pending)。
+      # 最快查法:抄本集群现有 LoadBalancer Service 注解或其他 Running 的 APIGInstance 的值:
+      #   kubectl get apiginstance -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.common.network.subnetIds}{"\n"}{end}' 
+      subnetIds: ["⚠️REPLACE_SUBNET_ID"]
+    # resource: 省略 => 平台默认(实测 small_1 CLB / 1c2g / 2 副本),按量再调。
+  ingress:
+    enable: true
+    enableAllNamespaces: false
+    # 本实例专属的 ingressClass。如果集群里还有别的 APIG 实例,千万别声明同一个
+    # class —— 两个实例会互相抢 Ingress。
+    ingressClasses: [rerun-apig]
+    watchNamespaces: [rerun]
+---
+# Web viewer 的入口:host 独享一个自动分配的 *.volceapi.com 域名。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rerun-web
+  namespace: rerun
+spec:
+  ingressClassName: rerun-apig
+  rules:
+    # host 只是网关内部的分流键,不需要真实 DNS;平台按它分配公网域名。
+    # ⚠️ 改 host 或换 ingressClassName 时,in-place apply 不干净(ADDRESS 残留旧 IP):
+    #   删掉这个 Ingress 再重新 apply。
+    - host: rerun-web.apig.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rerun-web # ClusterIP service,见 rerun-cloud-template.yaml
+                port:
+                  number: 80
