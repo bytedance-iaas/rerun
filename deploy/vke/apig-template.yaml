@@ -13,6 +13,8 @@
 #   前提:rerun namespace 已存在(见 rerun-cloud-template.yaml)。
 # =======================================================================
 #
+# 用法:复制本模板为 apig.yaml(该文件名已被 .gitignore 挡住)再填真实值。
+#
 # 部署与验证:
 #   kubectl apply -f apig.yaml
 #   kubectl get apiginstance -A          # PHASE=Running + LOADBALANCERID 出现即就绪
@@ -36,7 +38,7 @@ spec:
     network:
       # ⚠️ 必须是【当前集群】VPC 里的子网(跨集群抄会报 cannot be found from VPC,永远 Pending)。
       # 最快查法:抄本集群现有 LoadBalancer Service 注解或其他 Running 的 APIGInstance 的值:
-      #   kubectl get apiginstance -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.common.network.subnetIds}{"\n"}{end}' 
+      #   kubectl get apiginstance -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.common.network.subnetIds}{"\n"}{end}'
       subnetIds: ["⚠️REPLACE_SUBNET_ID"]
     # resource: 省略 => 平台默认(实测 small_1 CLB / 1c2g / 2 副本),按量再调。
   ingress:
@@ -62,6 +64,17 @@ spec:
     - host: rerun-web.apig.example
       http:
         paths:
+          # 同域名按路径分流:/curation = Daft 质检台(StatefulSet,见
+          # rerun-cloud-template.yaml),其余 = rerun web viewer。网关**不剥前缀**,
+          # 质检台自己把全部路由注册在 /curation 下(curation ui --root-path)。
+          # viewer 里的 Diagnose 按钮就指到这里(web 端缺省同域 /curation)。
+          - path: /curation
+            pathType: Prefix
+            backend:
+              service:
+                name: daft-curation # headless service,见 rerun-cloud-template.yaml
+                port:
+                  number: 7860
           - path: /
             pathType: Prefix
             backend:

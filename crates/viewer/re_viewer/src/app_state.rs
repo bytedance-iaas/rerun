@@ -245,6 +245,11 @@ impl AppState {
 
         let egui_ctx = ui.ctx().clone();
 
+        // The Diagnose buttons need the deployment config (`daft_url`), and session restore —
+        // the usual `request()` caller — skips itself when data arrived some other way
+        // (`?url=`, CLI, drop). Idempotent, so just make sure the fetch is kicked off.
+        crate::viewer_config::request();
+
         // Learn metadata for the "recently opened" list while its streams are active, so the
         // welcome screen can show e.g. episode counts after the next restart.
         for recent in &mut self.recent_datasets {
