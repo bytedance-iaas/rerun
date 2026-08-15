@@ -25,6 +25,10 @@ pub struct ViewerConfig {
 
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
     pub rrd_artifacts_prefetch: usize,
+
+    /// Where the "Diagnose" buttons send the user: the Daft curation console.
+    /// Absent = same-domain `/curation` on the web, no buttons natively.
+    pub daft_url: String,
 }
 
 impl Default for ViewerConfig {
@@ -37,6 +41,7 @@ impl Default for ViewerConfig {
             hf_token: String::new(),
             tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
             rrd_artifacts_prefetch: 0,
+            daft_url: String::new(),
         }
     }
 }
@@ -112,6 +117,7 @@ pub fn request() {
                     ViewerConfig::default()
                 }
             };
+            re_viewer_context::daft_link::set_base_url(&parsed.daft_url);
             *CONFIG.lock() = Some(parsed);
         });
     }

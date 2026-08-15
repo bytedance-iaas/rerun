@@ -1,36 +1,47 @@
-# rerun 云端常驻服务(VKE):一个 Deployment(缺省 1 个 pod),pod 里跑两个容器 ——
-# rerun web server(nginx + wasm viewer)和 catalog server。
-# 公网入口分两条:web 走 APIG 网关(HTTPS + 域名,见 apig-template.yaml),
-# catalog 走专用四层 CLB(51234,建议配 IP 白名单)。
+# rerun + Daft 云端常驻服务(VKE),一份模板管到底:
+#   · StatefulSet rerun-cloud —— 一个 pod 两个容器:web viewer(nginx + wasm)+
+#     catalog server(带持久盘,见 volumeClaimTemplates)
+#   · StatefulSet daft-curation —— Daft 质检台(robot-curation UI),挂 TOS 桶
+#   · 共用一个 Secret(AK/SK 一套)、一个 APIG 网关域名(路径分流:/ = viewer,
+#     /curation = 质检台;网关见 apig-template.yaml)
+# 公网入口分两条:web/质检台走 APIG 网关(HTTPS + 域名),catalog 走专用四层
+# CLB(51234,建议配 IP 白名单)。
 #
 # ============================== 使用前必改 ==============================
+# 复制本模板为 rerun-cloud.yaml(该文件名已被 .gitignore 挡住)再填真实值。
 # 搜索 "⚠️" 逐项替换:
-#   1. Secret 里的三个 base64 值(生成方法见 Secret 处注释)
-#   2. 两处 image 地址(你们镜像仓库里的 rerun 镜像 + tag)
-#   3. Service 注解里的 subnet-id(CLB 所在子网,VKE 控制台可查)
-#   4. (可选)PVC 的 storageClassName / 容量、资源 requests/limits、CLB 规格
+#   1. Secret 两处:rerun-viewer-secrets(七个值)+ tos-fsx-key(AK/SK 与上面同一套)
+#   2. image 三处:rerun 镜像 ×2(同 tag)、robot_curator 镜像 ×1
+#      ⚠️ robot_curator 必须是 ≥ Daft 仓库 commit 412b91ce8 的构建(子路径支持),
+#         旧镜像挂在 /curation 下静态资源/WS 全 404
+#   3. catalog CLB Service 注解里的 subnet-id
+#   4. fsx-TOS PV 的 bucket(质检台的数据面:datasets/ 放数据集、deliveries/ 放交付,
+#      viewer 里用 tos://<bucket>/datasets/<名>/ 打开的数据集才能被 Diagnose 一键带过去)
+#   5. (可选)storageClassName / 容量、资源 requests/limits、VLM 后端端点
 # =======================================================================
 #
 # 部署:
 #   kubectl apply -f rerun-cloud.yaml
+#   kubectl apply -f apig.yaml                     # 网关 + Ingress(路径分流)
 # 验证:
-#   kubectl -n rerun get pods                      # Running 即可
-#   kubectl -n rerun get svc rerun-cloud           # EXTERNAL-IP = catalog 的公网地址
+#   kubectl -n rerun get pods                      # rerun-cloud-0 2/2、daft-curation-0 1/1
+#   kubectl -n rerun get svc rerun-cloud           # EXTERNAL-IP = catalog 公网地址(:51234)
 #   Python 里    CatalogClient("rerun+http://<EXTERNAL-IP>:51234")
-#   web viewer 的公网地址是 APIG 分配的 https 域名(apig-template.yaml 里有查法);
-#   浏览器打开后会弹用户名/密码框(web_htpasswd 里的账号)。
+#   kubectl -n rerun exec daft-curation-0 -- ls /mnt/tos   # 应看到 datasets/ deliveries/
+#   web viewer 的公网地址是 APIG 分配的 https 域名(查法见 apig-template.yaml);
+#   浏览器打开会弹用户名/密码框(web_htpasswd 里的账号);
+#   <域名>/curation 是质检台(同一组账号密码,登录一次两边通行)。
 #
 # 集群内访问(云内训练任务等)走 Service 域名,不出公网:
 #   web:    http://rerun-web.rerun.svc.cluster.local
-#   server: rerun+http://rerun-cloud.rerun.svc.cluster.local:51234
+#   server: rerun+http://rerun-cloud-headless.rerun.svc.cluster.local:51234
 apiVersion: v1
 kind: Namespace
 metadata:
   name: rerun
 ---
-# 所有 rerun pod 共用的凭证。stringData 直接写明文,apply 时 k8s 自动转 base64
+# 所有 pod 共用的凭证。stringData 直接写明文,apply 时 k8s 自动转 base64
 # (Secret 里 base64 只是编码不是加密,明文写这里安全性等价)。
-# 用法:复制本模板为 rerun-cloud.yaml(该文件名已被 .gitignore 挡住)再填真实值。
 apiVersion: v1
 kind: Secret
 metadata:
@@ -51,43 +62,49 @@ stringData:
   # 没装 htpasswd 工具就用:printf 'alice:%s\n' "$(openssl passwd -apr1 'pw123')"
   # 加/删用户 = 改这里再重启 web pod。删掉整个 key = 关闭认证(仅限内网/本地调试;公网必须开)。
   web_htpasswd: "⚠️REPLACE_WEB_HTPASSWD"
+
+  # Daft 质检台的 Basic auth:与 web_htpasswd 里的某个账号**同一组账号密码**
+  # (同域名下浏览器复用缓存的凭证,同一组密码 = 登录一次两边通行)。
+  # 质检台的中间件要明文,所以单独两个 key。
+  curation_ui_user: "⚠️REPLACE_UI_USER"
+  curation_ui_password: "⚠️REPLACE_UI_PASSWORD"
+
   # catalog server 的 token 签名密钥(生成:rerun server generate-secret,只生成一次)。
   # 关系:密钥 = 印章,token = 盖了章的通行证。server 拿这里的密钥"验章";
   # 给用户签发 token 时必须用【同一个】密钥(一人一条命令,离线签,不用碰 server):
   #   rerun server generate-token --secret <这个密钥> --user zhang \
   #       --permission read --expiration 90d \
-  #       --server-host <CLB公网IP> --server-host rerun-cloud.rerun.svc.cluster.local
+  #       --server-host <CLB公网IP> --server-host rerun-cloud-headless.rerun.svc.cluster.local
   # 密钥保管好:拿到它的人能签任意权限的 token。删掉这个 key = 关闭认证(服务裸奔)。
   server_token_secret: "⚠️REPLACE_SERVER_TOKEN_SECRET"
 ---
-# catalog 数据库 + catalog server 的远端文件缓存。丢了能自愈(server 重新从 TOS 拉),
-# 但 catalog 注册记录也在上面,建议保留。按数据集体量调大小。
+# TOS 桶挂载凭证(fsx CSI 的 TOS 模式认这两个固定 key 名)。
+# 值 = 上面 rerun-viewer-secrets 里的**同一套** AK/SK,填两处是因为 CSI 驱动
+# 只认自己的 key 名,改不了。
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: Secret
 metadata:
-  name: rerun-server-data
+  name: tos-fsx-key
   namespace: rerun
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 100Gi
-  # ⚠️ 按集群实际存储类调整:ebs-essd = 增强型 SSD,省钱可换 ebs-ssd。
-  storageClassName: ebs-essd
+type: Opaque
+stringData:
+  AccessKeyId: "⚠️REPLACE_TOS_ACCESS_KEY"
+  SecretAccessKey: "⚠️REPLACE_TOS_SECRET_KEY"
 ---
+# ══════════════════ rerun:web viewer + catalog server ══════════════════
+# StatefulSet 而不是 Deployment:catalog 的库和缓存在 RWO 云盘上,StatefulSet
+# 保证同一时刻至多一个实例挂这块盘(节点故障时不会起出第二个 pod 抢盘),
+# 盘由 volumeClaimTemplates 管理,pod 名固定为 rerun-cloud-0。
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: rerun-cloud
   namespace: rerun
   labels:
     app: rerun-cloud
 spec:
+  serviceName: rerun-cloud-headless
   replicas: 1
-  # PVC 是 ReadWriteOnce,滚动升级会出现新旧两个 pod 抢同一块盘 —— 用 Recreate(先停旧再起新)。
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: rerun-cloud
@@ -102,7 +119,7 @@ spec:
         # ---- 容器 1:web viewer(nginx + wasm + /tos-config.json) ----
         - name: web
           # ⚠️ 换成你们镜像仓库里的 rerun 镜像(例:iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:<tag>)
-          image: "⚠️REPLACE_IMAGE"
+          image: "⚠️REPLACE_RERUN_IMAGE"
           env:
             - name: MODE
               value: web
@@ -112,12 +129,16 @@ spec:
               value: https://tos-s3-cn-beijing.volces.com
             - name: TOS_REGION
               value: cn-beijing
-            # 转换后 rrd 产物的存放桶;"off" 关闭。缺省 = 下面这个测试桶,建议换成你们自己的。
+            # 转换后 rrd 产物的存放桶;"off" 关闭。
             - name: TOS_RRD_ARTIFACTS_URL
               value: tos://physical-ai-rerun-test/rrd-data/
             # 打开数据集时同时并发下载几个现成 rrd 产物;0 = 自动(浏览器 3)。
             - name: RRD_ARTIFACTS_PREFETCH
               value: "0"
+            # (可选)Diagnose 按钮的目标地址覆盖。不设 = 同域 /curation,
+            # 即本模板的标准拓扑,一般不用动。
+            # - name: DAFT_URL
+            #   value: https://其他域名/curation
           ports:
             - containerPort: 80
           readinessProbe:
@@ -143,7 +164,7 @@ spec:
         # ---- 容器 2:catalog server ----
         - name: catalog
           # ⚠️ 同一个镜像,同一个 tag
-          image: "⚠️REPLACE_IMAGE"
+          image: "⚠️REPLACE_RERUN_IMAGE"
           env:
             - name: MODE
               value: server
@@ -195,9 +216,37 @@ spec:
             secretName: rerun-viewer-secrets # keys: tos_access_key, tos_secret_key, hf_token
         - name: rrd-cache
           emptyDir: {} # nginx 的 WebDAV 回写目录(备用通道),丢了无所谓
-        - name: server-data
-          persistentVolumeClaim:
-            claimName: rerun-server-data
+  # catalog 数据库 + 远端文件缓存。丢了能自愈(server 重新从 TOS 拉),但 catalog
+  # 注册记录也在上面,建议保留。按数据集体量调大小。
+  # PVC 名会是 server-data-rerun-cloud-0;删 StatefulSet 不会删它。
+  volumeClaimTemplates:
+    - metadata:
+        name: server-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        # ⚠️ 按集群实际存储类调整:ebs-essd = 增强型 SSD,省钱可换 ebs-ssd。
+        storageClassName: ebs-essd
+        resources:
+          requests:
+            storage: 100Gi
+---
+# StatefulSet 的 governing service(headless):给 pod 稳定的集群内域名
+# rerun-cloud-0.rerun-cloud-headless.rerun.svc.cluster.local;集群内客户端
+# 也可以直接用 rerun-cloud-headless.rerun.svc.cluster.local:51234。
+apiVersion: v1
+kind: Service
+metadata:
+  name: rerun-cloud-headless
+  namespace: rerun
+spec:
+  clusterIP: None
+  selector:
+    app: rerun-cloud
+  ports:
+    - name: web
+      port: 80
+    - name: catalog
+      port: 51234
 ---
 # web viewer 的集群内 service:APIG Ingress 的后端(见 apig-template.yaml)。
 # 公网 HTTP 流量全部走网关(HTTPS + Basic auth),web 不再直接挂公网 CLB。
@@ -221,7 +270,7 @@ spec:
 # 自己的 CLB。四层转发不解密不认证,安全靠两道:
 #   1. CLB 控制台 → 该 CLB → 访问控制:配 IP 白名单(ACL),只放行办公网/VPN 出口 IP。
 #   2. catalog server 的 token 认证(部署侧无须配置,见 token 管理文档)。
-# 集群内访问不变:rerun+http://rerun-cloud.rerun.svc.cluster.local:51234
+# 集群内访问不变:rerun+http://rerun-cloud-headless.rerun.svc.cluster.local:51234
 apiVersion: v1
 kind: Service
 metadata:
@@ -235,8 +284,6 @@ metadata:
     service.beta.kubernetes.io/volcengine-loadbalancer-subnet-id: "⚠️REPLACE_SUBNET_ID"
     # 公网型 CLB(会自动绑 EIP,产生公网费用);只要内网可达就改成 "PRIVATE"。
     service.beta.kubernetes.io/volcengine-loadbalancer-address-type: "PUBLIC"
-    # (可选)CLB 规格,按并发量选;不写用默认。可选值见 VKE 文档,例:small_1 / medium_1
-    # service.beta.kubernetes.io/volcengine-loadbalancer-spec: "small_1"
 spec:
   type: LoadBalancer
   selector:
@@ -245,3 +292,166 @@ spec:
     - name: catalog
       port: 51234
       targetPort: 51234
+---
+# ══════════════════ Daft 质检台(robot-curation UI) ══════════════════
+# 与 rerun 分开的 StatefulSet(不进同一个 pod):质检管线是 CPU 密集的批处理,
+# 和交互式 viewer 分开互不拖累,升级 viewer 也不会杀正在跑的质检任务。
+# 它的持久化都在下面的 fsx-TOS 挂载里(RWX 共享桶,不跟 pod 走),
+# 没有 pod 本地盘,所以没有 volumeClaimTemplates。
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: daft-curation
+  namespace: rerun
+  labels:
+    app: daft-curation
+spec:
+  serviceName: daft-curation
+  replicas: 1
+  selector:
+    matchLabels:
+      app: daft-curation
+  template:
+    metadata:
+      labels:
+        app: daft-curation
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: curation
+          # ⚠️ robot_curator 镜像,tag 必须 ≥ Daft 仓库 commit 412b91ce8(子路径支持)
+          image: "⚠️REPLACE_CURATOR_IMAGE"
+          # 镜像 entrypoint 就是 `curation`。
+          # --delivery = 交付根(报告读写都在这);数据集根缺省 /mnt/tos/datasets,
+          # 要换用 CURATION_DATA_ROOT。--terminal 故意不开:公网入口后面不放 shell。
+          args:
+            - ui
+            - --delivery
+            - /mnt/tos/deliveries
+            - --root-path
+            - /curation
+          ports:
+            - containerPort: 7860
+          env:
+            - name: CURATION_UI_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rerun-viewer-secrets
+                  key: curation_ui_user
+            - name: CURATION_UI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rerun-viewer-secrets
+                  key: curation_ui_password
+            # 站点配置(VLM 后端预设):不配则只有出厂占位预设,VLM 类质检不可用。
+            - name: CURATION_CONFIG
+              value: /etc/curation/site.yaml
+          readinessProbe:
+            httpGet:
+              path: /healthz # 直连容器端口,不带前缀(带前缀的 /curation/healthz 也通)
+              port: 7860
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # 质检管线吃 CPU(光流/视频解码/质检全在 CPU 上);上限按节点余量再调。
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "8"
+              memory: 16Gi
+          volumeMounts:
+            - name: tos-data
+              mountPath: /mnt/tos
+            - name: site-config
+              mountPath: /etc/curation
+      volumes:
+        - name: tos-data
+          persistentVolumeClaim:
+            claimName: daft-tos-data
+        - name: site-config
+          configMap:
+            name: curation-site
+---
+# TOS 桶挂载:fsx CSI 的 TOS 模式(集群没有独立的 tos CSI driver)。
+# 质检台没有网络直读 TOS 的能力,数据集/交付/报告全部走这个挂载
+# (tos://bucket/key 会被它翻译成 /mnt/tos/key,**忽略桶名**)。
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: daft-tos-data
+spec:
+  capacity:
+    storage: 500Gi # TOS 无容量语义,占位值
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  csi:
+    driver: fsx.csi.volcengine.com
+    volumeHandle: daft-tos-data
+    volumeAttributes:
+      type: TOS
+      # ⚠️ 质检台的数据桶:datasets/ 下放数据集(目录名 = Diagnose 传的名字),
+      # deliveries/ 下出交付与报告。需要读写权限。
+      bucket: "⚠️REPLACE_CURATION_BUCKET"
+      path: /
+      server: tos-cn-beijing.ivolces.com
+      secretName: tos-fsx-key
+      secretNamespace: rerun
+  mountOptions:
+    - no_writeback_cache
+    - tos_allow_delete=true
+    - num_meta_threads=64
+    - num_io_threads=1024
+    - num_bg_threads=128
+    - num_prefetch_threads=64
+    - tos_enable_cto=false
+    - tos_symlink_mode=1
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: daft-tos-data
+  namespace: rerun
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: ""
+  volumeMode: Filesystem
+  volumeName: daft-tos-data
+  resources:
+    requests:
+      storage: 500Gi
+---
+# 质检台的站点配置:VLM 后端预设(端点是集群内在运的 vLLM 服务,跨 namespace
+# 走集群 DNS 直连)。改完 kubectl apply + 重启 daft-curation-0 生效。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: curation-site
+  namespace: rerun
+data:
+  site.yaml: |
+    vlm_backends:
+      # ⚠️ 按实际在运的 VLM 服务增删;hardware/service_type 是描述性字段,进报告用。
+      h20-8b:
+        endpoint: http://vllm-cosmos-8b.curation.svc.cluster.local:8000/v1
+        model: nvidia/Cosmos-Reason2-8B
+        api_key_env:
+        hardware: NVIDIA H20
+        service_type: 自托管 vLLM
+---
+# /curation 的后端;同时是 daft StatefulSet 的 governing service(headless 即可,
+# APIG Ingress 按 endpoints 转发,headless 一样工作)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: daft-curation
+  namespace: rerun
+spec:
+  clusterIP: None
+  selector:
+    app: daft-curation
+  ports:
+    - name: ui
+      port: 7860
+      targetPort: 7860

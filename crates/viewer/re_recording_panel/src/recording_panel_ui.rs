@@ -725,12 +725,19 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
 
     let id = ui.make_persistent_id(local_app_id.id());
 
+    // Diagnose in Daft: TOS datasets only (`diagnose_url` is `None` for anything
+    // else) — an open TOS dataset is LeRobot v2/v3 by construction, the loader
+    // rejects other formats before anything shows up here.
+    let diagnose_url = re_viewer_context::daft_link::diagnose_url(app_id.as_str());
+
     if !local_app_id.loaded_recordings.is_empty() || streaming {
-        if paused {
-            // Keep the resume button visible without hovering.
+        if paused || diagnose_url.is_some() {
+            // Keep the resume button visible without hovering; same for Diagnose —
+            // it is the hand-off into the curation workflow, users must be able to
+            // see it without discovering the hover behavior first.
             list_item_content = list_item_content.with_always_show_buttons(true);
         }
-        list_item_content = list_item_content.with_buttons(|ui| {
+        list_item_content = list_item_content.with_buttons(move |ui| {
             if streaming {
                 let (icon, tooltip) = if paused {
                     (&icons::PLAY, "Resume downloading this dataset")
@@ -750,6 +757,19 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
             if resp.clicked() {
                 ctx.command_sender()
                     .send_system(SystemCommand::CloseApp(app_id.clone()));
+            }
+
+            // A labeled, always-visible button (not an icon): this is the entry point
+            // into data curation, it should read as a feature, not as row furniture.
+            // Buttons lay out right-to-left, so adding it last puts it leftmost —
+            // in front of the row furniture, where a feature belongs.
+            if let Some(url) = diagnose_url {
+                let resp = ui
+                    .add(egui::Button::new("Diagnose").small())
+                    .on_hover_text(format!("Run data curation on this dataset in Daft\n{url}"));
+                if resp.clicked() {
+                    ui.open_url(egui::OpenUrl::new_tab(url));
+                }
             }
         });
     }

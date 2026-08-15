@@ -119,3 +119,5 @@ secrets/
 !*.env.example
 /deploy/vke/*.local.yaml
 /deploy/vke/rerun-cloud.yaml
+/deploy/vke/apig.yaml
+/deploy/vke/native-viewer.yaml
