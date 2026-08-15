@@ -23,6 +23,7 @@ mod command_sender;
 mod component_fallbacks;
 mod component_ui_registry;
 mod contents;
+pub mod daft_link;
 mod drag_and_drop;
 mod file_dialog;
 mod focus_target;

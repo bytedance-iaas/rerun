@@ -2,9 +2,9 @@
 
 | 文件 | 进 git? | 内容 |
 |---|---|---|
-| `rerun-cloud-template.yaml` | ✅ | 常驻服务模板(占位符):namespace + 密钥 + PVC + 一个 Deployment(web viewer 与 catalog server 两容器同 pod)+ web 的 ClusterIP service + catalog 专用公网 CLB(仅 51234) |
+| `rerun-cloud-template.yaml` | ✅ | 整套常驻服务模板(占位符):namespace + 密钥 ×2 + rerun StatefulSet(web viewer 与 catalog server 两容器同 pod,catalog 持久盘走 volumeClaimTemplates)+ Daft 质检台 StatefulSet(fsx-TOS 挂载 + VLM 站点配置)+ 各 Service(web ClusterIP / headless / catalog 专用公网 CLB 仅 51234) |
 | `rerun-cloud.yaml` | ❌ .gitignore 已挡 | 上面模板的**已填真实密钥**版,直接 apply |
-| `apig-template.yaml` | ✅ | APIG 网关实例(单 instance 多域名)+ web viewer 的 Ingress;HTTPS/域名/分流都在这层 |
+| `apig-template.yaml` | ✅ | APIG 网关实例(单 instance)+ 按路径分流的 Ingress(`/` = web viewer,`/curation` = Daft 质检台);HTTPS/域名/分流都在这层 |
 | `apig.yaml` | ❌ .gitignore 已挡 | 上面模板的已填版(subnet-id) |
 | `native-viewer-template.yaml` | ✅ | 单用户的云上 native viewer 会话 pod 模板(`<USERNAME>`/`<SESSION_PASSWORD>` 占位)+ ClusterIP service + 挂共享网关的 Ingress;不再建每会话公网 CLB |
 
@@ -13,6 +13,7 @@
 | 入口 | 走哪 | 加密 | 认证 |
 |---|---|---|---|
 | web viewer | APIG 网关,固定 `*.volceapi.com` 域名 | HTTPS(平台证书) | nginx Basic auth(`web_htpasswd`) |
+| Daft 质检台 | 同一网关同一域名,`/curation` 路径 | HTTPS | Basic auth(与 web 同一组账号密码,登录一次两边通行) |
 | native 会话 | 同一网关,每会话一个域名 | HTTPS | VNC 密码(`SESSION_PASSWORD`) |
 | catalog server | 专用四层 CLB,裸 IP:51234 | 无(gRPC 过不了 APIG) | CLB IP 白名单(控制台配)+ token |
 
@@ -20,7 +21,7 @@
 
 Secret 用 `stringData` 直接填**明文**(k8s apply 时自动转 base64,base64 不是加密)。
 真实值只存在于 `rerun-cloud.yaml`(gitignore 已挡)和 `deploy/secrets/`,模板永远只有占位符。
-从模板重新生成已填版:
+从模板重新生成已填版(AK/SK 的占位符在两个 Secret 里出现,sed 会一起换掉):
 
 ```sh
 cd deploy
@@ -28,13 +29,15 @@ cd deploy
 # 首次:生成 catalog 的 token 签名密钥,存进 secrets/(gitignore 已挡)
 rerun server generate-secret | tr -d '\n' > secrets/server_token_secret
 
-sed -e "s|⚠️REPLACE_TOS_ACCESS_KEY|$(tr -d '\n' < secrets/tos_access_key)|" \
-    -e "s|⚠️REPLACE_TOS_SECRET_KEY|$(tr -d '\n' < secrets/tos_secret_key)|" \
-    -e "s|⚠️REPLACE_HF_TOKEN|$(tr -d '\n' < secrets/hf_token)|" \
-    -e "s|⚠️REPLACE_SERVER_TOKEN_SECRET|$(tr -d '\n' < secrets/server_token_secret)|" \
+# AK/SK 的占位符在两个 Secret 里出现(rerun-viewer-secrets + tos-fsx-key),g 标志一起换掉
+sed -e "s|⚠️REPLACE_TOS_ACCESS_KEY|$(tr -d '\n' < secrets/tos_access_key)|g" \
+    -e "s|⚠️REPLACE_TOS_SECRET_KEY|$(tr -d '\n' < secrets/tos_secret_key)|g" \
+    -e "s|⚠️REPLACE_HF_TOKEN|$(tr -d '\n' < secrets/hf_token)|g" \
+    -e "s|⚠️REPLACE_SERVER_TOKEN_SECRET|$(tr -d '\n' < secrets/server_token_secret)|g" \
     vke/rerun-cloud-template.yaml > vke/rerun-cloud.yaml
-# (镜像地址、subnet-id、web_htpasswd 模板里仍是占位符,记得手动补 ——
-#  web_htpasswd 可能多行,不适合 sed,直接编辑 rerun-cloud.yaml 填。)
+# 剩下的占位符手动编辑 rerun-cloud.yaml 补:web_htpasswd(可能多行,不适合 sed)、
+# 质检台账号密码(与 htpasswd 里某个账号同一组)、两个镜像地址、subnet-id、
+# 质检台数据桶名、VLM 端点。
 ```
 
 `web_htpasswd` 是 web viewer 的密码表:每行「用户名:密码哈希」。生成命令会把整行(含冒号)打印出来,原样填进 Secret:
@@ -90,6 +93,15 @@ kubectl -n rerun get ingress -o wide   # ADDRESS = 网关 CLB 公网 IP
 ## 常用命令
 
 ```sh
+# 常驻服务(全套:rerun + Daft 质检台)
+kubectl apply -f rerun-cloud.yaml
+kubectl apply -f apig.yaml
+kubectl -n rerun get pods,svc            # rerun-cloud-0 2/2、daft-curation-0 1/1
+kubectl -n rerun exec daft-curation-0 -- ls /mnt/tos   # 应看到 datasets/ deliveries/
+kubectl get apiginstance -n rerun        # PHASE=Running 即网关就绪
+# 公网域名去 APIG 控制台查(kubectl 查不到);到手后确认在桶 CORS 白名单里
+# (通配符 *.apigateway-cn-beijing.volceapi.com 已覆盖则免)。
+
 # 个人 native 会话(把 qian 换成自己的名字,密码换成自己的)
 sed -e 's/<USERNAME>/qian/g' -e 's/<SESSION_PASSWORD>/我的密码/g' \
     native-viewer-template.yaml | kubectl apply -f -
@@ -108,6 +120,7 @@ sed -e 's/<USERNAME>/qian/g' -e 's/<SESSION_PASSWORD>/x/g' \
 - `kubectl get apiginstance` 偶尔因集群 API 抖动返回 **false-empty**(`items: []`);重试确认。
 - 自动域名**只在 APIG 控制台**能看到,`kubectl` 拿不到;每个新 host 第一次要去控制台查一次。
 - 集群里如果还有别的 APIG 实例,**各实例的 `ingressClasses` 千万不能重名**,否则互相抢 Ingress。
+- **网关重建换域名后,老用户浏览器一律 "Failed to fetch"(2026-08-15 实测)**:旧域名时代看过的数据集文件被 Chrome 连 CORS 头一起缓存(TOS 不发 `Vary: Origin`),新域名命中旧缓存即 CORS 失败;只有看过的文件中招,极具迷惑性(curl 全通)。解法:DevTools → 右键刷新按钮 → 清空缓存并硬性重新加载(换个浏览器/无痕窗口同理)。
 - 想在网关上配 JWT 鉴权?不要——浏览器地址栏导航不带 Bearer,页面会被挡死。认证就放后端(Basic auth / VNC 密码)。
 - WebSocket(noVNC)走 HTTP/1.1,网关正常转发;**gRPC(HTTP/2)过不了网关**,catalog 必须走自己的 CLB。
 
@@ -244,14 +257,14 @@ client = rr.catalog.CatalogClient("rerun+http://127.0.0.1:51234", token="<带 12
 
 ```sh
 # web(nginx)容器:entrypoint 输出(启动时会打印 "Basic auth enabled" 等)
-kubectl -n rerun logs deploy/rerun-cloud -c web
+kubectl -n rerun logs rerun-cloud-0 -c web
 # nginx 的访问/错误日志在容器内文件里(Debian 装法,不进 stdout)——
 # 查"请求到没到后端、实际路径/状态码是什么"就看它:
-kubectl -n rerun exec deploy/rerun-cloud -c web -- tail -20 /var/log/nginx/access.log
-kubectl -n rerun exec deploy/rerun-cloud -c web -- tail -20 /var/log/nginx/error.log
+kubectl -n rerun exec rerun-cloud-0 -c web -- tail -20 /var/log/nginx/access.log
+kubectl -n rerun exec rerun-cloud-0 -c web -- tail -20 /var/log/nginx/error.log
 
 # catalog 容器:token 验签失败会有 "Token verification failed" 警告(限频每秒一条)
-kubectl -n rerun logs deploy/rerun-cloud -c catalog
+kubectl -n rerun logs rerun-cloud-0 -c catalog
 
 # native 会话 pod
 kubectl -n rerun logs pod/rerun-native-<name>
@@ -282,3 +295,16 @@ curl -i http://127.0.0.1:9091/            # 开了 Basic auth 应 401
 - **客户端 `PermissionError`** → 按文案分:`missing credentials`=没带 token;`bad token`/`invalid signature`=token 与 server 密钥不匹配或已过期;`not allowed for host`=签发时 `--server-host` 没列当前连接的地址。server 端对应日志:`Token verification failed`。
 
 快速健康检查(都免认证):`curl https://<web域名>/healthz`(web)、`curl http://<catalog地址>:51234/version`(catalog,返回版本串)。
+
+## 从旧结构(Deployment)迁移
+
+catalog 从 `Deployment rerun-cloud` 换成了 `StatefulSet rerun-cloud`(盘由
+volumeClaimTemplates 管理,新 PVC 名 `server-data-rerun-cloud-0`),Daft 质检台从独立的
+`Deployment daft-curation` 并入本模板。已有旧部署的集群要先删旧的再 apply:
+
+```sh
+kubectl -n rerun delete deploy rerun-cloud daft-curation --ignore-not-found
+kubectl -n rerun delete svc daft-curation --ignore-not-found   # 旧的是普通 ClusterIP,headless 要重建
+kubectl -n rerun delete pvc rerun-server-data --ignore-not-found   # 旧 catalog 盘;数据可自愈
+kubectl apply -f rerun-cloud.yaml
+```

@@ -50,7 +50,8 @@ AUTH
   "tos_secret_key": "${TOS_SK}",
   "hf_token": "${HF_TOKEN_VALUE}",
   "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL:-tos://physical-ai-rerun-test/rrd-data/}",
-  "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH:-0}
+  "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH:-0},
+  "daft_url": "${DAFT_URL:-}"
 }
 EOF
     chmod 644 /run/tos-config.json

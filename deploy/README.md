@@ -17,7 +17,9 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 | `Dockerfile` | Multi-stage: wasm viewer build + native viewer build (serialized to avoid OOM) + one runtime with nginx and the Xvnc/noVNC stack. Build context is the repo root. |
 | `docker-compose.yml` | Three services from the same image: `viewer` (web, `:9091`), `native-session` (native, `:9092`), `server` (catalog, `:9094`). |
 | `entrypoint.sh` | `MODE` dispatch: web renders `/tos-config.json` and runs nginx; native starts Xvnc + websockify + the viewer; server runs the catalog. |
-| `nginx.conf` | Static serving + `/tos-config.json` + WebDAV `PUT` on `/rrd-cache/` (phase-2 write-back). |
+| `nginx.conf` | Static serving + `/tos-config.json` + WebDAV `PUT` on `/rrd-cache/` (phase-2 write-back) + `301 /rerun → /` (the gateway routes `/curation` to the Daft console, everything else here). |
+| `vke/rerun-cloud-template.yaml` | The whole cloud stack as one template: rerun (web + catalog, StatefulSet with a persistent volume) and the Daft curation console (StatefulSet on a TOS mount, served under `/curation`; the viewer's Diagnose buttons deep-link into it, `?dataset=<name>`). Copy to `rerun-cloud.yaml` (gitignored) and fill in the ⚠️ marks. |
+| `vke/apig-template.yaml` | The APIG gateway + path-routed Ingress (`/` = viewer, `/curation` = Daft). Copy to `apig.yaml` (gitignored). |
 | `novnc-paste-bridge.js` | Appended into noVNC's `ui.js` at build time so Cmd+V / Ctrl+V pastes into the native session in one step. |
 | `.env.example` | Non-secret settings: endpoint, region. Copy to `.env` (gitignored). |
 | `gen-ca-bundle.sh` | Exports macOS keychain certs so cargo can download deps behind a corporate TLS-intercepting proxy. Optional; skip on Linux / no proxy. |
@@ -98,10 +100,16 @@ Building inside mainland China, point every download at a mirror:
 The web viewer talks to TOS **directly from the browser**, and browsers enforce CORS: the bucket only answers pages served from an origin on its `AllowedOrigin` whitelist.
 That whitelist lives in `enable-cors.sh`, so putting the web viewer at a new address is always two steps:
 
-1. Add the new origin (scheme + host + port, no trailing slash — e.g. `http://101.126.41.246` for a VKE LoadBalancer, `http://127.0.0.1:9091` for local docker) to the `AllowedOrigin` list in `enable-cors.sh`.
+1. Add the new origin (scheme + host + port, no trailing slash) to the `AllowedOrigin` list in `enable-cors.sh`. Common ones:
+   - `https://*.apigateway-cn-beijing.volceapi.com` — **use the wildcard** for the auto-assigned APIG domain (how most users reach the viewer publicly). The APIG domain is re-assigned on every gateway recreate, so a wildcard means you never have to chase the new `<id>` — TOS supports one `*` in an `AllowedOrigin`.
+   - `http://rerun-web` — the in-cluster Service name, when testing the web viewer from a browser running inside the cluster (e.g. `browser-test.yaml`).
+   - `http://101.126.41.246` — a VKE LoadBalancer / gateway public IP.
+   - `http://127.0.0.1:9091` — local docker.
 2. Re-run `./enable-cors.sh` (needs `secrets/`) — it overwrites the bucket's CORS config and prints a verification preflight.
 
-Symptoms of a missing origin: the web viewer loads fine, but opening any `tos://` dataset fails in the browser (CORS errors in the dev console), and rrd-artifact lookups silently miss — while the native viewers (which are not subject to CORS) work normally.
+The origin is the address in the browser's URL bar (the viewer's own host), **not** the TOS endpoint the data lives on — those are different hosts.
+
+Symptoms of a missing origin: the web viewer loads fine, but opening any `tos://` dataset fails in the browser with a cryptic `Request failed: Failed to fetch` (CORS errors in the dev console), and rrd-artifact lookups silently miss — while the native viewers (which are not subject to CORS) work normally.
 The `ExposeHeader` entries for `x-amz-meta-rerun-*` are equally load-bearing: without them the browser hides the fingerprint header and every artifact lookup misses.
 
 ## Credential model

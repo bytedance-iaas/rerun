@@ -2,7 +2,7 @@
 //! straight from the browser or native viewer.
 //!
 //! The flow ("metadata first, then episodes stream in"):
-//! 1. List + fetch the small `meta/` files, parse them into a [`re_importer::lerobot::datasetv3::LeRobotDatasetV3`].
+//! 1. List + fetch the small `meta/` files, parse them into a [`re_lerobot::datasetv3::LeRobotDatasetV3`].
 //! 2. Announce every episode as its own (still empty) recording so the panel fills immediately.
 //! 3. Fetch episodes one by one — data parquet fully, videos via byte-range requests covering just
 //!    that episode's samples — convert with the regular `LeRobot` importer code, and stream the
