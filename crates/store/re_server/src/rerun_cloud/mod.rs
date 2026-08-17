@@ -1255,6 +1255,7 @@ impl RerunCloudService for RerunCloudHandler {
                     store_slot_id,
                     resolved,
                     IfDuplicateBehavior::Error,
+                    None, // written over gRPC into memory: no durable storage address
                 )
                 .await?;
         }

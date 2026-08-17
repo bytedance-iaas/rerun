@@ -639,7 +639,7 @@ class DatasetEntry(Entry[DatasetEntryInternal]):
 
         return RegistrationHandle(self._internal.register_prefix(recordings_prefix, layer_name, on_duplicate))
 
-    def segment_store(self, segment_id: str) -> LazyStore:
+    def segment_store(self, segment_id: str, *, direct: bool | None = None) -> LazyStore:
         """
         Open a remote segment as a [`LazyStore`][rerun.experimental.LazyStore].
 
@@ -647,10 +647,28 @@ class DatasetEntry(Entry[DatasetEntryInternal]):
         via [`LazyStore.stream`][rerun.experimental.LazyStore.stream]. To fully
         materialize into a [`ChunkStore`][rerun.experimental.ChunkStore], call
         `lazy.stream().collect()`.
+
+        Parameters
+        ----------
+        segment_id
+            The ID of the segment to open.
+        direct
+            When `True`, chunk data is range-read **directly from the segment's storage**
+            (e.g. `tos://` / `s3://` object storage) instead of being relayed through the
+            catalog server: the server is only asked for the segment's layer storage URLs,
+            then all data bytes flow straight from the object store to this process.
+            Reading this way needs credentials for the store in the environment
+            (`TOS_ENDPOINT` / `TOS_REGION` / `TOS_ACCESS_KEY` / `TOS_SECRET_KEY`, or the
+            standard `AWS_*` variables) and works only for RRDs with a footer (anything
+            registered from `tos://` by recent servers qualifies).
+
+            When `None` (the default), the `RERUN_SEGMENT_DIRECT_READ` environment
+            variable decides (unset/`0`/`false` → relay through the server, as before).
+
         """
         from rerun.experimental import LazyStore
 
-        return LazyStore(self._internal.segment_store(segment_id))
+        return LazyStore(self._internal.segment_store(segment_id, direct=direct))
 
     @with_tracing("DatasetEntry.filter_segments")
     def filter_segments(self, segment_ids: str | Sequence[str] | datafusion.DataFrame) -> DatasetView:
