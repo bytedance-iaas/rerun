@@ -221,6 +221,10 @@ impl ViewerOpenUrl {
                         "TOS datasets are opened via the 'Open from Volcengine TOS' dialog"
                     ))
                 }
+
+                LogDataSource::HfDataset(_) => Err(anyhow::anyhow!(
+                    "Hugging Face datasets are opened via the 'Open from Hugging Face' dialog"
+                )),
             }
         } else if let Ok(url) = parse_webviewer_url(url) {
             // Web viewer URL with `url` parameters.

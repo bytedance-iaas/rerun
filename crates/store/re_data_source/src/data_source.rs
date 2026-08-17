@@ -57,6 +57,9 @@ pub enum LogDataSource {
     /// A `LeRobot` dataset stored in Volcengine TOS (or any S3-compatible object store),
     /// streamed episode by episode.
     TosDataset(crate::tos::TosDatasetSource),
+
+    /// A `LeRobot` dataset stored on Hugging Face, streamed episode by episode.
+    HfDataset(crate::hf::HfDatasetSource),
 }
 
 /// Options for [`LogDataSource::from_uri`].
@@ -375,6 +378,8 @@ impl LogDataSource {
             Self::RedapProxy(uri) => Ok(re_grpc_client::stream(async_runtime, uri)),
 
             Self::TosDataset(source) => Ok(crate::tos::stream_lerobot_dataset(source)),
+
+            Self::HfDataset(source) => Ok(crate::hf::stream_lerobot_dataset(source)),
         }
     }
 
@@ -431,6 +436,12 @@ impl LogDataSource {
                 file_extension: None,
                 file_source: None,
             },
+
+            Self::HfDataset(_) => LogDataSourceAnalytics {
+                source_type: "hf_dataset",
+                file_extension: None,
+                file_source: None,
+            },
         }
     }
 
@@ -462,6 +473,7 @@ impl LogDataSource {
             Self::RedapDatasetSegment { uri, .. } => Some(uri.to_string()),
             Self::RedapProxy(uri) => Some(uri.to_string()),
             Self::TosDataset(source) => Some(source.location.to_string()),
+            Self::HfDataset(source) => Some(format!("hf://{}", source.repo)),
         }
     }
 }

@@ -174,6 +174,18 @@ impl App {
                 }
             }
 
+            LogDataSource::HfDataset(source) => {
+                // The Hugging Face stream announces itself under its dataset URL.
+                let new_source = LogSource::HttpStream {
+                    url: format!("hf://{}", source.repo),
+                };
+                if all_sources.any(|source| source.is_same_ignoring_uri_fragments(&new_source)) {
+                    drop(all_sources);
+                    self.try_make_recording_from_source_active(egui_ctx, store_hub, &new_source);
+                    return;
+                }
+            }
+
             #[cfg(not(target_arch = "wasm32"))]
             LogDataSource::Stdin => {
                 let new_source = LogSource::Stdin;
