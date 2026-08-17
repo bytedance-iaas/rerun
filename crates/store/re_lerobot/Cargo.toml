@@ -31,13 +31,21 @@ re_video.workspace = true
 
 ahash.workspace = true
 anyhow.workspace = true
+bytes.workspace = true
 arrow.workspace = true
 itertools.workspace = true
 parking_lot.workspace = true
-parquet = { workspace = true, features = ["arrow", "snap", "zstd"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(not(any(target_arch = "wasm32")))'.dependencies]
+parquet = { workspace = true, features = ["arrow", "snap", "zstd"] }
+
+# `zstd` does not compile to wasm, so the web build only gets the (pure-Rust) snappy codec —
+# which is what LeRobot datasets use in practice (pyarrow's default).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+parquet = { workspace = true, features = ["arrow", "snap"] }
 
 [dev-dependencies]
 tempfile.workspace = true
