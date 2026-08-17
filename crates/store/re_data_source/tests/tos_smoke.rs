@@ -152,7 +152,7 @@ fn tos_lerobot_stream_smoke() {
         .spawn(|| {
             std::thread::sleep(Duration::from_secs(25));
             let store_id = re_log_types::StoreId::recording(
-                re_log_types::ApplicationId::from(TEST_DATASET.to_owned()),
+                re_log_types::ApplicationId::new_or_unknown(TEST_DATASET),
                 "episode_46".to_owned(),
             );
             let found = re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);

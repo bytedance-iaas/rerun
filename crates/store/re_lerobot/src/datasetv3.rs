@@ -2028,6 +2028,8 @@ mod tests {
             episode_index: EpisodeIndex(index),
             data_chunk_index: 0,
             data_file_index: 0,
+            length: None,
+            tasks: Vec::new(),
             feature_files: HashMap::default(),
         }
     }
