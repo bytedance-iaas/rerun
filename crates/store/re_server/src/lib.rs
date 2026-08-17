@@ -3,10 +3,14 @@
 //! A Rerun server implementation backed by an in-memory store.
 
 #[cfg(not(target_arch = "wasm32"))]
+mod cloud_storage;
+#[cfg(not(target_arch = "wasm32"))]
 mod entrypoint;
 #[cfg(not(target_arch = "wasm32"))]
 mod layers;
 mod named_path;
+#[cfg(not(target_arch = "wasm32"))]
+mod persistence;
 mod rerun_cloud;
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
