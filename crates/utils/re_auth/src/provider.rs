@@ -203,9 +203,28 @@ impl RedapProvider {
         permission: Permission,
         allowed_host: Option<&str>,
     ) -> Result<Jwt, Error> {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+        self.token_with_hosts(
+            duration,
+            issuer,
+            subject,
+            permission,
+            allowed_host.map(|h| vec![h.to_owned()]).unwrap_or_default(),
+        )
+    }
 
-        let allowed_hosts = allowed_host.map(|h| vec![h.to_owned()]).unwrap_or_default();
+    /// Like [`Self::token`], but with any number of `allowed_hosts` patterns.
+    ///
+    /// Useful when the same token must be presentable to a server under several names
+    /// (e.g. a public IP from outside and a cluster-internal DNS name from inside).
+    pub fn token_with_hosts(
+        &self,
+        duration: Duration,
+        issuer: impl Into<String>,
+        subject: impl Into<String>,
+        permission: Permission,
+        allowed_hosts: Vec<String>,
+    ) -> Result<Jwt, Error> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
 
         let claims = Claims::Redap(RedapClaims {
             iss: issuer.into(),
