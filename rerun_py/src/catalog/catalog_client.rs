@@ -30,6 +30,12 @@ pub struct PyCatalogClientInternal {
 
     connection: ConnectionHandle,
 
+    /// The access token this client was created with, if any.
+    ///
+    /// Kept so plain-HTTP side channels (e.g. the `/catalog/presign` endpoint) can
+    /// authenticate with the same credentials as the gRPC calls.
+    token: Option<String>,
+
     // If this isn't set, it means datafusion wasn't found
     datafusion_ctx: Option<Py<PyAny>>,
 }
@@ -37,6 +43,10 @@ pub struct PyCatalogClientInternal {
 impl PyCatalogClientInternal {
     pub fn connection(&self) -> &ConnectionHandle {
         &self.connection
+    }
+
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
     }
 }
 
@@ -91,6 +101,7 @@ impl PyCatalogClientInternal {
             re_redap_client::ConnectionRegistry::new_with_stored_credentials();
 
         let credentials = match token
+            .clone()
             .map(TryFrom::try_from)
             .transpose()
             .map_err(to_py_err)?
@@ -107,6 +118,7 @@ impl PyCatalogClientInternal {
         let ret = Self {
             origin,
             connection,
+            token,
             datafusion_ctx,
         };
 

@@ -249,11 +249,13 @@ impl Args {
             builder
         };
         let ledger = handler.ledger();
-        let handler = handler.build();
+        // Arc'd so the plain-HTTP routes below (e.g. /catalog/presign) can query the same
+        // store the gRPC service serves.
+        let handler = std::sync::Arc::new(handler.build());
 
         let rerun_cloud_server =
-            re_protos::cloud::v1alpha1::rerun_cloud_service_server::RerunCloudServiceServer::new(
-                handler,
+            re_protos::cloud::v1alpha1::rerun_cloud_service_server::RerunCloudServiceServer::from_arc(
+                std::sync::Arc::clone(&handler),
             )
             .max_decoding_message_size(re_grpc_server::MAX_DECODING_MESSAGE_SIZE)
             .max_encoding_message_size(re_grpc_server::MAX_ENCODING_MESSAGE_SIZE);
@@ -274,6 +276,152 @@ impl Args {
             .with_http_route(
                 "/version",
                 axum::routing::get(async move || re_build_info::build_info!().to_string()),
+            )
+            // Exchange a segment id for short-lived pre-signed URLs of its layer RRDs.
+            // With these, a dataloader range-reads its data straight from object storage
+            // without holding any storage credentials — each URL's embedded signature is
+            // the entire authorization, scoped to one object and a limited lifetime
+            // (RERUN_PRESIGN_EXPIRY_SECS, default 3600).
+            .with_http_route(
+                "/catalog/presign",
+                axum::routing::get({
+                    let handler = std::sync::Arc::clone(&handler);
+                    let auth_provider = auth_provider.clone();
+                    move |headers: axum::http::HeaderMap,
+                          query: axum::extract::Query<
+                        std::collections::HashMap<String, String>,
+                    >| {
+                        let handler = std::sync::Arc::clone(&handler);
+                        let auth_provider = auth_provider.clone();
+                        async move {
+                            use axum::http::StatusCode;
+                            if let Some(provider) = &auth_provider
+                                && let Err((code, msg)) =
+                                    crate::auth::verify_http_bearer(provider, &headers)
+                            {
+                                return (code, axum::Json(serde_json::json!({"error": msg})));
+                            }
+
+                            let (Some(dataset), Some(segment)) =
+                                (query.0.get("dataset"), query.0.get("segment"))
+                            else {
+                                return (
+                                    StatusCode::BAD_REQUEST,
+                                    axum::Json(serde_json::json!({
+                                        "error": "missing ?dataset=<entry id>&segment=<segment id>",
+                                    })),
+                                );
+                            };
+                            let Ok(dataset_id) = dataset.parse::<re_log_types::EntryId>() else {
+                                return (
+                                    StatusCode::BAD_REQUEST,
+                                    axum::Json(serde_json::json!({
+                                        "error": format!("invalid dataset entry id: {dataset}"),
+                                    })),
+                                );
+                            };
+                            let segment_id = re_types_core::SegmentId::from(segment.clone());
+
+                            let Some(layers) =
+                                handler.segment_storage_urls(dataset_id, &segment_id).await
+                            else {
+                                return (
+                                    StatusCode::NOT_FOUND,
+                                    axum::Json(serde_json::json!({
+                                        "error": format!(
+                                            "unknown dataset or segment: {dataset} / {segment}"
+                                        ),
+                                    })),
+                                );
+                            };
+
+                            let expires_in = std::time::Duration::from_secs(
+                                std::env::var("RERUN_PRESIGN_EXPIRY_SECS")
+                                    .ok()
+                                    .and_then(|v| v.parse().ok())
+                                    .unwrap_or(3600),
+                            );
+
+                            let mut out = Vec::new();
+                            for (layer, url) in layers {
+                                match url.scheme() {
+                                    "tos" | "s3" => {
+                                        let signed =
+                                            crate::cloud_storage::presign_get(&url, expires_in)
+                                                .await;
+                                        let size = crate::cloud_storage::object_size(&url).await;
+                                        match (signed, size) {
+                                            (Ok((signed, expires_at)), Ok(size_bytes)) => {
+                                                out.push(serde_json::json!({
+                                                    "layer": layer,
+                                                    "url": signed,
+                                                    "size_bytes": size_bytes,
+                                                    "expires_at_unix": expires_at,
+                                                }));
+                                            }
+                                            (Err(err), _) | (_, Err(err)) => {
+                                                return (
+                                                    StatusCode::BAD_GATEWAY,
+                                                    axum::Json(serde_json::json!({
+                                                        "error": err.message(),
+                                                    })),
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    // Local files: nothing to sign; hand the URL through.
+                                    // (Local/test deployments — the client reads it directly.)
+                                    "file" => {
+                                        let size_bytes = url
+                                            .to_file_path()
+                                            .ok()
+                                            .and_then(|p| std::fs::metadata(p).ok())
+                                            .map(|m| m.len());
+                                        let Some(size_bytes) = size_bytes else {
+                                            return (
+                                                StatusCode::INTERNAL_SERVER_ERROR,
+                                                axum::Json(serde_json::json!({
+                                                    "error": format!(
+                                                        "failed to stat local layer file: {url}"
+                                                    ),
+                                                })),
+                                            );
+                                        };
+                                        out.push(serde_json::json!({
+                                            "layer": layer,
+                                            "url": url,
+                                            "size_bytes": size_bytes,
+                                            "expires_at_unix": null,
+                                        }));
+                                    }
+
+                                    // memory:// and friends: only this server can serve them.
+                                    _ => {}
+                                }
+                            }
+
+                            if out.is_empty() {
+                                return (
+                                    StatusCode::NOT_FOUND,
+                                    axum::Json(serde_json::json!({
+                                        "error": "segment has no directly-readable layers \
+                                                  (its data lives only in server memory)",
+                                    })),
+                                );
+                            }
+
+                            (
+                                StatusCode::OK,
+                                axum::Json(serde_json::json!({
+                                    "dataset": dataset,
+                                    "segment": segment,
+                                    "layers": out,
+                                })),
+                            )
+                        }
+                    }
+                }),
             )
             // Read-only source listing of a dataset (original tos://s3://file:// URLs).
             // Lets training-side tooling mirror the data straight from the object store

@@ -10,7 +10,11 @@ mod grpc;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_segment_chunk_provider;
 #[cfg(not(target_arch = "wasm32"))]
+mod http_fetch;
+#[cfg(not(target_arch = "wasm32"))]
 mod object_store_reader;
+#[cfg(not(target_arch = "wasm32"))]
+mod presign;
 #[cfg(not(target_arch = "wasm32"))]
 mod segment_chunk_provider;
 
@@ -18,6 +22,8 @@ mod segment_chunk_provider;
 pub use self::direct_segment_chunk_provider::{DirectReadError, DirectSegmentChunkProvider};
 #[cfg(not(target_arch = "wasm32"))]
 pub use self::object_store_reader::{ObjectStoreReader, ObjectStoreReaderError, build_store};
+#[cfg(not(target_arch = "wasm32"))]
+pub use self::presign::{PresignedLayer, fetch_presigned_layers};
 #[cfg(not(target_arch = "wasm32"))]
 pub use self::segment_chunk_provider::SegmentChunkProvider;
 

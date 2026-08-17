@@ -639,7 +639,7 @@ class DatasetEntry(Entry[DatasetEntryInternal]):
 
         return RegistrationHandle(self._internal.register_prefix(recordings_prefix, layer_name, on_duplicate))
 
-    def segment_store(self, segment_id: str, *, direct: bool | None = None) -> LazyStore:
+    def segment_store(self, segment_id: str, *, direct: bool | str | None = None) -> LazyStore:
         """
         Open a remote segment as a [`LazyStore`][rerun.experimental.LazyStore].
 
@@ -662,8 +662,14 @@ class DatasetEntry(Entry[DatasetEntryInternal]):
             standard `AWS_*` variables) and works only for RRDs with a footer (anything
             registered from `tos://` by recent servers qualifies).
 
+            When `"presigned"`, the server additionally **pre-signs** the storage URLs
+            with its own credentials, so this process needs **no storage credentials at
+            all**: data still flows straight from the object store, authorized purely by
+            the short-lived signatures embedded in the URLs.
+
             When `None` (the default), the `RERUN_SEGMENT_DIRECT_READ` environment
-            variable decides (unset/`0`/`false` → relay through the server, as before).
+            variable decides (unset/`0`/`false` → relay through the server, as before;
+            `1`/`true` → direct; `presigned` → pre-signed).
 
         """
         from rerun.experimental import LazyStore

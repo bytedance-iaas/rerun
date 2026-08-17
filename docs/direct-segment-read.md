@@ -39,7 +39,26 @@ Client (`re_redap_client`, native only):
 
 Python (`rerun_py`):
 
-- `DatasetEntry.segment_store(segment_id, *, direct=None)` — `True` selects the direct provider; `None` (default) defers to the `RERUN_SEGMENT_DIRECT_READ` env var; `False`/unset keeps today's relayed path.
+- `DatasetEntry.segment_store(segment_id, *, direct=None)` — `True` selects the direct provider; `"presigned"` selects the key-less pre-signed mode (below); `None` (default) defers to the `RERUN_SEGMENT_DIRECT_READ` env var (`1`/`true` → direct, `presigned` → pre-signed); `False`/unset keeps today's relayed path.
+
+## Pre-signed mode — no storage credentials in the dataloader
+
+`direct=True` still requires the client to hold TOS credentials. `direct="presigned"` removes that:
+
+```
+dataloader ── GET /catalog/presign?dataset=…&segment=… (+ catalog token) ──► catalog server
+dataloader ◄── per-layer: pre-signed https URL + size + expiry ─────────────┘
+dataloader ◄── ranged GETs, authorized by the URL's embedded signature ──── TOS
+```
+
+- The server signs each layer's object URL **with its own TOS credentials** (`object_store`'s `Signer`); the client never sees a key. Each URL is scoped to exactly one object and expires after `RERUN_PRESIGN_EXPIRY_SECS` (default 3600 s).
+- Getting URLs requires the caller's **catalog token** (read permission suffices) when token auth is on — so "who may read which data" stays a catalog decision, while the bytes still flow straight from the bucket.
+- `file://`-registered layers pass through unsigned (local/test setups); layers that live only in server memory cannot be pre-signed and yield a clear 404.
+
+```python
+lazy = ds.segment_store(segment_id, direct="presigned")   # zero TOS credentials needed
+# or for a whole job:  export RERUN_SEGMENT_DIRECT_READ=presigned
+```
 
 ## Usage
 
@@ -90,4 +109,3 @@ Against real TOS (needs `TOS_*` credentials):
 ## Not in scope (yet)
 
 - The DataFusion path (`dataset.reader()`) still relays through the server; the protocol's `chunk_direct_urls` slot is the designated route for it later.
-- The client still holds TOS credentials. The follow-up ("pre-signed URL" phase) moves signing server-side so dataloaders hold no keys at all; this feature's metadata flow is designed to grow into that.

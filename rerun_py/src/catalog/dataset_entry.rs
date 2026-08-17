@@ -546,61 +546,87 @@ impl PyDatasetEntryInternal {
     /// With `direct=True`, chunk data is range-read straight from the segment's
     /// storage (e.g. object storage) instead of being relayed through the
     /// catalog server; the server is only consulted for the layer storage URLs.
-    /// `direct=None` (the default) reads the `RERUN_SEGMENT_DIRECT_READ`
-    /// environment variable.
+    /// With `direct="presigned"`, the server additionally pre-signs the URLs, so
+    /// this process needs no storage credentials at all. `direct=None` (the
+    /// default) reads the `RERUN_SEGMENT_DIRECT_READ` environment variable
+    /// (`1`/`true` → direct, `presigned` → pre-signed).
     #[pyo3(signature = (segment_id, *, direct = None))]
     fn segment_store(
         self_: PyRef<'_, Self>,
         segment_id: String,
-        direct: Option<bool>,
+        direct: Option<DirectMode>,
     ) -> PyResult<PyLazyStoreInternal> {
         let py = self_.py();
         let _span = read_trace_context_from_python(py, "DatasetEntry.segment_store").entered();
         let connection = self_.client.borrow(py).connection().clone();
+        let token = self_.client.borrow(py).token().map(ToOwned::to_owned);
         let dataset_id = self_.entry_details.id;
         let segment_id = SegmentId::from(segment_id);
 
         let direct = direct.unwrap_or_else(direct_read_default);
 
-        let provider: Arc<dyn re_log_encoding::ChunkProvider> = if direct {
-            let registry = connection.connection_registry().clone();
-            let origin = connection.origin().clone();
-            wait_for_future(py, async move {
-                let client = registry.client(origin).await.map_err(to_py_err)?;
-                let layers = client
-                    .get_segment_layer_urls(dataset_id, &segment_id)
+        let provider: Arc<dyn re_log_encoding::ChunkProvider> = match direct {
+            DirectMode::Relay => {
+                let provider = wait_for_future(py, async {
+                    SegmentChunkProvider::try_new(
+                        connection.connection_registry().clone(),
+                        connection.origin().clone(),
+                        dataset_id,
+                        segment_id,
+                    )
                     .await
-                    .map_err(to_py_err)?;
-                if layers.is_empty() {
-                    return Err(crate::catalog::errors::NotFoundError::new_err(format!(
-                        "segment '{segment_id}' not found in dataset (or it has no layers)"
-                    )));
-                }
-                let layers = layers
-                    .into_iter()
-                    .map(|(name, url)| {
-                        url::Url::parse(&url).map(|url| (name, url)).map_err(|err| {
-                            PyValueError::new_err(format!("invalid storage URL: {err}: {url}"))
+                    .map_err(to_py_err)
+                })?;
+                Arc::new(provider)
+            }
+
+            DirectMode::Direct => {
+                let registry = connection.connection_registry().clone();
+                let origin = connection.origin().clone();
+                wait_for_future(py, async move {
+                    let client = registry.client(origin).await.map_err(to_py_err)?;
+                    let layers = client
+                        .get_segment_layer_urls(dataset_id, &segment_id)
+                        .await
+                        .map_err(to_py_err)?;
+                    if layers.is_empty() {
+                        return Err(crate::catalog::errors::NotFoundError::new_err(format!(
+                            "segment '{segment_id}' not found in dataset (or it has no layers)"
+                        )));
+                    }
+                    let layers = layers
+                        .into_iter()
+                        .map(|(name, url)| {
+                            url::Url::parse(&url).map(|url| (name, url)).map_err(|err| {
+                                PyValueError::new_err(format!("invalid storage URL: {err}: {url}"))
+                            })
                         })
-                    })
-                    .collect::<PyResult<Vec<_>>>()?;
-                let provider = DirectSegmentChunkProvider::try_new(segment_id, layers)
+                        .collect::<PyResult<Vec<_>>>()?;
+                    let provider = DirectSegmentChunkProvider::try_new(segment_id, layers)
+                        .await
+                        .map_err(to_py_err)?;
+                    Ok(Arc::new(provider) as Arc<dyn re_log_encoding::ChunkProvider>)
+                })?
+            }
+
+            DirectMode::Presigned => {
+                let origin = connection.origin().clone();
+                wait_for_future(py, async move {
+                    let layers = re_redap_client::fetch_presigned_layers(
+                        &origin,
+                        dataset_id,
+                        &segment_id,
+                        token.as_deref(),
+                    )
                     .await
                     .map_err(to_py_err)?;
-                Ok(Arc::new(provider) as Arc<dyn re_log_encoding::ChunkProvider>)
-            })?
-        } else {
-            let provider = wait_for_future(py, async {
-                SegmentChunkProvider::try_new(
-                    connection.connection_registry().clone(),
-                    connection.origin().clone(),
-                    dataset_id,
-                    segment_id,
-                )
-                .await
-                .map_err(to_py_err)
-            })?;
-            Arc::new(provider)
+                    let provider =
+                        DirectSegmentChunkProvider::try_new_presigned(segment_id, &layers)
+                            .await
+                            .map_err(to_py_err)?;
+                    PyResult::Ok(Arc::new(provider) as Arc<dyn re_log_encoding::ChunkProvider>)
+                })?
+            }
         };
 
         let lazy = LazyStore::new(provider);
@@ -794,12 +820,55 @@ fn py_object_to_time_cell(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<re
     Ok(re_sdk::TimeCell::new(TimeType::TimestampNs, nanos))
 }
 
+/// How `segment_store` fetches chunk data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DirectMode {
+    /// Through the catalog server's `FetchChunks` (the default).
+    Relay,
+
+    /// Straight from the segment's storage, using this process's credentials.
+    Direct,
+
+    /// Straight from the segment's storage via server-pre-signed URLs — no storage
+    /// credentials in this process.
+    Presigned,
+}
+
+impl<'py> pyo3::FromPyObject<'_, 'py> for DirectMode {
+    type Error = pyo3::PyErr;
+
+    fn extract(ob: pyo3::Borrowed<'_, 'py, PyAny>) -> PyResult<Self> {
+        if let Ok(flag) = ob.extract::<bool>() {
+            return Ok(if flag { Self::Direct } else { Self::Relay });
+        }
+        if let Ok(s) = ob.extract::<String>() {
+            if s.eq_ignore_ascii_case("presigned") {
+                return Ok(Self::Presigned);
+            }
+            return Err(PyValueError::new_err(format!(
+                "invalid direct mode {s:?}: expected True, False, or \"presigned\""
+            )));
+        }
+        Err(PyValueError::new_err(
+            "invalid direct mode: expected True, False, or \"presigned\"",
+        ))
+    }
+}
+
 /// Default for `segment_store(direct=None)`: the `RERUN_SEGMENT_DIRECT_READ` environment variable.
 ///
-/// Truthy values: anything non-empty except `0` / `false` (case-insensitive).
-fn direct_read_default() -> bool {
-    std::env::var("RERUN_SEGMENT_DIRECT_READ").is_ok_and(|v| {
-        let v = v.trim();
-        !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false")
-    })
+/// `presigned` (case-insensitive) selects the pre-signed mode; any other non-empty value
+/// except `0` / `false` selects plain direct reads.
+fn direct_read_default() -> DirectMode {
+    let Ok(value) = std::env::var("RERUN_SEGMENT_DIRECT_READ") else {
+        return DirectMode::Relay;
+    };
+    let value = value.trim();
+    if value.eq_ignore_ascii_case("presigned") {
+        DirectMode::Presigned
+    } else if value.is_empty() || value == "0" || value.eq_ignore_ascii_case("false") {
+        DirectMode::Relay
+    } else {
+        DirectMode::Direct
+    }
 }
