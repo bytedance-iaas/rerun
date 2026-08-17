@@ -26,6 +26,12 @@ pub struct RecordingPanelData<'a> {
     /// All the locally loaded application IDs and the corresponding recordings.
     pub local_apps: Vec<AppIdData<'a>>,
 
+    /// Datasets streamed straight from a TOS/S3 bucket (application ids starting with `tos://`).
+    pub tos_apps: Vec<AppIdData<'a>>,
+
+    /// Datasets streamed straight from Hugging Face (application ids starting with `hf://`).
+    pub hf_apps: Vec<AppIdData<'a>>,
+
     /// All the locally loaded tables.
     pub local_tables: Vec<TableId>,
 
@@ -98,11 +104,21 @@ impl<'a> RecordingPanelData<'a> {
             .collect();
 
         let mut local_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
+        let mut tos_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
+        let mut hf_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
         let mut examples_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
 
         for entity_db in ctx.store_bundle().entity_dbs() {
             let app_id = entity_db.application_id();
             match entity_db.store_class() {
+                EntityDbClass::LocalRecording if app_id.as_str().starts_with("tos://") => {
+                    tos_apps.entry(app_id.clone()).or_default().push(entity_db);
+                }
+
+                EntityDbClass::LocalRecording if app_id.as_str().starts_with("hf://") => {
+                    hf_apps.entry(app_id.clone()).or_default().push(entity_db);
+                }
+
                 EntityDbClass::LocalRecording => local_apps
                     .entry(app_id.clone())
                     .or_default()
@@ -125,6 +141,16 @@ impl<'a> RecordingPanelData<'a> {
             })
             .collect();
 
+        let tos_apps = tos_apps
+            .into_iter()
+            .map(|(app_id, entity_dbs)| AppIdData::new(ctx, app_id, entity_dbs))
+            .collect();
+
+        let hf_apps = hf_apps
+            .into_iter()
+            .map(|(app_id, entity_dbs)| AppIdData::new(ctx, app_id, entity_dbs))
+            .collect();
+
         let example_apps: Vec<_> = examples_apps
             .into_iter()
             .map(|(app_id_or_examples, entity_dbs)| {
@@ -143,6 +169,8 @@ impl<'a> RecordingPanelData<'a> {
         Self {
             servers,
             local_apps,
+            tos_apps,
+            hf_apps,
             local_tables,
             example_apps,
             show_example_section,
@@ -152,6 +180,8 @@ impl<'a> RecordingPanelData<'a> {
 
     pub fn is_empty(&self) -> bool {
         self.local_apps.is_empty()
+            && self.tos_apps.is_empty()
+            && self.hf_apps.is_empty()
             && self.local_tables.is_empty()
             && self.example_apps.is_empty()
             && self.servers.is_empty()
@@ -173,7 +203,12 @@ impl<'a> RecordingPanelData<'a> {
             }
         }
 
-        for local_app in std::iter::chain(&self.local_apps, &self.example_apps) {
+        for local_app in itertools::chain!(
+            &self.local_apps,
+            &self.tos_apps,
+            &self.hf_apps,
+            &self.example_apps
+        ) {
             let store_iter = local_app.iter_loaded_stores();
 
             if let Some(pos) = store_iter.clone().position(|db| db.store_id() == store_id) {
