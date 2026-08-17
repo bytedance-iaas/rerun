@@ -53,6 +53,10 @@ pub enum LogDataSource {
 
     /// A `rerun+http://` URI pointing to a proxy.
     RedapProxy(re_uri::ProxyUri),
+
+    /// A `LeRobot` dataset stored in Volcengine TOS (or any S3-compatible object store),
+    /// streamed episode by episode.
+    TosDataset(crate::tos::TosDatasetSource),
 }
 
 /// Options for [`LogDataSource::from_uri`].
@@ -369,6 +373,8 @@ impl LogDataSource {
             }
 
             Self::RedapProxy(uri) => Ok(re_grpc_client::stream(async_runtime, uri)),
+
+            Self::TosDataset(source) => Ok(crate::tos::stream_lerobot_dataset(source)),
         }
     }
 
@@ -419,6 +425,12 @@ impl LogDataSource {
                 file_extension: None,
                 file_source: None,
             },
+
+            Self::TosDataset(_) => LogDataSourceAnalytics {
+                source_type: "tos_dataset",
+                file_extension: None,
+                file_source: None,
+            },
         }
     }
 
@@ -449,6 +461,7 @@ impl LogDataSource {
             Self::Stdin => Some("-".to_owned()),
             Self::RedapDatasetSegment { uri, .. } => Some(uri.to_string()),
             Self::RedapProxy(uri) => Some(uri.to_string()),
+            Self::TosDataset(source) => Some(source.location.to_string()),
         }
     }
 }
@@ -465,6 +478,28 @@ pub struct LogDataSourceAnalytics {
     /// How the file was opened (e.g., "cli", `file_dialog`, `drag_and_drop`).
     /// Only applicable for file-based sources.
     pub file_source: Option<&'static str>,
+}
+
+// TODO(ab, andreas): This should be replaced by the use of `AsyncRuntimeHandle`. However, this
+// requires:
+// - `AsyncRuntimeHandle` to be moved lower in the crate hierarchy to be available here (unsure
+//   where).
+// - Make sure that all callers of `DataSource::stream` have access to an `AsyncRuntimeHandle`
+//   (maybe it should be in `AppContext`?).
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn spawn_future<F>(future: F)
+where
+    F: std::future::Future<Output = ()> + 'static,
+{
+    wasm_bindgen_futures::spawn_local(future);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn spawn_future<F>(future: F)
+where
+    F: std::future::Future<Output = ()> + 'static + Send,
+{
+    tokio::spawn(future);
 }
 
 #[cfg(test)]

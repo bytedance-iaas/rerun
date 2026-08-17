@@ -8927,14 +8927,19 @@ dependencies = [
 name = "re_data_source"
 version = "0.36.0"
 dependencies = [
+ "ahash",
  "anyhow",
+ "bytes",
  "ehttp",
+ "hmac",
  "itertools 0.15.0",
+ "parking_lot",
  "rayon",
  "re_async",
  "re_format",
  "re_grpc_client",
  "re_importer",
+ "re_lerobot",
  "re_log",
  "re_log_channel",
  "re_log_encoding",
@@ -8942,9 +8947,16 @@ dependencies = [
  "re_redap_client",
  "re_tracing",
  "re_uri",
+ "re_video",
  "re_web",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
  "url",
+ "wasm-bindgen-futures",
  "web-sys",
+ "web-time",
 ]
 
 [[package]]
@@ -9418,6 +9430,7 @@ dependencies = [
  "ahash",
  "anyhow",
  "arrow",
+ "bytes",
  "itertools 0.15.0",
  "parking_lot",
  "parquet",

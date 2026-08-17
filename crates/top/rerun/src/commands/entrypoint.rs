@@ -1869,7 +1869,10 @@ impl ReceiversFromUrlParams {
                         }
                     }
 
-                    LogDataSource::Stdin => {
+                    // Tos is not producible by `from_uri` (it carries credentials and only
+                    // comes from the viewer's dialogs), but harmless to forward as a data source.
+                    LogDataSource::Stdin
+                    | LogDataSource::TosDataset(..) => {
                         data_sources.push(data_source);
                     }
                 }
