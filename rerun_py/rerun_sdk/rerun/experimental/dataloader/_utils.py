@@ -88,10 +88,15 @@ class _WorkerConnection:
         catalog_url: str,
         dataset_name: str,
         fields: dict[str, Field],
+        token: str | None = None,
     ) -> None:
         self._catalog_url = catalog_url
         self._dataset_name = dataset_name
         self._fields = fields
+        # A plain string, so it survives pickling to `spawn`ed DataLoader workers, which
+        # rebuild their own client below. Without it a worker can't authenticate to a
+        # secured catalog server and its first query fails with Unauthenticated.
+        self._token = token
         self._initialized: bool = False
         self._init_pid: int = -1
         self._view: DatasetEntry | None = None
@@ -100,7 +105,12 @@ class _WorkerConnection:
     @classmethod
     def from_source(cls, source: DataSource, fields: dict[str, Field]) -> _WorkerConnection:
         """Build a connection for a [`DataSource`][rerun.experimental.dataloader.DataSource]'s catalog."""
-        return cls(catalog_url=source.dataset.catalog.url, dataset_name=source.dataset.name, fields=fields)
+        return cls(
+            catalog_url=source.dataset.catalog.url,
+            dataset_name=source.dataset.name,
+            fields=fields,
+            token=source.dataset.catalog.token,
+        )
 
     @with_tracing("RerunDataset._ensure_initialized")
     def ensure(self) -> tuple[DatasetEntry, dict[str, ColumnDecoder]]:
@@ -110,7 +120,7 @@ class _WorkerConnection:
             assert self._view is not None  # always set once `_initialized`
             return self._view, self._decoders
 
-        client = CatalogClient(self._catalog_url)
+        client = CatalogClient(self._catalog_url, token=self._token)
         dataset = client.get_dataset(self._dataset_name)
         self._decoders = {k: f.decode for k, f in self._fields.items()}
         # Leave the dataset unscoped here: each read group narrows contents to its own
