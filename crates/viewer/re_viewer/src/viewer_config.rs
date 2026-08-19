@@ -13,7 +13,6 @@ use parking_lot::Mutex;
 #[serde(default)]
 pub struct ViewerConfig {
     pub tos_endpoint: String,
-    pub tos_region: String,
     pub tos_access_key: String,
     pub tos_secret_key: String,
     pub hf_token: String,
@@ -35,7 +34,6 @@ impl Default for ViewerConfig {
     fn default() -> Self {
         Self {
             tos_endpoint: String::new(),
-            tos_region: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             hf_token: String::new(),
@@ -65,7 +63,6 @@ impl ViewerConfig {
             location,
             credentials: re_data_source::tos::TosCredentials {
                 endpoint: self.tos_endpoint.clone(),
-                region: self.tos_region.clone(),
                 access_key: self.tos_access_key.clone(),
                 secret_key: self.tos_secret_key.clone(),
             },
@@ -136,7 +133,6 @@ pub fn request() {
             }
         }
         env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
-        env_override(&mut parsed.tos_region, "TOS_REGION");
         env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
         env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
         env_override(&mut parsed.hf_token, "HF_TOKEN");
@@ -169,7 +165,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.tos_endpoint, "https://tos.example.com");
-        assert_eq!(config.tos_region, "");
         assert!(!config.has_tos_credentials());
     }
 

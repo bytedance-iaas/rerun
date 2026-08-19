@@ -944,9 +944,14 @@ pub fn entity_db_button_ui(
                 .clicked()
             {
                 // Only queues a request: the viewer shows a confirmation dialog first.
+                let app_id = store_id.application_id();
                 re_data_source::rrd_artifacts::request_deletion(
                     re_data_source::rrd_artifacts::ArtifactDeletionRequest {
-                        dataset_url: store_id.application_id().to_string(),
+                        application_id: app_id.to_string(),
+                        dataset_url: re_data_source::lerobot_remote::dataset_url_of(
+                            app_id.as_str(),
+                        )
+                        .unwrap_or_else(|| app_id.to_string()),
                         episode,
                         target_url: artifact_url,
                     },

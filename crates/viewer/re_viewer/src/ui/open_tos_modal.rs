@@ -7,16 +7,14 @@ use re_ui::UiExt as _;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 
-/// Server-side default TOS settings, served by the deployment at `/tos-config.json`.
+/// The deployment's TOS connection settings, served at `/tos-config.json`.
 ///
-/// The deployment can hold default credentials (injected as docker secrets); those are used
-/// unless the user opts into providing their own. The credential fields are never shown in the
-/// dialog unless the user explicitly asks to override them.
+/// Endpoint and credentials (injected as docker secrets) come exclusively from here —
+/// the dialog itself only asks for the dataset URL.
 #[derive(Clone, serde::Deserialize)]
 #[serde(default)]
 struct ServerTosConfig {
     tos_endpoint: String,
-    tos_region: String,
     tos_access_key: String,
     tos_secret_key: String,
 
@@ -33,7 +31,6 @@ impl Default for ServerTosConfig {
     fn default() -> Self {
         Self {
             tos_endpoint: String::new(),
-            tos_region: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             // The artifacts store is on by default, even with no config file at all.
@@ -49,29 +46,17 @@ impl ServerTosConfig {
     }
 }
 
-/// Volcengine TOS regions, for the endpoint/region dropdowns. The bool marks regions that
-/// also have an S3-compatible *internal* endpoint (`…ivolces.com`, reachable only from
-/// inside the Volcengine network). Verified against live DNS + HTTPS probes of
-/// `tos-s3-<region>.[i]volces.com` (2026-08-07); manual entry stays available for
-/// anything not listed here.
-const TOS_REGIONS: &[(&str, bool)] = &[
-    ("cn-beijing", true),
-    ("cn-beijing2", false),
-    ("cn-shanghai", true),
-    ("cn-guangzhou", true),
-    ("cn-hongkong", false),
-    ("ap-southeast-1", true),
-    ("ap-southeast-2", false),
-    ("ap-southeast-3", false),
+/// Volcengine TOS regions, for the Region dropdown — the list and order mirror the
+/// volcengine console's create-bucket region picker (2026-08-18). The list may lag
+/// behind newly opened regions, so free-text entry stays available.
+const TOS_REGIONS: &[&str] = &[
+    "cn-beijing",
+    "ap-southeast-1",
+    "ap-southeast-3",
+    "cn-guangzhou",
+    "cn-hongkong",
+    "cn-shanghai",
 ];
-
-fn public_endpoint(region: &str) -> String {
-    format!("https://tos-s3-{region}.volces.com")
-}
-
-fn internal_endpoint(region: &str) -> String {
-    format!("https://tos-s3-{region}.ivolces.com")
-}
 
 /// Dialog for opening a `LeRobot` dataset stored in Volcengine TOS.
 #[derive(Default)]
@@ -80,13 +65,11 @@ pub struct OpenTosModal {
     just_opened: bool,
 
     url: String,
-    endpoint: String,
-    region: String,
 
-    /// Show the AK/SK inputs and use them instead of the server-side default credentials.
-    use_custom_credentials: bool,
-    access_key: String,
-    secret_key: String,
+    /// The bucket's region. Defaults to the deployment endpoint's region; the endpoint is
+    /// derived from this (`re_data_source::tos::endpoint_for_region`), so this is the only
+    /// connection field the user ever touches.
+    region: String,
 
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
@@ -96,7 +79,6 @@ pub struct OpenTosModal {
     /// config looks exactly like "this deployment has no credentials" and is undebuggable.
     server_config: Arc<Mutex<Option<Result<ServerTosConfig, String>>>>,
     server_config_requested: bool,
-    server_config_applied: bool,
 }
 
 impl OpenTosModal {
@@ -106,13 +88,10 @@ impl OpenTosModal {
         self.fetch_server_config();
     }
 
-    /// Open with the URL and non-secret connection fields pre-filled (e.g. from the welcome
-    /// screen's "recently opened" list). Credentials are never pre-filled from outside.
-    pub fn open_prefilled(&mut self, url: &str, endpoint: &str, region: &str) {
+    /// Open with the dataset URL (and its remembered region) pre-filled, e.g. from the
+    /// welcome screen's "recently opened" list.
+    pub fn open_prefilled(&mut self, url: &str, region: &str) {
         self.url = url.to_owned();
-        if !endpoint.is_empty() {
-            self.endpoint = endpoint.to_owned();
-        }
         if !region.is_empty() {
             self.region = region.to_owned();
         }
@@ -170,7 +149,6 @@ impl OpenTosModal {
                 }
             }
             env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
-            env_override(&mut parsed.tos_region, "TOS_REGION");
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
@@ -184,44 +162,20 @@ impl OpenTosModal {
         }
     }
 
-    /// Pre-fill still-empty (non-secret) fields once the server defaults arrive.
-    fn apply_server_config(&mut self) {
-        if self.server_config_applied {
-            return;
-        }
-        let Some(Ok(config)) = self.server_config.lock().clone() else {
-            return;
-        };
-        self.server_config_applied = true;
-
-        if self.endpoint.is_empty() {
-            self.endpoint = config.tos_endpoint.clone();
-        }
-        if self.region.is_empty() {
-            self.region = config.tos_region.clone();
-        }
-
-        // Without server-side default credentials the user must provide their own.
-        if !config.has_credentials() {
-            self.use_custom_credentials = true;
-        }
-        // The AK/SK input fields themselves are never pre-filled.
-    }
-
     pub fn ui(&mut self, ui: &egui::Ui, command_sender: &CommandSender) {
-        self.apply_server_config();
-
         let fetched = self.server_config.lock().clone();
         let config_resolved = fetched.is_some();
         let config_error = fetched.as_ref().and_then(|r| r.as_ref().err().cloned());
         let server_config = fetched.and_then(Result::ok).unwrap_or_default();
 
-        // Once we know there are no server-side credentials (config arrived without them, or
-        // the fetch failed), the user's own AK/SK are the only way forward — force the custom
-        // fields open instead of leaving both paths disabled.
-        if config_resolved && !server_config.has_credentials() {
-            self.use_custom_credentials = true;
+        // Default region: wherever the deployment's endpoint lives.
+        if self.region.is_empty() && config_resolved {
+            self.region = re_data_source::tos::region_from_endpoint(&server_config.tos_endpoint);
         }
+        let resolved_endpoint = re_data_source::tos::endpoint_for_region(
+            &self.region,
+            &server_config.tos_endpoint,
+        );
 
         self.modal.ui(
             ui.ctx(),
@@ -244,44 +198,9 @@ impl OpenTosModal {
                         }
                         ui.end_row();
 
-                        // Endpoint and region: free text with a dropdown of known values.
-                        // The list may lag behind newly opened regions, so typing always works.
-                        ui.label("Endpoint:");
-                        ui.horizontal(|ui| {
-                            let menu_width = 20.0;
-                            egui::TextEdit::singleline(&mut self.endpoint)
-                                .hint_text("https://tos-s3-cn-beijing.volces.com")
-                                .desired_width(
-                                    ui.available_width() - menu_width - ui.spacing().item_spacing.x,
-                                )
-                                .show(ui);
-                            ui.menu_button("⏷", |ui| {
-                                for (region, _) in TOS_REGIONS {
-                                    if ui.button(public_endpoint(region)).clicked() {
-                                        self.endpoint = public_endpoint(region);
-                                        self.region = (*region).to_owned();
-                                        ui.close();
-                                    }
-                                }
-                                ui.separator();
-                                for (region, has_internal) in TOS_REGIONS {
-                                    if *has_internal
-                                        && ui
-                                            .button(format!(
-                                                "{} (internal)",
-                                                internal_endpoint(region)
-                                            ))
-                                            .clicked()
-                                    {
-                                        self.endpoint = internal_endpoint(region);
-                                        self.region = (*region).to_owned();
-                                        ui.close();
-                                    }
-                                }
-                            });
-                        });
-                        ui.end_row();
-
+                        // Region: free text with a dropdown of known values. The list may lag
+                        // behind newly opened regions, so typing always works. The endpoint is
+                        // derived from the region, so there is nothing else to fill.
                         ui.label("Region:");
                         ui.horizontal(|ui| {
                             let menu_width = 20.0;
@@ -292,12 +211,9 @@ impl OpenTosModal {
                                 )
                                 .show(ui);
                             ui.menu_button("⏷", |ui| {
-                                for (region, _) in TOS_REGIONS {
+                                for region in TOS_REGIONS {
                                     if ui.button(*region).clicked() {
                                         self.region = (*region).to_owned();
-                                        if self.endpoint.is_empty() {
-                                            self.endpoint = public_endpoint(region);
-                                        }
                                         ui.close();
                                     }
                                 }
@@ -309,7 +225,7 @@ impl OpenTosModal {
                 // In the browser the requests go out from the user's machine, so internal
                 // endpoints (only routable inside the Volcengine network) won't work.
                 #[cfg(target_arch = "wasm32")]
-                if self.endpoint.contains(".ivolces.com") {
+                if resolved_endpoint.contains(".ivolces.com") {
                     ui.warning_label(
                         "This is an internal endpoint (.ivolces.com), only reachable from \
                          inside the Volcengine network. In a browser you most likely need \
@@ -319,36 +235,9 @@ impl OpenTosModal {
 
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
-                        "Failed to load the server-side defaults (endpoint, credentials): \
-                         {err}\nFile: tos-config.json — enter the values manually below.",
+                        "Failed to load the deployment's TOS settings (endpoint, credentials): \
+                         {err}\nFile: tos-config.json — opening datasets needs this fixed.",
                     ));
-                }
-
-                // Credentials: the deployment's docker-secret defaults are used unless the user
-                // opts into providing their own.
-                ui.add_space(2.0);
-                ui.add_enabled_ui(server_config.has_credentials(), |ui| {
-                    ui.re_checkbox(&mut self.use_custom_credentials, "Use non-default AK/SK");
-                });
-
-                if self.use_custom_credentials {
-                    egui::Grid::new("tos_credential_fields")
-                        .num_columns(2)
-                        .spacing([8.0, 6.0])
-                        .show(ui, |ui| {
-                            ui.label("Access key:");
-                            egui::TextEdit::singleline(&mut self.access_key)
-                                .desired_width(f32::INFINITY)
-                                .show(ui);
-                            ui.end_row();
-
-                            ui.label("Secret key:");
-                            egui::TextEdit::singleline(&mut self.secret_key)
-                                .password(true)
-                                .desired_width(f32::INFINITY)
-                                .show(ui);
-                            ui.end_row();
-                        });
                 }
 
                 // Converted episodes are uploaded to a shared rrd artifacts store by default, so the next
@@ -362,27 +251,26 @@ impl OpenTosModal {
                     self.artifact_upload_disabled = !upload;
                 }
 
-                let credentials_ok = if self.use_custom_credentials {
-                    !self.access_key.trim().is_empty() && !self.secret_key.trim().is_empty()
-                } else {
-                    server_config.has_credentials()
-                };
+                // Credentials come exclusively from the deployment config (docker secrets
+                // on the web, tos-config.json natively); the endpoint is derived from the
+                // chosen region. The signing region in turn is derived from the endpoint
+                // (see `TosCredentials::region`).
+                let connection_ok =
+                    !self.region.trim().is_empty() && server_config.has_credentials();
 
                 let location = TosLocation::parse(&self.url);
-                let can_open = location.is_some() && !self.endpoint.is_empty() && credentials_ok;
+                let can_open = location.is_some() && connection_ok;
 
                 if !self.url.is_empty() && location.is_none() {
                     ui.error_label("The dataset URL should look like tos://bucket/prefix/");
-                } else if !credentials_ok {
-                    if self.use_custom_credentials {
-                        ui.label("Enter an access key and a secret key.");
+                } else if !connection_ok {
+                    ui.label(if !config_resolved {
+                        "Loading the deployment's TOS settings…"
+                    } else if self.region.trim().is_empty() {
+                        "Region is required."
                     } else {
-                        ui.label(
-                            "This deployment has no default credentials — provide your own AK/SK.",
-                        );
-                    }
-                } else if !can_open {
-                    ui.label("Endpoint is required.");
+                        "This deployment has no TOS credentials configured (tos-config.json)."
+                    });
                 } else {
                     ui.label(
                         "Episodes appear immediately and stream in one by one; \
@@ -401,23 +289,10 @@ impl OpenTosModal {
                         || can_open && ui.input(|i| i.key_pressed(egui::Key::Enter))
                     {
                         if let Some(location) = location {
-                            let (access_key, secret_key) = if self.use_custom_credentials {
-                                (
-                                    self.access_key.trim().to_owned(),
-                                    self.secret_key.trim().to_owned(),
-                                )
-                            } else {
-                                (
-                                    server_config.tos_access_key.clone(),
-                                    server_config.tos_secret_key.clone(),
-                                )
-                            };
-
                             let credentials = TosCredentials {
-                                endpoint: self.endpoint.trim().to_owned(),
-                                region: self.region.trim().to_owned(),
-                                access_key,
-                                secret_key,
+                                endpoint: resolved_endpoint.clone(),
+                                access_key: server_config.tos_access_key.clone(),
+                                secret_key: server_config.tos_secret_key.clone(),
                             };
                             // The artifacts bucket uses the same credentials as the source.
                             let rrd_artifacts = re_data_source::rrd_artifacts::parse_artifacts_url(

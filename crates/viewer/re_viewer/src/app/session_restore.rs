@@ -86,21 +86,13 @@ impl App {
                         );
                         continue;
                     }
-                    let endpoint = if recent.endpoint.is_empty() {
-                        config.tos_endpoint.clone()
-                    } else {
-                        recent.endpoint.clone()
-                    };
-                    let region = if recent.region.is_empty() {
-                        config.tos_region.clone()
-                    } else {
-                        recent.region.clone()
-                    };
                     LogDataSource::TosDataset(re_data_source::tos::TosDatasetSource {
                         location,
                         credentials: re_data_source::tos::TosCredentials {
-                            endpoint,
-                            region,
+                            endpoint: re_data_source::tos::endpoint_for_region(
+                                &recent.region,
+                                &config.tos_endpoint,
+                            ),
                             access_key: config.tos_access_key.clone(),
                             secret_key: config.tos_secret_key.clone(),
                         },

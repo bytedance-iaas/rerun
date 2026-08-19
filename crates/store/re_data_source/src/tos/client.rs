@@ -25,10 +25,71 @@ pub struct TosCredentials {
     /// E.g. `https://tos-s3-cn-beijing.volces.com`.
     pub endpoint: String,
 
-    /// E.g. `cn-beijing`.
-    pub region: String,
     pub access_key: String,
     pub secret_key: String,
+}
+
+impl TosCredentials {
+    /// The SigV4 signing region, derived from the endpoint.
+    ///
+    /// The region is embedded in the endpoint host for both TOS
+    /// (`tos-s3-<region>.[i]volces.com`) and AWS (`s3.<region>.amazonaws.com`), so asking
+    /// users for it separately is redundant — TOS offers no discovery either (a probe
+    /// against the wrong region just answers `NoSuchBucket`). Unrecognized endpoints
+    /// (e.g. MinIO, which does not validate the region by default) fall back to
+    /// `cn-beijing`, our default deployment region.
+    pub fn region(&self) -> String {
+        region_from_endpoint(&self.endpoint)
+    }
+}
+
+/// The endpoint to use for a user-chosen region, given the deployment's configured endpoint.
+///
+/// The deployment endpoint is kept verbatim as long as the region matches it — it may be an
+/// internal address (`….ivolces.com`, cheaper and faster inside the Volcengine network) that
+/// a rebuilt public URL would lose. Any other region gets the standard public pattern.
+pub fn endpoint_for_region(region: &str, deployment_endpoint: &str) -> String {
+    let region = region.trim();
+    let deployment_endpoint = deployment_endpoint.trim();
+
+    if region.is_empty()
+        || (!deployment_endpoint.is_empty() && region == region_from_endpoint(deployment_endpoint))
+    {
+        if !deployment_endpoint.is_empty() {
+            return deployment_endpoint.to_owned();
+        }
+    }
+
+    let region = if region.is_empty() { "cn-beijing" } else { region };
+    format!("https://tos-s3-{region}.volces.com")
+}
+
+/// See [`TosCredentials::region`].
+pub fn region_from_endpoint(endpoint: &str) -> String {
+    let host = endpoint
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    let host = host.split(['/', ':']).next().unwrap_or(host);
+    let labels: Vec<&str> = host.split('.').collect();
+
+    // tos-s3-<region>.volces.com / tos-s3-<region>.ivolces.com
+    if let Some(region) = labels
+        .first()
+        .and_then(|first| first.strip_prefix("tos-s3-").or_else(|| first.strip_prefix("tos-")))
+        && !region.is_empty()
+    {
+        return region.to_owned();
+    }
+
+    // s3.<region>.amazonaws.com
+    if host.ends_with(".amazonaws.com")
+        && labels.len() == 4
+        && (labels[0] == "s3" || labels[0].starts_with("s3-"))
+    {
+        return labels[1].to_owned();
+    }
+
+    "cn-beijing".to_owned()
 }
 
 /// One object returned by a bucket listing.
@@ -60,6 +121,70 @@ impl TosClient {
         Self {
             credentials,
             bucket: bucket.into(),
+        }
+    }
+
+    pub fn bucket(&self) -> &str {
+        &self.bucket
+    }
+
+    /// The bucket's current CORS configuration XML; `None` if it has none.
+    pub async fn get_bucket_cors(&self) -> anyhow::Result<Option<String>> {
+        let response = self
+            .signed_request(
+                "GET",
+                "/",
+                &[("cors".to_owned(), String::new())],
+                Vec::new(),
+                Vec::new(),
+                SMALL_REQUEST_TIMEOUT,
+            )
+            .await?;
+        match response.status {
+            200 => Ok(Some(String::from_utf8_lossy(&response.bytes).into_owned())),
+            404 => Ok(None), // NoSuchCORSConfiguration
+            403 => anyhow::bail!(
+                "GetBucketCors denied (HTTP 403) — these credentials cannot manage this bucket's CORS\nBucket: {}",
+                self.bucket
+            ),
+            other => anyhow::bail!(
+                "GetBucketCors failed with HTTP {other}: {}\nBucket: {}",
+                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
+                self.bucket
+            ),
+        }
+    }
+
+    /// Replace the bucket's CORS configuration (S3 semantics: a full replace — merge the
+    /// existing rules in before calling, see `cors::ensure_bucket_cors`).
+    pub async fn put_bucket_cors(&self, config_xml: &str) -> anyhow::Result<()> {
+        use base64::Engine as _;
+        use md5::Digest as _;
+
+        let body = config_xml.as_bytes().to_vec();
+        // Content-MD5 is required by the S3 protocol for PutBucketCors.
+        let content_md5 = base64::engine::general_purpose::STANDARD.encode(md5::Md5::digest(&body));
+        let response = self
+            .signed_request(
+                "PUT",
+                "/",
+                &[("cors".to_owned(), String::new())],
+                vec![("content-md5".to_owned(), content_md5)],
+                body,
+                SMALL_REQUEST_TIMEOUT,
+            )
+            .await?;
+        match response.status {
+            200 | 204 => Ok(()),
+            403 => anyhow::bail!(
+                "PutBucketCors denied (HTTP 403) — these credentials cannot manage this bucket's CORS\nBucket: {}",
+                self.bucket
+            ),
+            other => anyhow::bail!(
+                "PutBucketCors failed with HTTP {other}: {}\nBucket: {}",
+                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
+                self.bucket
+            ),
         }
     }
 
@@ -331,6 +456,12 @@ impl TosClient {
         body: Vec<u8>,
         hard_timeout: std::time::Duration,
     ) -> anyhow::Result<ehttp::Response> {
+        // In the browser, a bucket without our CORS rule is unreadable no matter how valid
+        // the signature is — so before the first request of the session to this bucket, ask
+        // the catalog server (same-origin, exempt from CORS) to install the rule.
+        #[cfg(target_arch = "wasm32")]
+        super::cors::ensure_cors_via_server_once(&self.bucket).await;
+
         let host = self.host();
         let (amz_date, date) = amz_timestamps();
 
@@ -370,7 +501,7 @@ impl TosClient {
             uri_encode(path, false),
         );
 
-        let region = &self.credentials.region;
+        let region = &self.credentials.region();
         let scope = format!("{date}/{region}/s3/aws4_request");
         let string_to_sign = format!(
             "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
@@ -423,6 +554,15 @@ impl TosClient {
             }
         }
         request.headers.insert("authorization", &authorization);
+
+        // Browser only: bypass the HTTP cache's stale entries. TOS sends no
+        // `Vary: Origin`, so a response cached from a no-CORS context (address-bar
+        // visit, pre-CORS-config attempt) permanently fails every later CORS fetch of
+        // that URL with an opaque "Failed to fetch" — hit three times in the field.
+        // `cache-control` is a CORS-safelisted request header: no preflight cost,
+        // just an ETag revalidation per request.
+        #[cfg(target_arch = "wasm32")]
+        request.headers.insert("cache-control", "no-cache");
 
         crate::http_client::fetch_async_with_timeout(request, hard_timeout)
             .await
@@ -553,6 +693,48 @@ fn xml_unescape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn endpoint_resolution_for_region() {
+        // Same region as the deployment endpoint: keep it verbatim (internal address too).
+        assert_eq!(
+            endpoint_for_region("cn-beijing", "https://tos-s3-cn-beijing.ivolces.com"),
+            "https://tos-s3-cn-beijing.ivolces.com"
+        );
+        // Empty region: the deployment endpoint wins.
+        assert_eq!(
+            endpoint_for_region("", "https://tos-s3-cn-shanghai.volces.com"),
+            "https://tos-s3-cn-shanghai.volces.com"
+        );
+        // A different region: standard public pattern.
+        assert_eq!(
+            endpoint_for_region("cn-guangzhou", "https://tos-s3-cn-beijing.ivolces.com"),
+            "https://tos-s3-cn-guangzhou.volces.com"
+        );
+        // No deployment endpoint at all.
+        assert_eq!(
+            endpoint_for_region("ap-southeast-1", ""),
+            "https://tos-s3-ap-southeast-1.volces.com"
+        );
+        assert_eq!(endpoint_for_region("", ""), "https://tos-s3-cn-beijing.volces.com");
+    }
+
+    #[test]
+    fn region_is_derived_from_endpoint() {
+        for (endpoint, expected) in [
+            ("https://tos-s3-cn-beijing.volces.com", "cn-beijing"),
+            ("https://tos-s3-cn-beijing2.volces.com", "cn-beijing2"),
+            ("https://tos-s3-ap-southeast-1.ivolces.com", "ap-southeast-1"),
+            ("http://tos-s3-cn-shanghai.volces.com/", "cn-shanghai"),
+            ("https://tos-cn-guangzhou.volces.com", "cn-guangzhou"),
+            ("https://s3.us-west-2.amazonaws.com", "us-west-2"),
+            // Unrecognized (e.g. MinIO): default region.
+            ("http://minio.local:9000", "cn-beijing"),
+            ("https://storage.example.com", "cn-beijing"),
+        ] {
+            assert_eq!(region_from_endpoint(endpoint), expected, "endpoint: {endpoint}");
+        }
+    }
 
     #[test]
     fn uri_encode_leaves_unreserved_chars() {

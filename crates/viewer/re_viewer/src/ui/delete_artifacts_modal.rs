@@ -33,7 +33,7 @@ impl DeleteArtifactsModal {
                     );
                 } else {
                     let count = re_data_source::lerobot_remote::dataset_artifact_count(
-                        &request.dataset_url,
+                        &request.application_id,
                     );
                     ui.label(format!(
                         "This deletes ALL converted rrds of this dataset ({count} known) \
@@ -56,7 +56,7 @@ impl DeleteArtifactsModal {
                     ));
                     if delete.clicked() {
                         match re_data_source::lerobot_remote::dataset_artifacts_config(
-                            &request.dataset_url,
+                            &request.application_id,
                         ) {
                             Some(config) => {
                                 re_data_source::rrd_artifacts::spawn_deletion(

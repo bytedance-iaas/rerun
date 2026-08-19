@@ -27,9 +27,12 @@ impl ContextMenuAction for DeleteRrdArtifact {
         else {
             return;
         };
+        let app_id = store_id.application_id();
         re_data_source::rrd_artifacts::request_deletion(
             re_data_source::rrd_artifacts::ArtifactDeletionRequest {
-                dataset_url: store_id.application_id().to_string(),
+                application_id: app_id.to_string(),
+                dataset_url: re_data_source::lerobot_remote::dataset_url_of(app_id.as_str())
+                    .unwrap_or_else(|| app_id.to_string()),
                 episode: re_data_source::lerobot_remote::episode_queue_index(store_id),
                 target_url,
             },
@@ -63,13 +66,16 @@ impl ContextMenuAction for DeleteDatasetRrdArtifacts {
         else {
             return;
         };
+        let dataset_url = re_data_source::lerobot_remote::dataset_url_of(app_id.as_str())
+            .unwrap_or_else(|| app_id.to_string());
         let dir = re_data_source::rrd_artifacts::dataset_artifacts_dir(
             &config.location.prefix,
-            app_id.as_str(),
+            &dataset_url,
         );
         re_data_source::rrd_artifacts::request_deletion(
             re_data_source::rrd_artifacts::ArtifactDeletionRequest {
-                dataset_url: app_id.to_string(),
+                application_id: app_id.to_string(),
+                dataset_url,
                 episode: None,
                 target_url: format!("tos://{}/{dir}", config.location.bucket),
             },

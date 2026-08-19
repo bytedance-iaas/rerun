@@ -457,6 +457,13 @@ impl PauseState {
 /// The shared state of one active stream.
 #[derive(Default)]
 struct StreamState {
+    /// The original dataset URL (`tos://…` / `hf://…`).
+    ///
+    /// Since 0.36.0 application ids are restricted to entry-name characters, so the URL is
+    /// normalized before becoming the app id and can no longer be recovered from it. The UI
+    /// resolves the real URL through [`dataset_url_of`] instead.
+    dataset_url: Mutex<String>,
+
     /// Episode/file indices the user asked to load first (most recent last).
     requests: Mutex<Vec<usize>>,
 
@@ -793,6 +800,53 @@ pub fn is_dataset_streaming(application_id: &str) -> bool {
     ACTIVE_STREAMS.lock().contains_key(application_id)
 }
 
+/// A valid application id derived from a dataset URL.
+///
+/// 0.36.0 restricts application ids to entry-name characters, and `ApplicationId` warns
+/// loudly ("requires migration") whenever it has to normalize — which for us would be on
+/// every remote dataset. So map the URL to a valid id ourselves: disallowed characters
+/// (slashes, dots, …) become '-', over-long ids are truncated with a short hash suffix.
+/// Lossy on purpose — the UI recovers the real URL via [`dataset_url_of`].
+pub fn dataset_application_id(dataset_url: &str) -> ApplicationId {
+    // Entry-name characters, minus '.' which application ids additionally forbid.
+    let mut id: String = dataset_url
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ' ' | '[' | ']' | ':') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+
+    const MAX_LEN: usize = 180;
+    if id.len() > MAX_LEN {
+        // FNV-1a, so equal URLs keep colliding-free ids after truncation.
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for byte in dataset_url.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        id.truncate(MAX_LEN - 9); // ASCII-only after the mapping above, so safe.
+        id.push('-');
+        id.push_str(&format!("{:08x}", hash & 0xffff_ffff));
+    }
+
+    ApplicationId::new_or_unknown(id)
+}
+
+/// The original dataset URL (`tos://…` / `hf://…`) behind an application id, if the dataset
+/// has an active stream. The app id itself is a normalized form of the URL and cannot be
+/// parsed back into one.
+pub fn dataset_url_of(application_id: &str) -> Option<String> {
+    ACTIVE_STREAMS
+        .lock()
+        .get(application_id)
+        .map(|state| state.dataset_url.lock().clone())
+        .filter(|url| !url.is_empty())
+}
+
 /// Whether this recording is a dataset stream's trailing "⋯ N more" placeholder entry
 /// (an action row, not a real episode — it must never take focus).
 pub fn is_more_placeholder(store_id: &StoreId) -> bool {
@@ -860,8 +914,9 @@ struct StreamGuard {
 }
 
 impl StreamGuard {
-    fn new(application_id: &ApplicationId) -> Self {
+    fn new(application_id: &ApplicationId, dataset_url: &str) -> Self {
         let state = Arc::new(StreamState::default());
+        *state.dataset_url.lock() = dataset_url.to_owned();
         ACTIVE_STREAMS
             .lock()
             .insert(application_id.to_string(), state.clone());
@@ -1359,9 +1414,7 @@ async fn stream_items<S: DatasetStore>(
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
     mode: StreamMode,
 ) -> anyhow::Result<()> {
-    // 0.36.0: application ids are restricted to entry-name characters; URLs get
-    // normalized (with a short hash suffix) rather than used verbatim.
-    let application_id = ApplicationId::new_or_unknown(dataset_url.to_owned());
+    let application_id = dataset_application_id(dataset_url);
     let noun = remote.item_noun();
     let id_prefix = remote.recording_id_prefix();
 
@@ -1372,7 +1425,7 @@ async fn stream_items<S: DatasetStore>(
     let total = indices.len();
     re_log::info!("Loaded dataset metadata: {total} {noun}\nDataset: {dataset_url}");
 
-    let guard = StreamGuard::new(&application_id);
+    let guard = StreamGuard::new(&application_id, dataset_url);
     guard.state.n_items.store(total, Ordering::SeqCst);
     *guard.state.artifacts_config.lock() = rrd_artifacts.clone();
     if let Some(artifacts) = &rrd_artifacts {
@@ -1784,6 +1837,12 @@ async fn prefetch_artifacts(
         candidates.len()
     );
 
+    // Artifact keys mirror the *source URL*; since 0.36.0 the application id is a
+    // normalized (lossy) form of it, so resolve the real URL from the stream registry.
+    let dataset_url =
+        dataset_url_of(application_id.as_str()).unwrap_or_else(|| application_id.to_string());
+    let dataset_url = dataset_url.as_str();
+
     use futures_util::stream::StreamExt as _;
     let state: &StreamState = &guard.state;
     let id_prefix = remote.recording_id_prefix();
@@ -1795,7 +1854,7 @@ async fn prefetch_artifacts(
             };
             let key = crate::rrd_artifacts::object_key(
                 &artifacts.location.prefix,
-                application_id.as_str(),
+                dataset_url,
                 &format!("{id_prefix}{index}"),
             );
             try_load_rrd_artifact(
@@ -1858,9 +1917,12 @@ async fn load_one_item<S: DatasetStore>(
     let episode = EpisodeIndex(index);
     let artifact_ctx = rrd_artifacts.and_then(|artifacts| {
         let fingerprint = episode_artifact_fingerprint(remote, episode)?;
+        // Keys mirror the source URL, not the (normalized) application id.
+        let dataset_url = dataset_url_of(application_id.as_str())
+            .unwrap_or_else(|| application_id.to_string());
         let key = crate::rrd_artifacts::object_key(
             &artifacts.location.prefix,
-            application_id.as_str(),
+            &dataset_url,
             &format!("{}{index}", remote.recording_id_prefix()),
         );
         Some((artifacts, key, fingerprint))

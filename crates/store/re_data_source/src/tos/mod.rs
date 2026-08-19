@@ -9,9 +9,10 @@
 //!    resulting `LogMsg`s. Selecting an episode in the viewer moves it to the front of the queue.
 
 pub(crate) mod client;
+pub mod cors;
 mod lerobot_stream;
 
-pub use client::{TosClient, TosCredentials};
+pub use client::{TosClient, TosCredentials, endpoint_for_region, region_from_endpoint};
 pub use lerobot_stream::{TosDatasetSource, convert_lerobot_dataset, stream_lerobot_dataset};
 
 /// A `tos://bucket/prefix/` dataset location.
