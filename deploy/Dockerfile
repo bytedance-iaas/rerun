@@ -189,6 +189,47 @@ ENV CARGO_PROFILE_RELEASE_LTO=${RELEASE_LTO} \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${RELEASE_CGU}
 RUN env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} cargo build --package rerun-cli --release --no-default-features --features native_viewer,map_view,nasm,oss_server
 
+# ---- Python SDK wheel, from the same sources as the server above. Shipped in the image
+# and served by nginx at /sdk/ (see nginx.conf), so the SDK a user installs from a
+# deployment always matches the catalog server it talks to — no separate publishing.
+# Details:
+# - RERUN_ALLOW_MISSING_BIN=1: the wheel ships without the `rerun` CLI binary (users of
+#   the SDK talk to the deployed server; keeps the wheel small).
+# - abi3-py310: one wheel covers every Python >= 3.10.
+# - --compatibility linux: skip the manylinux audit; the wheel needs a glibc at least as
+#   new as this build image's (bookworm, 2.36) — fine for in-cloud training images.
+# - Reuses /rerun/target from the cargo build above, so the extra cost is only the
+#   rerun_py bindings crate.
+# BUILD_SDK_WHEEL=0 skips all of it (faster dev images; /sdk/ will just be empty).
+ARG BUILD_SDK_WHEEL=1
+ARG PIP_INDEX_URL=""
+RUN if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-venv python3-dev \
+    protobuf-compiler libprotobuf-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/maturin \
+    && env ${PIP_INDEX_URL:+PIP_INDEX_URL=${PIP_INDEX_URL}} \
+    /opt/maturin/bin/pip install --no-cache-dir 'maturin>=1.8,<2'; \
+    fi
+# The repo's cargo config pins PYO3_CONFIG_FILE at rerun_py/pyo3-build.cfg — a generated,
+# gitignored file (pixi writes it on dev machines). Synthesize it here from the build
+# python, or every pyo3 build script fails with "failed to open PyO3 config file".
+RUN if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
+    printf 'implementation=CPython\nversion=3.%s\nshared=true\nabi3=true\nexecutable=%s\npointer_width=64\nbuild_flags=\nsuppress_build_script_link_lines=false\n' \
+    "$(/usr/bin/python3 -c 'import sys; print(sys.version_info[1])')" \
+    /usr/bin/python3 > rerun_py/pyo3-build.cfg \
+    && env RERUN_ALLOW_MISSING_BIN=1 ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} \
+    /opt/maturin/bin/maturin build --release --compatibility linux \
+    --manifest-path rerun_py/Cargo.toml -o /rerun/downloads/sdk; \
+    else mkdir -p /rerun/downloads/sdk; fi
+
+# The Linux desktop viewer, downloadable from the deployment (/downloads/viewer/): the
+# very binary built above, gzipped. Fixed filename on purpose — the URL never changes,
+# re-downloading it after a deployment upgrade *is* the version upgrade.
+RUN mkdir -p /rerun/downloads/viewer \
+    && tar -C /rerun/target/release -czf /rerun/downloads/viewer/rerun-linux-x86_64.tar.gz rerun
+
 # ---------------- runtime: nginx (web mode) + Xvnc/noVNC (native mode) ----------------
 # trixie for its recent Mesa: bookworm's Mesa 22.3 can't software-render rerun
 # (Vulkan/lavapipe presents nothing through Xvnc; GL/llvmpipe lacks R32Float rendering).
@@ -262,6 +303,9 @@ RUN rm -f /etc/nginx/sites-enabled/default && mkdir -p /rrd-cache && chown www-d
 
 # Native viewer binary.
 COPY --from=builder-native /rerun/target/release/rerun /usr/local/bin/rerun
+# Download area served by nginx at /downloads/ (see nginx.conf): the matching Python
+# SDK wheel (sdk/) and the Linux desktop viewer (viewer/), both from this same build.
+COPY --from=builder-native /rerun/downloads/ /usr/share/nginx/downloads/
 
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
