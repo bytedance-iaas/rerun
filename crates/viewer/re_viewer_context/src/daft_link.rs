@@ -70,13 +70,20 @@ pub fn dataset_name_from_tos_url(tos_url: &str) -> Option<&str> {
 /// `None` when there is no console address (always, natively) or the URL has no
 /// dataset segment.
 ///
-/// The payload is the complete `tos://` path, so the console can address datasets
-/// anywhere, not just direct children of its own data root.
-pub fn diagnose_url(tos_url: &str) -> Option<String> {
+/// The payload is the complete `tos://` path plus, when known, the bucket's region
+/// (`&region=cn-beijing`) — the console's two connection inputs are exactly URL +
+/// region, and prefilling both means the hand-off is one click. The console treats
+/// a missing region as "deployment default", so `None` degrades gracefully.
+pub fn diagnose_url(tos_url: &str, region: Option<&str>) -> Option<String> {
     let base = base_url()?;
     // Only link datasets that actually have a dataset segment.
     dataset_name_from_tos_url(tos_url)?;
-    Some(format!("{base}?dataset={}", encode_query_value(tos_url)))
+    let mut url = format!("{base}?dataset={}", encode_query_value(tos_url));
+    if let Some(region) = region.filter(|r| !r.is_empty()) {
+        use std::fmt::Write as _;
+        write!(url, "&region={}", encode_query_value(region)).ok();
+    }
+    Some(url)
 }
 
 /// Percent-encode a query-string value (RFC 3986 unreserved characters pass through).
@@ -127,6 +134,9 @@ mod tests {
     fn native_has_no_console_address() {
         set_base_url("https://example.com/curation");
         assert_eq!(base_url(), None);
-        assert_eq!(diagnose_url("tos://bucket/datasets/demo/"), None);
+        assert_eq!(
+            diagnose_url("tos://bucket/datasets/demo/", Some("cn-beijing")),
+            None
+        );
     }
 }

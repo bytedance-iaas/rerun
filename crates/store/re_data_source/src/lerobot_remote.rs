@@ -544,6 +544,30 @@ impl StreamState {
 static ACTIVE_STREAMS: LazyLock<Mutex<ahash::HashMap<String, Arc<StreamState>>>> =
     LazyLock::new(Default::default);
 
+/// TOS bucket regions, keyed by dataset URL, remembered when a stream is opened.
+///
+/// Exists for the Diagnose deep link into the Daft curation console: the console asks
+/// for URL **and region**, and the region is only known here, at stream-open time (it is
+/// what the user picked in the open dialog, baked into the credentials). Keyed by URL,
+/// not app id, and never evicted — a handful of small strings per session, and the link
+/// must keep working after the stream itself finishes. HF datasets never register.
+static DATASET_REGIONS: LazyLock<Mutex<ahash::HashMap<String, String>>> =
+    LazyLock::new(Default::default);
+
+/// Record which region a dataset URL was opened from (see [`DATASET_REGIONS`]).
+pub fn remember_dataset_region(dataset_url: &str, region: &str) {
+    if !region.is_empty() {
+        DATASET_REGIONS
+            .lock()
+            .insert(dataset_url.to_owned(), region.to_owned());
+    }
+}
+
+/// The region a dataset URL was opened from, if it was a TOS dataset.
+pub fn dataset_region_of(dataset_url: &str) -> Option<String> {
+    DATASET_REGIONS.lock().get(dataset_url).cloned()
+}
+
 /// Ask the loader of the given recording (if it is a remote dataset item still being loaded)
 /// to fetch that item next. Returns true if a matching active stream was found.
 pub fn prioritize_episode_for_store(store_id: &StoreId) -> bool {

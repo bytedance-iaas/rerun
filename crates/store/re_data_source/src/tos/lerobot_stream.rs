@@ -73,6 +73,10 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
         credentials,
         rrd_artifacts,
     } = source;
+    // Remembered for the Diagnose deep link into the curation console: the console
+    // asks for URL + region, and this is the last spot where the region (baked into
+    // the credentials by the open dialog) and the final URL are both in hand.
+    let region = credentials.region();
     let client = TosClient::new(credentials, location.bucket.clone());
 
     // A path to a single file (e.g. tos://bucket/path/recording.mcap) is downloaded and run
@@ -80,6 +84,7 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
     // The rrd artifacts store only covers LeRobot episodes, not loose files.
     if let Some(file_name) = location.split_off_file_name() {
         let url = format!("{location}{file_name}");
+        crate::lerobot_remote::remember_dataset_region(&url, &region);
         return crate::lerobot_remote::stream_remote_file(
             TosStore { client, location },
             file_name,
@@ -87,6 +92,7 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
         );
     }
 
+    crate::lerobot_remote::remember_dataset_region(&location.to_string(), &region);
     crate::lerobot_remote::stream_lerobot_dataset(
         TosStore { client, location },
         rrd_artifacts,
