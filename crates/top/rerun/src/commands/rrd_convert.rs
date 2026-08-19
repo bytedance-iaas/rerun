@@ -44,7 +44,6 @@ impl RrdConvertCommand {
 
         let credentials = TosCredentials {
             endpoint: config.tos_endpoint.clone(),
-            region: config.tos_region.clone(),
             access_key: config.tos_access_key.clone(),
             secret_key: config.tos_secret_key.clone(),
         };

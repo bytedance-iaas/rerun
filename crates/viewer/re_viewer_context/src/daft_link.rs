@@ -51,8 +51,8 @@ pub fn base_url() -> Option<String> {
 
 /// The dataset's directory name — the last path segment of a `tos://bucket/prefix/name/` URL.
 ///
-/// This is what the console's dataset picker keys on (it lists directory names under its
-/// data root, it does not take paths), so it is the whole deep-link payload.
+/// Used as the validity gate for [`diagnose_url`]: only URLs with an actual dataset
+/// segment get a Diagnose link.
 pub fn dataset_name_from_tos_url(tos_url: &str) -> Option<&str> {
     let rest = tos_url.strip_prefix("tos://")?;
     let rest = rest.trim_end_matches('/');
@@ -65,13 +65,18 @@ pub fn dataset_name_from_tos_url(tos_url: &str) -> Option<&str> {
     }
 }
 
-/// The full deep link for a TOS dataset, e.g. `/curation?dataset=demo` —
+/// The full deep link for a TOS dataset, e.g.
+/// `/curation?dataset=tos%3A%2F%2Fbucket%2Fprefix%2Fdemo%2F` —
 /// `None` when there is no console address (always, natively) or the URL has no
 /// dataset segment.
+///
+/// The payload is the complete `tos://` path, so the console can address datasets
+/// anywhere, not just direct children of its own data root.
 pub fn diagnose_url(tos_url: &str) -> Option<String> {
     let base = base_url()?;
-    let name = dataset_name_from_tos_url(tos_url)?;
-    Some(format!("{base}?dataset={}", encode_query_value(name)))
+    // Only link datasets that actually have a dataset segment.
+    dataset_name_from_tos_url(tos_url)?;
+    Some(format!("{base}?dataset={}", encode_query_value(tos_url)))
 }
 
 /// Percent-encode a query-string value (RFC 3986 unreserved characters pass through).

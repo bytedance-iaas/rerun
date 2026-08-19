@@ -60,8 +60,7 @@ impl App {
             LogDataSource::TosDataset(source) => RecentDataset {
                 url: source.location.to_string(),
                 kind: RecentKind::Tos,
-                endpoint: source.credentials.endpoint.clone(),
-                region: source.credentials.region.clone(),
+                region: re_data_source::tos::region_from_endpoint(&source.credentials.endpoint),
                 item_count: None,
                 last_opened_unix: now_unix(),
                 open_at_exit: false,
@@ -75,7 +74,6 @@ impl App {
                 RecentDataset {
                     url,
                     kind: RecentKind::Hf,
-                    endpoint: String::new(),
                     region: String::new(),
                     item_count: None,
                     last_opened_unix: now_unix(),

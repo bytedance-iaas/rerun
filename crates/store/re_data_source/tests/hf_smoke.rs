@@ -98,7 +98,7 @@ fn hf_redownload_episode() {
     });
 
     let ep0 = re_log_types::StoreId::recording(
-        re_log_types::ApplicationId::new_or_unknown(format!("hf://{HF_TEST_DATASET}")),
+        re_data_source::lerobot_remote::dataset_application_id(&format!("hf://{HF_TEST_DATASET}")),
         "episode_0".to_owned(),
     );
 
@@ -228,7 +228,7 @@ fn hf_lerobot_v2_stream_smoke() {
     // Clicking the "… more" entry (simulated via the prioritize hook) must announce
     // the next batch of 200.
     let more_store = re_log_types::StoreId::recording(
-        re_log_types::ApplicationId::new_or_unknown("hf://jesbu1/bridge_v2_lerobot"),
+        re_data_source::lerobot_remote::dataset_application_id("hf://jesbu1/bridge_v2_lerobot"),
         "more".to_owned(),
     );
     assert!(re_data_source::lerobot_remote::prioritize_episode_for_store(&more_store));

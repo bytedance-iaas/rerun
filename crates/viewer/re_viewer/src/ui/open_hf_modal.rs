@@ -19,7 +19,6 @@ struct ServerHfConfig {
     // The rrd artifacts store lives in a TOS bucket regardless of the dataset's source, so the HF dialog
     // needs the TOS connection settings too (same keys, same config file).
     tos_endpoint: String,
-    tos_region: String,
     tos_access_key: String,
     tos_secret_key: String,
 
@@ -37,7 +36,6 @@ impl Default for ServerHfConfig {
         Self {
             hf_token: String::new(),
             tos_endpoint: String::new(),
-            tos_region: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             // The artifacts store is on by default, even with no config file at all.
@@ -62,7 +60,6 @@ impl ServerHfConfig {
             location,
             credentials: re_data_source::tos::TosCredentials {
                 endpoint: self.tos_endpoint.clone(),
-                region: self.tos_region.clone(),
                 access_key: self.tos_access_key.clone(),
                 secret_key: self.tos_secret_key.clone(),
             },
@@ -160,7 +157,6 @@ impl OpenHfModal {
             }
             env_override(&mut parsed.hf_token, "HF_TOKEN");
             env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
-            env_override(&mut parsed.tos_region, "TOS_REGION");
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");

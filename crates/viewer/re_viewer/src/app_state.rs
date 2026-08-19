@@ -760,7 +760,6 @@ impl AppState {
                                             crate::recent_datasets::RecentKind::Tos => {
                                                 self.open_tos_modal.open_prefilled(
                                                     &recent.url,
-                                                    &recent.endpoint,
                                                     &recent.region,
                                                 );
                                             }

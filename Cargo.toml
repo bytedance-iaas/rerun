@@ -312,6 +312,7 @@ log = "0.4.33"
 lz4_flex = "0.13.1"
 macaw = "0.30.0"
 mcap = "0.25.0"
+md-5 = "0.10.6" # PutBucketCors 的 Content-MD5(S3 协议要求);与 RustCrypto 家族其他 pin 同步升级
 memmap2 = "0.9.11"
 memory-stats = "1.2"
 mimalloc = { version = "=0.1.48", features = [

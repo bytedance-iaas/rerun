@@ -20,7 +20,6 @@ fn credentials() -> TosCredentials {
     TosCredentials {
         endpoint: std::env::var("TOS_ENDPOINT")
             .unwrap_or_else(|_| "https://tos-s3-cn-beijing.volces.com".to_owned()),
-        region: std::env::var("TOS_REGION").unwrap_or_else(|_| "cn-beijing".to_owned()),
         access_key: std::env::var("TOS_ACCESS_KEY").expect("set TOS_ACCESS_KEY"),
         secret_key: std::env::var("TOS_SECRET_KEY").expect("set TOS_SECRET_KEY"),
     }
@@ -152,7 +151,7 @@ fn tos_lerobot_stream_smoke() {
         .spawn(|| {
             std::thread::sleep(Duration::from_secs(25));
             let store_id = re_log_types::StoreId::recording(
-                re_log_types::ApplicationId::new_or_unknown(TEST_DATASET),
+                re_data_source::lerobot_remote::dataset_application_id(TEST_DATASET),
                 "episode_46".to_owned(),
             );
             let found = re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);

@@ -57,7 +57,11 @@ pub struct RrdArtifactsConfig {
 /// A "delete artifacts" request, waiting for the user to confirm it in the viewer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArtifactDeletionRequest {
-    /// The dataset URL (= application id) whose artifacts are affected.
+    /// The application id of the dataset's stream — the key for registry lookups
+    /// (artifact counts, config, forget). A normalized form of the URL since 0.36.0.
+    pub application_id: String,
+
+    /// The dataset's real source URL (`tos://…`) — artifact keys/directories mirror it.
     pub dataset_url: String,
 
     /// `Some(index)` deletes that one episode's artifact; `None` deletes the whole
@@ -226,7 +230,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
                     request.target_url
                 );
                 crate::lerobot_remote::forget_rrd_artifact_urls(
-                    &request.dataset_url,
+                    &request.application_id,
                     request.episode,
                 );
             }
@@ -253,7 +257,6 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
 #[serde(default)]
 pub struct LocalConfig {
     pub tos_endpoint: String,
-    pub tos_region: String,
     pub tos_access_key: String,
     pub tos_secret_key: String,
     pub hf_token: String,
@@ -288,7 +291,6 @@ pub fn load_local_config() -> LocalConfig {
         }
     };
     env_override(&mut config.tos_endpoint, "TOS_ENDPOINT");
-    env_override(&mut config.tos_region, "TOS_REGION");
     env_override(&mut config.tos_access_key, "TOS_ACCESS_KEY");
     env_override(&mut config.tos_secret_key, "TOS_SECRET_KEY");
     env_override(&mut config.hf_token, "HF_TOKEN");
@@ -414,6 +416,7 @@ mod tests {
     #[test]
     fn deletion_requests_are_consumed_exactly_once() {
         let request = ArtifactDeletionRequest {
+            application_id: "tos://bucket/ds".to_owned(),
             dataset_url: "tos://bucket/ds/".to_owned(),
             episode: Some(3),
             target_url: "tos://artifacts/rrd-data/tos/bucket/ds/episode_3.rrd".to_owned(),

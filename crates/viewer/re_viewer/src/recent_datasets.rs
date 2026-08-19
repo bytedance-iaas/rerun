@@ -20,10 +20,9 @@ pub struct RecentDataset {
 
     pub kind: RecentKind,
 
-    /// TOS only (non-secret connection info, so re-opening needs no typing).
-    pub endpoint: String,
-
-    /// TOS only.
+    /// TOS only: the bucket's region, so re-opening lands on the right endpoint.
+    /// (`default` so entries persisted before this field existed still load.)
+    #[serde(default)]
     pub region: String,
 
     /// Episodes/files in the dataset, once a stream reported it.
@@ -95,7 +94,6 @@ mod tests {
         RecentDataset {
             url: url.to_owned(),
             kind: RecentKind::Tos,
-            endpoint: String::new(),
             region: String::new(),
             item_count: None,
             last_opened_unix: when,

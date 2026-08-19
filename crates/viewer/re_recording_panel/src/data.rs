@@ -26,10 +26,10 @@ pub struct RecordingPanelData<'a> {
     /// All the locally loaded application IDs and the corresponding recordings.
     pub local_apps: Vec<AppIdData<'a>>,
 
-    /// Datasets streamed straight from a TOS/S3 bucket (application ids starting with `tos://`).
+    /// Datasets streamed straight from a TOS/S3 bucket (application ids starting with `tos:`).
     pub tos_apps: Vec<AppIdData<'a>>,
 
-    /// Datasets streamed straight from Hugging Face (application ids starting with `hf://`).
+    /// Datasets streamed straight from Hugging Face (application ids starting with `hf:`).
     pub hf_apps: Vec<AppIdData<'a>>,
 
     /// All the locally loaded tables.
@@ -111,11 +111,14 @@ impl<'a> RecordingPanelData<'a> {
         for entity_db in ctx.store_bundle().entity_dbs() {
             let app_id = entity_db.application_id();
             match entity_db.store_class() {
-                EntityDbClass::LocalRecording if app_id.as_str().starts_with("tos://") => {
+                // Note: since 0.36.0 the app id is a normalized form of the dataset URL
+                // ("tos://b/x" becomes "tos:--b-x-<hash>"), so only the scheme prefix is
+                // reliable — colons survive normalization, slashes do not.
+                EntityDbClass::LocalRecording if app_id.as_str().starts_with("tos:") => {
                     tos_apps.entry(app_id.clone()).or_default().push(entity_db);
                 }
 
-                EntityDbClass::LocalRecording if app_id.as_str().starts_with("hf://") => {
+                EntityDbClass::LocalRecording if app_id.as_str().starts_with("hf:") => {
                     hf_apps.entry(app_id.clone()).or_default().push(entity_db);
                 }
 
@@ -226,6 +229,10 @@ impl<'a> RecordingPanelData<'a> {
 #[cfg_attr(feature = "testing", derive(serde::Serialize))]
 pub struct AppIdData<'a> {
     pub app_id: ApplicationId,
+
+    /// What to show for this app: the original dataset URL for remote (TOS/HF) datasets,
+    /// otherwise the app id itself (which is a lossy normalization of the URL).
+    pub display_name: String,
     pub is_active: bool,
     pub is_selected: bool,
 
@@ -257,8 +264,12 @@ impl<'a> AppIdData<'a> {
             .map(|entity_db| RecordingData { entity_db })
             .collect();
 
+        let display_name = re_data_source::lerobot_remote::dataset_url_of(app_id.as_str())
+            .unwrap_or_else(|| app_id.to_string());
+
         Self {
             app_id,
+            display_name,
             is_active,
             is_selected,
             loaded_recordings,
@@ -270,7 +281,7 @@ impl<'a> AppIdData<'a> {
     }
 
     pub fn name(&self) -> &str {
-        self.app_id.as_str()
+        &self.display_name
     }
 
     pub fn item(&self) -> Item {

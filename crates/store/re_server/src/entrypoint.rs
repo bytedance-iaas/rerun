@@ -76,6 +76,14 @@ pub struct Args {
     #[clap(long = "token-secret", env = "RERUN_SERVER_TOKEN_SECRET")]
     pub token_secret: Option<String>,
 
+    /// Like `--token-secret`, but read from a file (surrounding whitespace is trimmed).
+    ///
+    /// Meant for secret files mounted with restrictive permissions (e.g. a 0400 Kubernetes
+    /// secret volume) — unlike an environment variable, the value never shows up in the
+    /// process environment. Ignored when `--token-secret` is set.
+    #[clap(long = "token-secret-file", env = "RERUN_SERVER_TOKEN_SECRET_FILE")]
+    pub token_secret_file: Option<std::path::PathBuf>,
+
     /// Token management utilities; without a subcommand, runs the server.
     #[clap(subcommand)]
     pub command: Option<ServerCommand>,
@@ -158,6 +166,7 @@ impl Default for Args {
             cors_allow_origin: Vec::new(),
             data_dir: None,
             token_secret: None,
+            token_secret_file: None,
             command: None,
         }
     }
@@ -179,8 +188,25 @@ impl Args {
             cors_allow_origin,
             data_dir,
             token_secret,
+            token_secret_file,
             command: _,
         } = self;
+
+        let token_secret = match (token_secret, token_secret_file) {
+            (Some(secret), _) => Some(secret),
+            (None, Some(path)) => Some(
+                std::fs::read_to_string(&path)
+                    .with_context(|| {
+                        format!(
+                            "failed to read --token-secret-file\nFile path: {}",
+                            path.display()
+                        )
+                    })?
+                    .trim()
+                    .to_owned(),
+            ),
+            (None, None) => None,
+        };
 
         // Token authentication: with a secret every request must present a valid token;
         // without one the server is open (only acceptable on trusted networks).
@@ -478,6 +504,144 @@ impl Args {
                                         "error": format!("unknown dataset: {name}"),
                                     })),
                                 ),
+                            }
+                        }
+                    }
+                }),
+            )
+            // Self-service bucket CORS for the web viewer. The browser cannot fix a
+            // bucket's CORS itself (the fix request is itself CORS-gated), so the viewer
+            // asks this server — reached same-origin through the gateway's /api route.
+            // Tokenless on purpose: viewer users hold no catalog token, and a CORS rule
+            // grants no data access by itself (reads still need credentials or a
+            // pre-signed URL); results are cached and failures cooled down per bucket.
+            // Merge-only semantics (never overwrites foreign rules) live in
+            // `re_data_source::tos::cors::ensure_bucket_cors`.
+            // Disable with RERUN_AUTO_CORS=off; override origins with
+            // RERUN_AUTO_CORS_ORIGINS (comma-separated).
+            .with_http_route(
+                "/api/ensure-cors",
+                axum::routing::post({
+                    type CacheEntry = (std::time::Instant, Result<bool, String>);
+                    let cache: std::sync::Arc<
+                        parking_lot::Mutex<std::collections::HashMap<String, CacheEntry>>,
+                    > = std::sync::Arc::default();
+                    move |query: axum::extract::Query<
+                        std::collections::HashMap<String, String>,
+                    >| {
+                        let cache = std::sync::Arc::clone(&cache);
+                        async move {
+                            use axum::http::StatusCode;
+                            let json = |status: StatusCode, value: serde_json::Value| {
+                                (status, axum::Json(value))
+                            };
+
+                            if matches!(
+                                std::env::var("RERUN_AUTO_CORS").as_deref(),
+                                Ok("0" | "false" | "off" | "no")
+                            ) {
+                                return json(
+                                    StatusCode::OK,
+                                    serde_json::json!({"status": "disabled"}),
+                                );
+                            }
+
+                            let Some(bucket) = query.get("bucket").map(|b| b.trim().to_owned())
+                            else {
+                                return json(
+                                    StatusCode::BAD_REQUEST,
+                                    serde_json::json!({"error": "missing ?bucket="}),
+                                );
+                            };
+                            let valid_bucket = (3..=63).contains(&bucket.len())
+                                && bucket
+                                    .bytes()
+                                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.')
+                                && !bucket.starts_with(['-', '.'])
+                                && !bucket.ends_with(['-', '.']);
+                            if !valid_bucket {
+                                return json(
+                                    StatusCode::BAD_REQUEST,
+                                    serde_json::json!({"error": format!("not a bucket name: {bucket:?}")}),
+                                );
+                            }
+
+                            // Success is remembered for 10 min, failure for 30 s — the
+                            // browser retries per page load, this keeps TOS calls rare.
+                            let cached = cache.lock().get(&bucket).and_then(|(at, result)| {
+                                let ttl = if result.is_ok() { 600 } else { 30 };
+                                (at.elapsed().as_secs() < ttl).then(|| result.clone())
+                            });
+                            let result = if let Some(cached) = cached {
+                                cached
+                            } else {
+                                let endpoint = std::env::var("TOS_ENDPOINT").unwrap_or_default();
+                                let access_key =
+                                    std::env::var("TOS_ACCESS_KEY").unwrap_or_default();
+                                let secret_key =
+                                    std::env::var("TOS_SECRET_KEY").unwrap_or_default();
+                                if endpoint.is_empty() || access_key.is_empty() || secret_key.is_empty() {
+                                    return json(
+                                        StatusCode::SERVICE_UNAVAILABLE,
+                                        serde_json::json!({"error": "server has no TOS credentials (TOS_ENDPOINT/TOS_ACCESS_KEY/TOS_SECRET_KEY)"}),
+                                    );
+                                }
+                                let credentials = re_data_source::tos::TosCredentials {
+                                    endpoint,
+                                    access_key,
+                                    secret_key,
+                                };
+                                let origins: Vec<String> = std::env::var("RERUN_AUTO_CORS_ORIGINS")
+                                    .ok()
+                                    .filter(|s| !s.trim().is_empty())
+                                    .map(|s| {
+                                        s.split(',')
+                                            .map(|o| o.trim().to_owned())
+                                            .filter(|o| !o.is_empty())
+                                            .collect()
+                                    })
+                                    .unwrap_or_else(|| {
+                                        re_data_source::tos::cors::default_origins(
+                                            &credentials.region(),
+                                        )
+                                    });
+                                let client =
+                                    re_data_source::tos::TosClient::new(credentials, &bucket);
+                                let result = match tokio::time::timeout(
+                                    std::time::Duration::from_secs(15),
+                                    re_data_source::tos::cors::ensure_bucket_cors(
+                                        &client, &origins,
+                                    ),
+                                )
+                                .await
+                                {
+                                    Ok(Ok(changed)) => {
+                                        if changed {
+                                            info!("auto-CORS: installed viewer rule on bucket {bucket}");
+                                        }
+                                        Ok(changed)
+                                    }
+                                    Ok(Err(err)) => Err(format!("{err:#}")),
+                                    Err(_) => Err("timed out talking to TOS".to_owned()),
+                                };
+                                cache
+                                    .lock()
+                                    .insert(bucket.clone(), (std::time::Instant::now(), result.clone()));
+                                result
+                            };
+
+                            match result {
+                                Ok(changed) => json(
+                                    StatusCode::OK,
+                                    serde_json::json!({"status": "ok", "bucket": bucket, "changed": changed}),
+                                ),
+                                Err(err) => {
+                                    warn!("auto-CORS failed: {err}\nBucket: {bucket}");
+                                    json(
+                                        StatusCode::BAD_GATEWAY,
+                                        serde_json::json!({"error": err, "bucket": bucket}),
+                                    )
+                                }
                             }
                         }
                     }

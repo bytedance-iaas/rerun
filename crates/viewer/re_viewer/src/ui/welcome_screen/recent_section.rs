@@ -75,26 +75,6 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
                     .text_style(DesignTokens::welcome_screen_body()),
             ));
 
-            // TOS datasets can be sent to the Daft curation console. Only LeRobot v2/v3
-            // makes it through the TOS loader, and `item_count` is set the first time a
-            // stream reports progress — so "has an item count" doubles as "format confirmed",
-            // and the button stays greyed out until then.
-            if matches!(recent.kind, RecentKind::Tos)
-                && let Some(url) = re_viewer_context::daft_link::diagnose_url(&recent.url)
-            {
-                let confirmed = recent.item_count.is_some();
-                let response = ui
-                    .add_enabled(confirmed, egui::Button::new("Diagnose").small())
-                    .on_hover_text(format!("Run data curation on this dataset in Daft\n{url}"))
-                    .on_disabled_hover_text(
-                        "Dataset format not confirmed yet — open the dataset once first \
-                         (only LeRobot v2/v3 can be diagnosed)",
-                    );
-                if response.clicked() {
-                    ui.open_url(egui::OpenUrl::new_tab(url));
-                }
-            }
-
             if ui
                 .small_icon_button(&icons::CLOSE, "Remove from this list")
                 .clicked()
