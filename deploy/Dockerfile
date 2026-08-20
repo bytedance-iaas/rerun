@@ -192,9 +192,12 @@ RUN env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} cargo build --package reru
 # ---- Python SDK wheel, from the same sources as the server above. Shipped in the image
 # and served by nginx at /sdk/ (see nginx.conf), so the SDK a user installs from a
 # deployment always matches the catalog server it talks to — no separate publishing.
+# The viewer now ships *inside* this wheel: `pip install` it and the `rerun` command is
+# on PATH, so there is no separate desktop-viewer download to keep in sync.
 # Details:
-# - RERUN_ALLOW_MISSING_BIN=1: the wheel ships without the `rerun` CLI binary (users of
-#   the SDK talk to the deployed server; keeps the wheel small).
+# - The `rerun` CLI built at line ~190 is copied into rerun_sdk/rerun_cli/ before the
+#   build, so the wheel bundles it (maturin's `include` list picks it up). Users run
+#   `rerun` after install — same as the official PyPI wheel.
 # - abi3-py310: one wheel covers every Python >= 3.10.
 # - --compatibility linux: skip the manylinux audit; the wheel needs a glibc at least as
 #   new as this build image's (bookworm, 2.36) — fine for in-cloud training images.
@@ -219,16 +222,38 @@ RUN if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
     printf 'implementation=CPython\nversion=3.%s\nshared=true\nabi3=true\nexecutable=%s\npointer_width=64\nbuild_flags=\nsuppress_build_script_link_lines=false\n' \
     "$(/usr/bin/python3 -c 'import sys; print(sys.version_info[1])')" \
     /usr/bin/python3 > rerun_py/pyo3-build.cfg \
-    && env RERUN_ALLOW_MISSING_BIN=1 ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} \
+    && mkdir -p rerun_py/rerun_sdk/rerun_cli \
+    && rm -f rerun_py/rerun_sdk/rerun_cli/rerun \
+    && cp /rerun/target/release/rerun rerun_py/rerun_sdk/rerun_cli/rerun \
+    && env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} \
     /opt/maturin/bin/maturin build --release --compatibility linux \
     --manifest-path rerun_py/Cargo.toml -o /rerun/downloads/sdk; \
     else mkdir -p /rerun/downloads/sdk; fi
 
-# The Linux desktop viewer, downloadable from the deployment (/downloads/viewer/): the
-# very binary built above, gzipped. Fixed filename on purpose — the URL never changes,
-# re-downloading it after a deployment upgrade *is* the version upgrade.
-RUN mkdir -p /rerun/downloads/viewer \
-    && tar -C /rerun/target/release -czf /rerun/downloads/viewer/rerun-linux-x86_64.tar.gz rerun
+# macOS wheels cannot be built in a Linux container (Mach-O needs the macOS SDK). They are
+# built on a Mac and uploaded to a TOS bucket (see deploy/README.md), then fetched here at
+# build time so they ship in /downloads/sdk/ next to the Linux wheel and `pip install` on a
+# Mac picks the matching one. The bucket URL is deliberately NOT hardcoded — pass it in:
+#   docker build --build-arg MAC_WHEEL_URL=https://<bucket>.<tos-endpoint>/mac/<wheel> …
+#   (docker compose reads it from the MAC_WHEEL_URL env var / .env)
+# When building the SDK (BUILD_SDK_WHEEL=1) MAC_WHEEL_URL is REQUIRED and must be reachable:
+# an empty URL, a failed download, or an under-1 MB response (error page / truncation) all
+# fail the build rather than silently shipping without the macOS wheel. Set BUILD_SDK_WHEEL=0
+# to skip the SDK entirely (dev images).
+ARG MAC_WHEEL_URL=""
+RUN if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
+      if [ -z "$MAC_WHEEL_URL" ]; then \
+        printf '%s\n' "Error: MAC_WHEEL_URL is not set — pass --build-arg MAC_WHEEL_URL=<TOS wheel URL>, or set BUILD_SDK_WHEEL=0 to skip the SDK." >&2; \
+        exit 1; \
+      fi; \
+      out="/rerun/downloads/sdk/$(basename "$MAC_WHEEL_URL")"; \
+      curl -fSL "$MAC_WHEEL_URL" -o "$out" || { \
+        printf '%s\n' "Error: failed to download the macOS wheel." "URL: $MAC_WHEEL_URL" >&2; exit 1; }; \
+      if [ "$(wc -c < "$out")" -lt 1000000 ]; then \
+        printf '%s\n' "Error: fetched macOS wheel is under 1 MB — not a real wheel." "URL: $MAC_WHEEL_URL" >&2; \
+        exit 1; \
+      fi; \
+    fi
 
 # ---------------- runtime: nginx (web mode) + Xvnc/noVNC (native mode) ----------------
 # trixie for its recent Mesa: bookworm's Mesa 22.3 can't software-render rerun
@@ -303,8 +328,9 @@ RUN rm -f /etc/nginx/sites-enabled/default && mkdir -p /rrd-cache && chown www-d
 
 # Native viewer binary.
 COPY --from=builder-native /rerun/target/release/rerun /usr/local/bin/rerun
-# Download area served by nginx at /downloads/ (see nginx.conf): the matching Python
-# SDK wheel (sdk/) and the Linux desktop viewer (viewer/), both from this same build.
+# Download area served by nginx at /downloads/ (see nginx.conf): the Python SDK wheels
+# (sdk/) — Linux built here, macOS carried in from artifacts/. The viewer ships inside
+# the wheel now, so there is no separate viewer/ download.
 COPY --from=builder-native /rerun/downloads/ /usr/share/nginx/downloads/
 
 COPY deploy/entrypoint.sh /entrypoint.sh
