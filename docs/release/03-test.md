@@ -192,7 +192,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 
 | 症状 | 原因与处理 |
 |---|---|
-| APIGInstance 一直 Pending | `describe apiginstance` 看 Events;`cannot be found from VPC` / `InvalidVPC.NotFound` = subnetId 抄了别的集群的,改对重装,不会自愈 |
+| APIGInstance 一直 Pending | `describe apiginstance` 看 Events;`cannot be found from VPC` / `InvalidVPC.NotFound` = `apig.subnetIds` 里某个子网抄了别的集群的,改对重装,不会自愈 |
 | `no matches for kind "APIGInstance"` | 集群没装 APIG 组件,VKE 控制台 → 组件管理 → 安装 |
 | `kubectl get apiginstance` 返回空列表 | 集群 API 偶发抖动,重试确认,别据此断言实例不存在 |
 | 质检跑批开头就报「缺少 TOS 凭证」 | curation 容器没拿到 `TOS_ACCESS_KEY/TOS_SECRET_KEY`:确认 `secrets.existingSecret` 指的 Secret 里有 `tos_access_key/tos_secret_key` 两个 key |

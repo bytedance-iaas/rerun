@@ -11,15 +11,22 @@ metadata:
   labels:
     {{- include "rerun-cloud.labels" . | nindent 4 }}
 spec:
-  {{- with .Values.apig.existingInstanceId }}
-  # 适配已有网关实例,不新建。
-  id: {{ . | quote }}
-  {{- end }}
-  name: {{ include "rerun-cloud.fullname" . }}-apig
+  {{- if .Values.apig.existingInstanceId }}
+  # 适配已有网关实例,不新建:网关和它的前置 CLB 都已就位,所以不需要 subnetId。
+  id: {{ .Values.apig.existingInstanceId | quote }}
+  {{- else }}
+  # 新建网关:平台要在子网里起网关实例 + 前置 CLB,这就是「只有新建才要 subnetIds」的原因。
+  # 网关是多副本高可用,给 2 个不同可用区的子网,平台把副本 + CLB 摊到多可用区。
   common:
     network:
-      subnetIds: [{{ required "network.subnetId 必填(APIG 所在子网,须在当前集群 VPC 内)" .Values.network.subnetId | quote }}]
+      {{- if not .Values.apig.subnetIds }}
+      {{- fail "apig.subnetIds 必填(新建 APIG 网关所在子网,至少一个;高可用建议给 2 个不同可用区的子网,须都在当前集群 VPC 内;若要适配已有网关请改设 apig.existingInstanceId)" }}
+      {{- end }}
+      subnetIds:
+        {{- toYaml .Values.apig.subnetIds | nindent 8 }}
     # resource: 省略 => 平台默认(实测 small_1 CLB / 1c2g / 2 副本)。
+  {{- end }}
+  name: {{ include "rerun-cloud.fullname" . }}-apig
   ingress:
     enable: true
     enableAllNamespaces: false

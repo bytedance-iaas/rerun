@@ -17,7 +17,7 @@
 
   只有别的 apiVersion(或 grep 无输出)都算不满足,先找集群管理员装/升级 APIG 组件;
   (质检台不再需要 fsx CSI 驱动:数据面已改为 TOS SDK 直连,不挂载任何桶。)
-- 一个当前集群 VPC 内的子网 ID(给 CLB / 网关用)。查法 — 抄本集群任一正常 LoadBalancer Service 的注解:
+- （仅当**新建独立 APIG 网关**时,见 2.4)当前集群 VPC 内的子网 ID,给新网关及其前置 CLB 用;网关多副本高可用,建议备 2 个【不同可用区】的子网。复用已有网关(2.3 推荐做法)不需要子网。查法 — 抄本集群任一正常 LoadBalancer Service 的注解:
 
   ```sh
   kubectl get svc -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.service\.beta\.kubernetes\.io/volcengine-loadbalancer-subnet-id}{"\n"}{end}' | grep subnet-
@@ -99,7 +99,7 @@ export ARK_API_KEY=="##############"
 kubectl -n $RERUN_NS create secret generic rerun-cloud-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
-    --from-literal=ark_api_key="<火山方舟 API key>" \
+    --from-literal=ark_api_key="$ARK_API_KEY" \
     --from-literal=web_htpasswd="$(printf '%s\n%s\n' \
         "alice:$(openssl passwd -apr1 'pwd123')" \
         "bob:$(openssl passwd -apr1 'pwd456')")"
@@ -116,11 +116,20 @@ kubectl -n $RERUN_NS create secret generic rerun-cloud-secrets \
 
 ```yaml
 image:
-  rerun: <rerun 镜像,例 iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:TAG>
+  rerun: <rerun 镜像>
   curator: <robot_curator 镜像>
 
-network:
-  subnetId: <第 1 节查到的 subnet-xxx>
+apig:
+  # 复用集群里已有的 APIG 网关(推荐):填平台实例 id —— APIG 控制台
+  # https://console.volcengine.com/veapig → 实例列表里那一串。
+  # 复用时不需要 subnetIds(网关和它的前置 CLB 都已存在)。
+  existingInstanceId: <apig 实例 id>
+
+  # —— 或者:新建独立网关(见 2.4)。改用这种方式时,注释掉上面的 existingInstanceId,
+  #    放开下面的 subnetIds(第 1 节查到的,建议 2 个不同可用区的子网):
+  # subnetIds:
+  #   - <subnet-xxx（可用区 A）>
+  #   - <subnet-yyy（可用区 B）>
 
 tos:
   rrdArtifactsUrl: tos://<rrd 缓存路径>
@@ -133,14 +142,20 @@ secrets:
 密钥已在 2.2 建进集群,这里只引用 Secret 名字 — **values 文件里没有任何密钥**。
 后续增删登录账号见第 7 节。
 
-质检台(daft)的参数都带默认值,一般不用在这份文件里写:火山方舟 base url
-(`daft.arkBaseUrl`,默认北京)、CPU/内存与 `ephemeral-storage` 体积预检额度
-(`daft.resources`)等。要改就直接编辑 [`deploy/helm/rerun-cloud/values.yaml`](../../deploy/helm/rerun-cloud/values.yaml)
-里对应项(那里有逐项注释),或按需在本文件里覆盖同名键。
-方舟的 API key 是密钥,走 2.2 的 `ark_api_key`,不在这里配。
+集群里还没有 APIG 网关、或就是要一个独立网关,改用新建方式,见 **2.4**。
 
 缺省区域不是 cn-beijing、或要用其他开关(不部署质检台、内网 CLB、外部 Secret 等),
 参数全集和默认值见 [`deploy/helm/rerun-cloud/values.yaml`](../../deploy/helm/rerun-cloud/values.yaml) 的注释。
+
+### 2.4 改为新建独立 APIG 网关(可选)
+
+集群里还没有 APIG 网关,或想给本部署一个**独立**网关(独立前置 CLB、独立公网域名,按量计费),
+就用 2.3 `apig` 段里那几行注释掉的备选:**注释掉 `existingInstanceId`,放开 `subnetIds`**。
+
+- `subnetIds` 至少一个;网关多副本高可用,建议给 2 个【不同可用区】的子网(第 1 节查到的),
+  平台把网关副本和前置 CLB 摊到多可用区。
+- `existingInstanceId` 与 `subnetIds` 填一个即可:前者非空就走复用、`subnetIds` 被忽略;两者同时
+  留空会因缺 `subnetIds` 报错。
 
 ## 3. 安装
 

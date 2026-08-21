@@ -40,7 +40,7 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 | `secrets.arkApiKey` / `daft.arkBaseUrl` | 质检台接火山方舟(Ark)VLM 后端:API key(密钥,注入 `ARK_API_KEY`)+ base url(普通配置,注入 `ARK_BASE_URL`)。用 `existingSecret` 时把 key 加进那份 Secret(key 名 `ark_api_key`) |
 | `vllm.model` / `vllm.servedModelName` / `vllm.gpuCount` / `vllm.nodeHostname` | 选模型、对外模型名、GPU 卡数、钉到哪个 GPU 节点 |
 | `apig.enabled=false` | 不建网关和 Ingress(自备入口) |
-| `apig.existingInstanceId` | 适配已有 APIG 实例而不新建 |
+| `apig.existingInstanceId` | 适配已有 APIG 实例而不新建(设了就不用填 `apig.subnetIds`) |
 | `web.basicAuth.enabled=false` / `catalog.tokenAuth.enabled=false` | 关认证(仅限内网调试) |
 | `secrets.existingSecret` | 密钥由外部 Secret 提供,chart 不渲染明文 |
 | `catalog.hfEndpoint=""` | 海外集群直连 HuggingFace 官方 |
@@ -84,5 +84,5 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 ## 已知前提
 
 - 集群在火山引擎 VKE 上,且已装 APIGInstance CRD(`loadbalancer.vke.volcengine.com/v1beta1`);
-- `network.subnetId` 必须是当前集群 VPC 里的子网;
+- 新建网关时 `apig.subnetIds` 至少给一个当前集群 VPC 里的子网(网关高可用,建议给 2 个不同可用区的子网;适配已有实例走 `apig.existingInstanceId` 则不需要);
 - robot_curator 镜像 ≥ Daft 仓库 commit 412b91ce8(子路径支持)。

@@ -1,6 +1,7 @@
 # rerun-cloud chart 的默认配置。
 # 必填项(不填 helm 会报错并指明缺什么):
-#   image.rerun、network.subnetId,daft.enabled 时的 image.curator,
+#   image.rerun、apig.subnetIds(仅新建网关时,即 apig.existingInstanceId 为空),
+#   daft.enabled 时的 image.curator,
 #   以及密钥 —— 推荐 kubectl 直建 Secret 后配三个 existing*Secret 引用(values 零密钥,
 #   见部署文档);开发环境也可直填 secrets.* 字段由 chart 渲染。
 # 真实值不要写进本文件:另建一个 gitignore 挡住的 values 文件(例:values-prod.yaml),
@@ -15,12 +16,6 @@ image:
   # (CURATION_UI_HTPASSWD_FILE,2026-08-17 之后的构建),旧镜像收不到账号配置
   # 会以无鉴权状态运行。
   curator: ""
-
-network:
-  # APIG 网关所在子网 ID。必须是【当前集群】VPC 里的子网,跨集群抄会
-  # 报 cannot be found from VPC 且永远 Pending。查法:抄本集群任一正常
-  # LoadBalancer Service 的 volcengine-loadbalancer-subnet-id 注解。
-  subnetId: ""
 
 tos:
   region: cn-beijing
@@ -207,8 +202,18 @@ vllm:
 apig:
   # false = 不建网关也不建 Ingress(自备入口时用)。
   enabled: true
-  # 非空 = 适配已有 APIG 实例(平台实例 id);空 = 新建网关 + 前置 CLB。
+  # 非空 = 适配已有 APIG 实例(平台实例 id),此时 subnetId 忽略、不必填;
+  # 空 = 新建网关 + 前置 CLB,此时 subnetId 必填。
   existingInstanceId: ""
+  # 新建网关所在子网 ID 列表(仅新建时必填,至少一个;适配已有实例时忽略)。
+  # APIG 网关是多副本高可用,建议给 2 个【不同可用区】的子网,平台把网关实例
+  # 和它的前置 CLB 摊到多可用区。必须都是【当前集群】VPC 里的子网,跨集群抄会
+  # 报 cannot be found from VPC 且永远 Pending。查法:抄本集群任一正常
+  # LoadBalancer Service 的 volcengine-loadbalancer-subnet-id 注解。
+  #   subnetIds:
+  #     - subnet-aaaa   # 可用区 A
+  #     - subnet-bbbb   # 可用区 B
+  subnetIds: []
   # 本实例专属的 ingressClass。空 = 从 release 名派生(<fullname>-apig)。
   # 集群里已有别的 APIG 实例时,千万别与其声明同一个 class,两个实例会互相抢 Ingress。
   ingressClassName: ""
