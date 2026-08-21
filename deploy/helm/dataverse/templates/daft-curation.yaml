@@ -16,20 +16,20 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-curation
+  name: {{ include "dataverse.fullname" . }}-curation
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: curation
 spec:
-  serviceName: {{ include "rerun-cloud.fullname" . }}-curation
+  serviceName: {{ include "dataverse.fullname" . }}-curation
   replicas: 1
   selector:
     matchLabels:
-      {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "curation") | nindent 6 }}
+      {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "curation") | nindent 8 }}
+        {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 8 }}
       annotations:
         checksum/secrets: {{ include (print $.Template.BasePath "/secret-viewer.yaml") . | sha256sum }}
         checksum/site-config: {{ include (print $.Template.BasePath "/configmap-curation.yaml") . | sha256sum }}
@@ -75,12 +75,12 @@ spec:
             - name: TOS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+                  name: {{ include "dataverse.viewerSecretName" . }}
                   key: tos_access_key
             - name: TOS_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+                  name: {{ include "dataverse.viewerSecretName" . }}
                   key: tos_secret_key
             - name: TOS_ENDPOINT
               value: {{ .Values.tos.endpointInternal | quote }}
@@ -91,7 +91,7 @@ spec:
             - name: ARK_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+                  name: {{ include "dataverse.viewerSecretName" . }}
                   key: ark_api_key
                   optional: true
             {{- end }}
@@ -139,28 +139,28 @@ spec:
         {{- if .Values.web.basicAuth.enabled }}
         - name: curation-auth
           secret:
-            secretName: {{ include "rerun-cloud.viewerSecretName" . }}
+            secretName: {{ include "dataverse.viewerSecretName" . }}
             items:
               - key: web_htpasswd
                 path: htpasswd
         {{- end }}
         - name: site-config
           configMap:
-            name: {{ include "rerun-cloud.fullname" . }}-curation-site
+            name: {{ include "dataverse.fullname" . }}-curation-site
 ---
 # /curation 的后端;同时是 daft StatefulSet 的 governing service
 # (headless 即可,APIG Ingress 按 endpoints 转发)。
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-curation
+  name: {{ include "dataverse.fullname" . }}-curation
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: curation
 spec:
   clusterIP: None
   selector:
-    {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "curation") | nindent 4 }}
+    {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 4 }}
   ports:
     - name: ui
       port: 7860

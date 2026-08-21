@@ -1,0 +1,9 @@
+apiVersion: v2
+name: dataverse
+description: >-
+  Dataverse 云服务常驻部署(VKE):一个 chart 打包 ReRun 与质检台两个组件 ——
+  ReRun(web viewer + catalog server)+ Daft 质检台,外加 APIG 网关/gRPC 路由入口。
+type: application
+version: 0.1.0
+# appVersion 跟随 rerun 镜像 tag 的语义版本;实际镜像由 values 里的 image.rerun 指定。
+appVersion: "0.36.0"

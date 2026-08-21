@@ -38,11 +38,11 @@ viewer 已随 wheel 一起分发——装完 SDK 后 `rerun` 命令直接可用(
 签发在 catalog 容器内执行,签名密钥不出集群(见 02-deploy 第 5 节):
 
 ```sh
-kubectl -n $RERUN_NS exec rerun-cloud-0 -c catalog -- sh -c \
+kubectl -n $RERUN_NS exec dataverse-0 -c catalog -- sh -c \
     "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
         --user tester --permission read-write --expiration 7d \
         --server-host $GW_DOMAIN --server-host 127.0.0.1 \
-        --server-host rerun-cloud-headless.$RERUN_NS.svc.cluster.local"
+        --server-host dataverse-headless.$RERUN_NS.svc.cluster.local"
 # 再跑一遍,--permission read,存成只读 token
 ```
 
@@ -55,7 +55,7 @@ catalog 现在走网关域名(TLS + HTTP/2),与 web viewer 同一条通道 —�
 
 ```sh
 env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy -u ALL_PROXY -u all_proxy \
-  kubectl -n $RERUN_NS port-forward svc/rerun-cloud-headless 51234:51234
+  kubectl -n $RERUN_NS port-forward svc/dataverse-headless 51234:51234
 ```
 
 之后 Python 里连 `rerun+http://127.0.0.1:51234`(token 须含 `127.0.0.1`,见 1.3)。
@@ -68,7 +68,7 @@ env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy -u ALL_PROXY -u al
 
 ```sh
 kubectl -n $RERUN_NS get pods
-# 预期:rerun-cloud-0 2/2 Running,rerun-cloud-curation-0 1/1 Running
+# 预期:dataverse-0 2/2 Running,dataverse-curation-0 1/1 Running
 kubectl get apiginstance -n $RERUN_NS
 # 预期:PHASE=Running(偶发空列表是集群 API 抖动,重试)
 ```
@@ -145,7 +145,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 ```
 
 - 上述脚本 → **注册成功,`client.datasets()` 里能看到 `smoke-test`**。
-- 重启验证持久化:`kubectl -n $RERUN_NS delete pod rerun-cloud-0`,等重新 2/2 Running 后再查 → **`smoke-test` 仍在,schema 正常**(注册记录在云盘上,不随 pod 走)。
+- 重启验证持久化:`kubectl -n $RERUN_NS delete pod dataverse-0`,等重新 2/2 Running 后再查 → **`smoke-test` 仍在,schema 正常**(注册记录在云盘上,不随 pod 走)。
 
 ### 3.5 训练直读(预签名)
 
@@ -159,7 +159,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
   ```
 
   → **全部读完**;字节走的是预签名 URL 直连 TOS。
-- 想验证"数据真的不经过 server":拿到 `lazy` 之后把 server 断掉(`kubectl -n $RERUN_NS delete pod rerun-cloud-0`),再 `collect()` → **照常读完**。完整剧本(含 relay 模式对照)见 [`docs/testing/direct-read-demo.md`](../testing/direct-read-demo.md)。
+- 想验证"数据真的不经过 server":拿到 `lazy` 之后把 server 断掉(`kubectl -n $RERUN_NS delete pod dataverse-0`),再 `collect()` → **照常读完**。完整剧本(含 relay 模式对照)见 [`docs/testing/direct-read-demo.md`](../testing/direct-read-demo.md)。
 - PyTorch dataloader(`RerunIterableDataset`)一路的直读分步验证见 [`docs/testing/dataloader-direct-read-test.md`](../testing/dataloader-direct-read-test.md)。
 - 办公网提醒:预签名 URL 指向 TOS 公网 endpoint,办公网读大文件会被限速到 ~100KB/s,能读通但慢;吞吐测试放云内跑。
 
@@ -208,7 +208,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 | 办公网 curl 网关得到奇怪的 401/404/504 | 看响应头 `Server:`,`feilian-agw` = 飞连代答,请求没到服务;正常经 APIG 的响应是 `istio-envoy` |
 | 大数据集加载中页面崩溃 | wasm 内存上限(不足 4 GB);换 native viewer 会话 |
 | `/curation` 下静态资源/WS 全 404 | curator 镜像太旧,不支持子路径;换新镜像 |
-| `/curation` 全部 401,正确密码也进不去 | htpasswd 挂载坏了(鉴权 fail-closed 锁死);`kubectl -n $RERUN_NS logs rerun-cloud-curation-0` 找 "没有可用账号" |
+| `/curation` 全部 401,正确密码也进不去 | htpasswd 挂载坏了(鉴权 fail-closed 锁死);`kubectl -n $RERUN_NS logs dataverse-curation-0` 找 "没有可用账号" |
 
 ### 4.3 catalog / token
 
@@ -218,7 +218,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 - `bad token` / `invalid signature` — token 与 server 密钥不匹配,或已过期;
 - `not allowed for host` — 签发时 `--server-host` 没列当前连接的地址(port-forward 场景最常见,见 1.3)。
 
-server 侧对应日志:`kubectl -n $RERUN_NS logs rerun-cloud-0 -c catalog` 里的 `Token verification failed`。
+server 侧对应日志:`kubectl -n $RERUN_NS logs dataverse-0 -c catalog` 里的 `Token verification failed`。
 
 ### 4.4 办公网连 catalog 失败
 
@@ -226,22 +226,22 @@ catalog 常规路径是网关域名(TLS),办公网一般放行;若报 `transport
 
 - 连的是 `rerun+https://<域名>:443` 吗?`rerun+http` 或裸 IP 都会被办公网(飞连)掐 —— 它拦"裸 IP + 明文 HTTP/2",且 `nc` 探端口是通的,极具迷惑性;
 - token 的 `--server-host` 是否包含所连的地址(错配是 `PermissionError`,不是 transport error);
-- 仍不通就按 1.4 的 port-forward 兜底(目标 `svc/rerun-cloud-headless`),token 须含 `127.0.0.1`。
+- 仍不通就按 1.4 的 port-forward 兜底(目标 `svc/dataverse-headless`),token 须含 `127.0.0.1`。
 
 ### 4.5 日志位置速查
 
 ```sh
-kubectl -n $RERUN_NS logs rerun-cloud-0 -c web            # web 容器(启动时打印认证状态)
-kubectl -n $RERUN_NS exec rerun-cloud-0 -c web -- tail -20 /var/log/nginx/access.log   # 实际请求/状态码
-kubectl -n $RERUN_NS logs rerun-cloud-0 -c catalog        # catalog(验签失败有告警)
-kubectl -n $RERUN_NS logs rerun-cloud-curation-0          # 质检台
+kubectl -n $RERUN_NS logs dataverse-0 -c web            # web 容器(启动时打印认证状态)
+kubectl -n $RERUN_NS exec dataverse-0 -c web -- tail -20 /var/log/nginx/access.log   # 实际请求/状态码
+kubectl -n $RERUN_NS logs dataverse-0 -c catalog        # catalog(验签失败有告警)
+kubectl -n $RERUN_NS logs dataverse-curation-0          # 质检台
 kubectl -n kube-system logs deploy/apig-controller --tail=50   # 网关控制器
 ```
 
 定位在哪一层的通用手法 — port-forward 直连后端做对照(不经网关):
 
 ```sh
-kubectl -n $RERUN_NS port-forward svc/rerun-cloud-web 9091:80
+kubectl -n $RERUN_NS port-forward svc/dataverse-web 9091:80
 curl -i http://127.0.0.1:9091/healthz   # 应 200;/ 应 401(Basic auth)
 ```
 

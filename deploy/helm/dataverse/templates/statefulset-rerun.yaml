@@ -4,20 +4,20 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}
+  name: {{ include "dataverse.fullname" . }}
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: rerun
 spec:
-  serviceName: {{ include "rerun-cloud.fullname" . }}-headless
+  serviceName: {{ include "dataverse.fullname" . }}-headless
   replicas: 1
   selector:
     matchLabels:
-      {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "rerun") | nindent 6 }}
+      {{- include "dataverse.selectorLabels" (dict "root" . "component" "rerun") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "rerun") | nindent 8 }}
+        {{- include "dataverse.selectorLabels" (dict "root" . "component" "rerun") | nindent 8 }}
       annotations:
         # 密钥内容变了自动滚动重启;existingSecret 场景 chart 看不到内容,改完需手动重启。
         checksum/secrets: {{ print (include (print $.Template.BasePath "/secret-viewer.yaml") .) (include (print $.Template.BasePath "/secret-token.yaml") .) | sha256sum }}
@@ -108,16 +108,16 @@ spec:
         # web 容器只看得到应用凭证(AK/SK、hf_token、账号表),签名密钥不在其中。
         - name: tos-secrets
           secret:
-            secretName: {{ include "rerun-cloud.viewerSecretName" . }}
+            secretName: {{ include "dataverse.viewerSecretName" . }}
         # catalog 容器在同一目录额外投影签名密钥,单文件 0400(仅属主可读)。
         - name: catalog-secrets
           projected:
             sources:
               - secret:
-                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+                  name: {{ include "dataverse.viewerSecretName" . }}
               {{- if .Values.catalog.tokenAuth.enabled }}
               - secret:
-                  name: {{ include "rerun-cloud.tokenSecretName" . }}
+                  name: {{ include "dataverse.tokenSecretName" . }}
                   items:
                     - key: server_token_secret
                       path: server_token_secret

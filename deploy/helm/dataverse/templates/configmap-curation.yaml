@@ -10,15 +10,15 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-curation-site
+  name: {{ include "dataverse.fullname" . }}-curation-site
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: curation
 data:
   site.yaml: |
     {{- $backends := deepCopy (.Values.daft.vlmBackends | default dict) }}
     {{- if .Values.vllm.enabled }}
-    {{- $endpoint := printf "http://%s-vllm.%s.svc.cluster.local:%v/v1" (include "rerun-cloud.fullname" .) .Release.Namespace (.Values.vllm.port | int) }}
+    {{- $endpoint := printf "http://%s-vllm.%s.svc.cluster.local:%v/v1" (include "dataverse.fullname" .) .Release.Namespace (.Values.vllm.port | int) }}
     {{- $auto := dict "endpoint" $endpoint "model" (.Values.vllm.servedModelName | default .Values.vllm.model) "service_type" "自托管 vLLM(本 chart 部署)" }}
     {{- /* 用户 daft.vlmBackends 优先:同名 self-hosted 时保留用户的 */}}
     {{- $backends = merge $backends (dict "self-hosted" $auto) }}

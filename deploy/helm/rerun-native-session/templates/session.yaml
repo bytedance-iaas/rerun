@@ -14,7 +14,7 @@ spec:
   automountServiceAccountToken: false
   containers:
     - name: viewer
-      image: {{ required "image.rerun 必填(rerun 镜像;-f 复用 rerun-cloud 的 values 文件即可)" .Values.image.rerun | quote }}
+      image: {{ required "image.rerun 必填(rerun 镜像;-f 复用 dataverse 的 values 文件即可)" .Values.image.rerun | quote }}
       env:
         - name: MODE
           value: native

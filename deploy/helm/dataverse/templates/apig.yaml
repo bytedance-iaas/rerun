@@ -7,9 +7,9 @@
 apiVersion: loadbalancer.vke.volcengine.com/v1beta1
 kind: APIGInstance
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-apig-instance
+  name: {{ include "dataverse.fullname" . }}-apig-instance
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
 spec:
   {{- if .Values.apig.existingInstanceId }}
   # 适配已有网关实例,不新建:网关和它的前置 CLB 都已就位,所以不需要 subnetId。
@@ -26,13 +26,13 @@ spec:
         {{- toYaml .Values.apig.subnetIds | nindent 8 }}
     # resource: 省略 => 平台默认(实测 small_1 CLB / 1c2g / 2 副本)。
   {{- end }}
-  name: {{ include "rerun-cloud.fullname" . }}-apig
+  name: {{ include "dataverse.fullname" . }}-apig
   ingress:
     enable: true
     enableAllNamespaces: false
     # 本实例专属的 ingressClass,从 release 名派生,避免与集群里其他 APIG 实例
     # 抢同一个 class(两个实例声明同一个 class 会互相抢 Ingress)。
-    ingressClasses: [{{ include "rerun-cloud.ingressClassName" . }}]
+    ingressClasses: [{{ include "dataverse.ingressClassName" . }}]
     watchNamespaces: [{{ .Release.Namespace }}]
 ---
 # Web viewer 的入口:host 独享一个自动分配的 *.volceapi.com 域名。
@@ -42,13 +42,13 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-web
+  name: {{ include "dataverse.fullname" . }}-web
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
 spec:
-  ingressClassName: {{ include "rerun-cloud.ingressClassName" . }}
+  ingressClassName: {{ include "dataverse.ingressClassName" . }}
   rules:
-    - host: {{ include "rerun-cloud.webHost" . }}
+    - host: {{ include "dataverse.webHost" . }}
       http:
         paths:
           # catalog 的纯 HTTP 端点,同域直达(HTTP/1.1 过网关):
@@ -59,21 +59,21 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "rerun-cloud.fullname" . }}-headless
+                name: {{ include "dataverse.fullname" . }}-headless
                 port:
                   number: 51234
           - path: /catalog
             pathType: Prefix
             backend:
               service:
-                name: {{ include "rerun-cloud.fullname" . }}-headless
+                name: {{ include "dataverse.fullname" . }}-headless
                 port:
                   number: 51234
           - path: /version
             pathType: Prefix
             backend:
               service:
-                name: {{ include "rerun-cloud.fullname" . }}-headless
+                name: {{ include "dataverse.fullname" . }}-headless
                 port:
                   number: 51234
           {{- if .Values.daft.enabled }}
@@ -84,7 +84,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "rerun-cloud.fullname" . }}-curation
+                name: {{ include "dataverse.fullname" . }}-curation
                 port:
                   number: 7860
           {{- end }}
@@ -92,7 +92,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "rerun-cloud.fullname" . }}-web
+                name: {{ include "dataverse.fullname" . }}-web
                 port:
                   number: 80
 ---
@@ -105,9 +105,9 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-catalog-grpc
+  name: {{ include "dataverse.fullname" . }}-catalog-grpc
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
   annotations:
     # 让网关对上游按 gRPC(HTTP/2)转发。APIG 主要按 Service 端口判定协议:下面 backend 指向
     # headless 的 `grpc` 端口(name=grpc / appProtocol=grpc,见 services-rerun.yaml),APIG 会
@@ -118,16 +118,16 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 spec:
-  ingressClassName: {{ include "rerun-cloud.ingressClassName" . }}
+  ingressClassName: {{ include "dataverse.ingressClassName" . }}
   rules:
-    - host: {{ include "rerun-cloud.webHost" . }}
+    - host: {{ include "dataverse.webHost" . }}
       http:
         paths:
           - path: /rerun.cloud.v1alpha1.RerunCloudService
             pathType: Prefix
             backend:
               service:
-                name: {{ include "rerun-cloud.fullname" . }}-headless
+                name: {{ include "dataverse.fullname" . }}-headless
                 # Reference by NUMBER, not name: the APIG controller's CreateUpstream API
                 # requires a numeric K8SService.Port (a named port fails with
                 # MissingParameter.UpstreamSpec.K8SService.Port). 51235 is the `grpc`

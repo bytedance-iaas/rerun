@@ -8,9 +8,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-vllm
+  name: {{ include "dataverse.fullname" . }}-vllm
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: vllm
 spec:
   replicas: 1
@@ -18,11 +18,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "vllm") | nindent 6 }}
+      {{- include "dataverse.selectorLabels" (dict "root" . "component" "vllm") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "vllm") | nindent 8 }}
+        {{- include "dataverse.selectorLabels" (dict "root" . "component" "vllm") | nindent 8 }}
     spec:
       automountServiceAccountToken: false
       {{- if .Values.vllm.nodeHostname }}
@@ -106,7 +106,7 @@ spec:
             - name: HF_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+                  name: {{ include "dataverse.viewerSecretName" . }}
                   key: hf_token
                   optional: true
           readinessProbe:
@@ -146,13 +146,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "rerun-cloud.fullname" . }}-vllm
+  name: {{ include "dataverse.fullname" . }}-vllm
   labels:
-    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: vllm
 spec:
   selector:
-    {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "vllm") | nindent 4 }}
+    {{- include "dataverse.selectorLabels" (dict "root" . "component" "vllm") | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.vllm.port }}

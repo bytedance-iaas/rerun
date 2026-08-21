@@ -1,7 +1,15 @@
-# rerun-cloud Helm chart
+# dataverse Helm chart
 
-Rerun 云服务常驻部署的 Helm chart:web viewer + catalog(StatefulSet)+ Daft 质检台 + APIG 网关(含 catalog 的 gRPC 路由)。
-包含:rerun StatefulSet(web viewer + catalog server 两容器)、Daft 质检台 StatefulSet(TOS 直连,凭证复用应用 Secret 里的 AK/SK)、集群内 Service、APIG 网关实例与按路径分流的 Ingress。
+Dataverse 云服务常驻部署的 Helm chart:**一个 chart 打包 ReRun 与质检台两个组件**,外加它们共用的网关入口。
+
+| 组件 | 内容 |
+|---|---|
+| **ReRun** | rerun StatefulSet(web viewer + catalog server 两容器)+ 集群内 Service(web / headless gRPC) |
+| **质检台** | Daft 质检台 StatefulSet(TOS 直连,凭证复用应用 Secret 里的 AK/SK)+ 站点配置 ConfigMap;`daft.enabled=false` 可整体关掉 |
+
+共用部分:凭证与 token 签名密钥 Secret、APIG 网关实例与按路径分流的 Ingress(含 catalog 的 gRPC 路由);
+可选的自托管 vLLM(`vllm.enabled=true`)只服务质检台。
+
 按需的云上 native viewer 会话是独立 chart:[`../rerun-native-session`](../rerun-native-session/)。
 
 ## 安装
@@ -12,7 +20,7 @@ Rerun 云服务常驻部署的 Helm chart:web viewer + catalog(StatefulSet)+ Daf
 # 1. 建 namespace 和两个 Secret(应用凭证 / token 签名密钥;
 #    签名密钥用管道直建,不落盘):
 kubectl create namespace rerun
-kubectl -n rerun create secret generic rerun-cloud-secrets \
+kubectl -n rerun create secret generic dataverse-secrets \
     --from-literal=tos_access_key=… --from-literal=tos_secret_key=… \
     --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 'pw123')" \
     --from-literal=ark_api_key=…   # 可选:质检台走火山方舟 VLM 后端时才需要
@@ -21,7 +29,7 @@ rerun server generate-secret | kubectl -n rerun create secret generic \
 
 # 2. values 里只引用名字(secrets.existingSecret / secrets.existingTokenSecret)
 #    + 非密钥配置,然后安装:
-helm install rerun-cloud deploy/helm/rerun-cloud -n rerun -f deploy/secrets/values-prod.yaml
+helm install dataverse deploy/helm/dataverse -n rerun -f deploy/secrets/values-prod.yaml
 
 # 3. 照安装结束打印的 NOTES 走完部署后步骤(查域名、配 CORS、签 token)。
 ```
@@ -29,13 +37,13 @@ helm install rerun-cloud deploy/helm/rerun-cloud -n rerun -f deploy/secrets/valu
 开发环境也可不建 Secret,直填 `secrets.*` 字段由 chart 渲染(见 values.yaml 注释)。
 签名密钥只以 0400 文件挂进 catalog 容器(projected 卷),不进环境变量,web / native 会话不可见;签发 token 用 `kubectl exec` 在容器内做,密钥不出集群。
 
-release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文档里的名字一致。
+release 名建议就叫 `dataverse`:资源名前缀 = release 名,这样和文档里的名字一致。
 
 ## 常用开关
 
 | value | 作用 |
 |---|---|
-| `daft.enabled=false` | 不部署质检台(连带跳过站点配置与 `/curation` 路由) |
+| `daft.enabled=false` | 不部署质检台(连带跳过站点配置与 `/curation` 路由),只留 ReRun |
 | `vllm.enabled=true` | 在同 namespace 部署一个自托管 vLLM(GPU),并自动注册成质检台的一个 VLM 后端 |
 | `secrets.arkApiKey` / `daft.arkBaseUrl` | 质检台接火山方舟(Ark)VLM 后端:API key(密钥,注入 `ARK_API_KEY`)+ base url(普通配置,注入 `ARK_BASE_URL`)。用 `existingSecret` 时把 key 加进那份 Secret(key 名 `ark_api_key`) |
 | `vllm.model` / `vllm.servedModelName` / `vllm.gpuCount` / `vllm.nodeHostname` | 选模型、对外模型名、GPU 卡数、钉到哪个 GPU 节点 |
@@ -58,7 +66,7 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 
 ## 升级与配置变更
 
-- `helm upgrade rerun-cloud deploy/helm/rerun-cloud -n rerun -f …` 即可;
+- `helm upgrade dataverse deploy/helm/dataverse -n rerun -f …` 即可;
   Secret / 站点配置内容变化通过 checksum 注解自动滚动重启 pod
   (`secrets.existingSecret` 场景 chart 看不到内容,改完外部 Secret 需手动 `kubectl rollout restart`)。
 - **不要改的字段**:StatefulSet 的 selector 标签(k8s 不允许,改 = 删了重建);
@@ -66,20 +74,10 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 
 ## 卸载与数据
 
-- `helm uninstall rerun-cloud -n rerun`。
+- `helm uninstall dataverse -n rerun`。
 - catalog 的数据盘 PVC(`server-data-<fullname>-0`)由 volumeClaimTemplates 管理,**uninstall 不删**;确认不要了再手动删 PVC。
 - 质检台不挂 PV:工作区是 emptyDir(数据集缓存 / 跑批暂存 / 任务状态),pod 删了只丢缓存与任务历史;交付按「完整性标志最后传」上传到用户桶,不丢。
 - APIG 网关实例删除后,自动分配的域名随之失效。
-
-## 从 kubectl 模板部署迁移
-
-旧的 `kubectl apply -f rerun-cloud.yaml` 部署与本 chart 的资源名和 selector 标签不同
-(旧 `rerun-web`/`daft-curation` → 新 `<fullname>-web`/`<fullname>-curation`),不能原地接管:
-
-1. 备好 token 签名密钥和各账号密码(与旧部署一致,用户无感);
-2. 删旧 StatefulSet/Service/Ingress/APIGInstance(旧 catalog PVC `server-data-rerun-cloud-0` 名字恰好与新 chart 一致,保留即可被新 StatefulSet 复用;不一致时先改名或接受重新注册);
-3. `helm install`;
-4. 网关域名会重新分配:更新 TOS 桶 CORS 白名单,通知用户换地址。
 
 ## 已知前提
 

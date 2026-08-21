@@ -1,11 +1,11 @@
-# rerun-cloud chart 的默认配置。
+# dataverse chart 的默认配置(一个 chart 打包 ReRun 与质检台两个组件)。
 # 必填项(不填 helm 会报错并指明缺什么):
 #   image.rerun、apig.subnetIds(仅新建网关时,即 apig.existingInstanceId 为空),
 #   daft.enabled 时的 image.curator,
 #   以及密钥 —— 推荐 kubectl 直建 Secret 后配三个 existing*Secret 引用(values 零密钥,
 #   见部署文档);开发环境也可直填 secrets.* 字段由 chart 渲染。
 # 真实值不要写进本文件:另建一个 gitignore 挡住的 values 文件(例:values-prod.yaml),
-#   helm install rerun-cloud deploy/helm/rerun-cloud -n rerun --create-namespace -f values-prod.yaml
+#   helm install dataverse deploy/helm/dataverse -n rerun --create-namespace -f values-prod.yaml
 
 image:
   # rerun 镜像(web viewer 和 catalog server 同一个镜像,例:
