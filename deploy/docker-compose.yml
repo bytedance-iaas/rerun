@@ -4,6 +4,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        # URL of the macOS SDK wheel on TOS — not hardcoded in the Dockerfile.
+        # Set it in .env (or the shell env); required unless BUILD_SDK_WHEEL=0.
+        MAC_WHEEL_URL: ${MAC_WHEEL_URL:-}
     image: rerun-viewer-unified
     environment:
       MODE: web

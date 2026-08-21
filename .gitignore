@@ -47,6 +47,12 @@ __pycache__
 **/.ipynb_checkpoints/
 **/.pytest_cache
 
+# Locally-built SDK wheels staged for upload (e.g. the macOS wheel that a Linux container
+# cannot build). Kept out of git entirely — they carry a big native binary and are hosted
+# on a public-read TOS bucket instead; the image fetches them at build time. See
+# deploy/README.md.
+/artifacts/
+
 # Pixi environment
 .pixi
 
