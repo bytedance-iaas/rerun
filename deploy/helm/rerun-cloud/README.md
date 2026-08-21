@@ -1,7 +1,7 @@
 # rerun-cloud Helm chart
 
 Rerun 云服务常驻部署的 Helm chart:web viewer + catalog(StatefulSet)+ Daft 质检台 + APIG 网关(含 catalog 的 gRPC 路由)。
-包含:rerun StatefulSet(web viewer + catalog server 两容器)、Daft 质检台 StatefulSet(fsx-TOS 挂载)、集群内 Service、APIG 网关实例与按路径分流的 Ingress。
+包含:rerun StatefulSet(web viewer + catalog server 两容器)、Daft 质检台 StatefulSet(TOS 直连,凭证复用应用 Secret 里的 AK/SK)、集群内 Service、APIG 网关实例与按路径分流的 Ingress。
 按需的云上 native viewer 会话是独立 chart:[`../rerun-native-session`](../rerun-native-session/)。
 
 ## 安装
@@ -9,20 +9,18 @@ Rerun 云服务常驻部署的 Helm chart:web viewer + catalog(StatefulSet)+ Daf
 推荐流程(密钥 kubectl 直建、values 零密钥,完整步骤见 docs/release/02-deploy.md):
 
 ```sh
-# 1. 建 namespace 和三个 Secret(应用凭证 / fsx 挂载凭证 / token 签名密钥;
+# 1. 建 namespace 和两个 Secret(应用凭证 / token 签名密钥;
 #    签名密钥用管道直建,不落盘):
 kubectl create namespace rerun
 kubectl -n rerun create secret generic rerun-cloud-secrets \
     --from-literal=tos_access_key=… --from-literal=tos_secret_key=… \
     --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 'pw123')" \
     --from-literal=ark_api_key=…   # 可选:质检台走火山方舟 VLM 后端时才需要
-kubectl -n rerun create secret generic daft-secrets \
-    --from-literal=AccessKeyId=… --from-literal=SecretAccessKey=…
 rerun server generate-secret | kubectl -n rerun create secret generic \
     rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
 
-# 2. values 里只引用名字(secrets.existingSecret / secrets.existingTokenSecret /
-#    daft.fsx.existingSecret)+ 非密钥配置,然后安装:
+# 2. values 里只引用名字(secrets.existingSecret / secrets.existingTokenSecret)
+#    + 非密钥配置,然后安装:
 helm install rerun-cloud deploy/helm/rerun-cloud -n rerun -f deploy/secrets/values-prod.yaml
 
 # 3. 照安装结束打印的 NOTES 走完部署后步骤(查域名、配 CORS、签 token)。
@@ -37,14 +35,14 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 
 | value | 作用 |
 |---|---|
-| `daft.enabled=false` | 不部署质检台(连带跳过 TOS 挂载与 `/curation` 路由) |
+| `daft.enabled=false` | 不部署质检台(连带跳过站点配置与 `/curation` 路由) |
 | `vllm.enabled=true` | 在同 namespace 部署一个自托管 vLLM(GPU),并自动注册成质检台的一个 VLM 后端 |
 | `secrets.arkApiKey` / `daft.arkBaseUrl` | 质检台接火山方舟(Ark)VLM 后端:API key(密钥,注入 `ARK_API_KEY`)+ base url(普通配置,注入 `ARK_BASE_URL`)。用 `existingSecret` 时把 key 加进那份 Secret(key 名 `ark_api_key`) |
 | `vllm.model` / `vllm.servedModelName` / `vllm.gpuCount` / `vllm.nodeHostname` | 选模型、对外模型名、GPU 卡数、钉到哪个 GPU 节点 |
 | `apig.enabled=false` | 不建网关和 Ingress(自备入口) |
 | `apig.existingInstanceId` | 适配已有 APIG 实例而不新建 |
 | `web.basicAuth.enabled=false` / `catalog.tokenAuth.enabled=false` | 关认证(仅限内网调试) |
-| `secrets.existingSecret` / `daft.fsx.existingSecret` | 密钥由外部 Secret 提供,chart 不渲染明文 |
+| `secrets.existingSecret` | 密钥由外部 Secret 提供,chart 不渲染明文 |
 | `catalog.hfEndpoint=""` | 海外集群直连 HuggingFace 官方 |
 
 ## 自托管 vLLM(可选,给质检台用)
@@ -70,7 +68,7 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 
 - `helm uninstall rerun-cloud -n rerun`。
 - catalog 的数据盘 PVC(`server-data-<fullname>-0`)由 volumeClaimTemplates 管理,**uninstall 不删**;确认不要了再手动删 PVC。
-- 质检台的 PV/PVC 只是 TOS 桶的挂载通道,删了不丢数据(数据在桶里)。
+- 质检台不挂 PV:工作区是 emptyDir(数据集缓存 / 跑批暂存 / 任务状态),pod 删了只丢缓存与任务历史;交付按「完整性标志最后传」上传到用户桶,不丢。
 - APIG 网关实例删除后,自动分配的域名随之失效。
 
 ## 从 kubectl 模板部署迁移
@@ -85,6 +83,6 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 
 ## 已知前提
 
-- 集群在火山引擎 VKE 上,且已装 APIGInstance CRD(`loadbalancer.vke.volcengine.com/v1beta1`)与 fsx CSI(TOS 模式);
+- 集群在火山引擎 VKE 上,且已装 APIGInstance CRD(`loadbalancer.vke.volcengine.com/v1beta1`);
 - `network.subnetId` 必须是当前集群 VPC 里的子网;
 - robot_curator 镜像 ≥ Daft 仓库 commit 412b91ce8(子路径支持)。

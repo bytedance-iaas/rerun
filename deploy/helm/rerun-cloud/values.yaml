@@ -146,6 +146,10 @@ daft:
     limits:
       cpu: "8"
       memory: 16Gi
+      # 数据集缓存/跑批暂存的安全预算(emptyDir 计入容器 ephemeral-storage)。
+      # 配了它体积预检才启用:大数据集下载前先估"还能安全写多少",防止把 pod
+      # 写到被 kubelet 驱逐。按节点盘和数据集大小调;节点盘偏小就调低。
+      ephemeral-storage: 50Gi
 
 vllm:
   # false = 不部署自托管 LLM(默认)。打开需要一张 GPU 卡:质检台的 VLM 类质检
