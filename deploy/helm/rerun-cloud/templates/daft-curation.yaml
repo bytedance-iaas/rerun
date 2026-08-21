@@ -84,6 +84,21 @@ spec:
                   key: tos_secret_key
             - name: TOS_ENDPOINT
               value: {{ .Values.tos.endpointInternal | quote }}
+            # 火山方舟(Ark)VLM 后端接入:API key 走 secret(缺省不设,用 existingSecret
+            # 又没这个 key 时 optional 保证不炸),base url 是普通配置。环境变量名与
+            # Daft 引擎读取一致(ARK_API_KEY / ARK_BASE_URL)。
+            {{- if or .Values.secrets.arkApiKey .Values.secrets.existingSecret }}
+            - name: ARK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+                  key: ark_api_key
+                  optional: true
+            {{- end }}
+            {{- with .Values.daft.arkBaseUrl }}
+            - name: ARK_BASE_URL
+              value: {{ . | quote }}
+            {{- end }}
             # 数据集下载缓存固定到 /data(emptyDir),与任务状态同一块盘。
             - name: CURATION_TOS_CACHE
               value: /data/tos-cache

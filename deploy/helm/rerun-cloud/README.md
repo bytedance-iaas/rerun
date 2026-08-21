@@ -14,7 +14,8 @@ Rerun 云服务常驻部署的 Helm chart:web viewer + catalog(StatefulSet)+ Daf
 kubectl create namespace rerun
 kubectl -n rerun create secret generic rerun-cloud-secrets \
     --from-literal=tos_access_key=… --from-literal=tos_secret_key=… \
-    --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 'pw123')"
+    --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 'pw123')" \
+    --from-literal=ark_api_key=…   # 可选:质检台走火山方舟 VLM 后端时才需要
 kubectl -n rerun create secret generic daft-secrets \
     --from-literal=AccessKeyId=… --from-literal=SecretAccessKey=…
 rerun server generate-secret | kubectl -n rerun create secret generic \
@@ -38,6 +39,7 @@ release 名建议就叫 `rerun-cloud`:资源名前缀 = release 名,这样和文
 |---|---|
 | `daft.enabled=false` | 不部署质检台(连带跳过 TOS 挂载与 `/curation` 路由) |
 | `vllm.enabled=true` | 在同 namespace 部署一个自托管 vLLM(GPU),并自动注册成质检台的一个 VLM 后端 |
+| `secrets.arkApiKey` / `daft.arkBaseUrl` | 质检台接火山方舟(Ark)VLM 后端:API key(密钥,注入 `ARK_API_KEY`)+ base url(普通配置,注入 `ARK_BASE_URL`)。用 `existingSecret` 时把 key 加进那份 Secret(key 名 `ark_api_key`) |
 | `vllm.model` / `vllm.servedModelName` / `vllm.gpuCount` / `vllm.nodeHostname` | 选模型、对外模型名、GPU 卡数、钉到哪个 GPU 节点 |
 | `apig.enabled=false` | 不建网关和 Ingress(自备入口) |
 | `apig.existingInstanceId` | 适配已有 APIG 实例而不新建 |

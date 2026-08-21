@@ -47,6 +47,10 @@ secrets:
   tosSecretKey: ""
   # HuggingFace token,访问私有 HF 数据集才需要;留空则不写入。
   hfToken: ""
+  # 火山方舟(Ark)API key,质检台的 VLM 类质检走方舟 MaaS 时用(注入成质检台的
+  # ARK_API_KEY 环境变量)。留空则不写入,质检台不启用方舟后端。base url 不是密钥,
+  # 见 daft.arkBaseUrl。用 existingSecret 时改为在那份 Secret 里加 key: ark_api_key。
+  arkApiKey: ""
   # Basic auth 密码表(Apache htpasswd 格式):每行「用户名:密码哈希」,哈希用
   # openssl passwd -apr1 或 htpasswd -B 生成。多用户用 YAML 块写法一行一个。
   # web viewer 和 Daft 质检台共用这一份:同域名部署,任意账号登录一次两边通行。
@@ -131,6 +135,10 @@ daft:
   #     hardware: NVIDIA H20
   #     service_type: 自托管 vLLM
   vlmBackends: {}
+  # 火山方舟(Ark)VLM 服务的 base url,注入成质检台的 ARK_BASE_URL 环境变量。
+  # 这是普通配置不是密钥;配套的 API key 走 secrets.arkApiKey(密钥)。
+  # 留空则不注入 ARK_BASE_URL(质检台不启用方舟后端时可不管)。
+  arkBaseUrl: https://ark.cn-beijing.volces.com/api/v3
   resources:
     requests:
       cpu: "2"
