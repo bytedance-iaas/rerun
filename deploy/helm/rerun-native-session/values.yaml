@@ -1,0 +1,59 @@
+# 一个 release = 一个会话。用户名取自 release 名:
+#   helm install qian deploy/helm/rerun-native-session -n <ns> \
+#       -f <rerun-cloud 用的同一份 values 文件> --set sessionPassword=<会话密码>
+# 会话资源名为 rerun-native-<release 名>(小写字母/数字/中划线)。
+#
+# 字段结构刻意与 rerun-cloud chart 的 values 对齐(取其子集):直接复用同一份
+# values-prod.yaml,镜像/缓存桶/凭证 Secret 名都不用重复填;文件里多余的字段
+# (curator、subnetId、daft.* 等)会被本 chart 忽略。必须单独给的只有 sessionPassword。
+# 前提:rerun-cloud 已部署在同一 namespace(复用它的凭证 Secret 和 APIG 网关)。
+
+image:
+  # rerun 镜像,和 rerun-cloud 用同一个(同字段路径,-f 复用即得)。
+  rerun: ""
+
+# 会话密码:noVNC 连接时要求输入(VNC 协议层认证)。走公网(Ingress)必须设。
+# 每个会话独立,用 --set sessionPassword=… 传,不放共享 values 文件。
+sessionPassword: ""
+
+# 远程桌面的【初始】分辨率;用 resize=remote 连接时会被浏览器窗口尺寸接管。
+geometry: 1280x800
+
+tos:
+  # 会话在云内跑,走内网 endpoint;集群没开内网访问 TOS 时换公网。
+  endpointInternal: https://tos-s3-cn-beijing.ivolces.com
+  region: cn-beijing
+  # rrd 产物缓存桶;复用 values-prod 里的值即与其他 viewer 一致。"off" 关闭。
+  rrdArtifactsUrl: "off"
+
+catalog:
+  # HF 镜像站;海外集群置空直连官方。(与 rerun-cloud 同字段路径,复用其值。)
+  hfEndpoint: https://hf-mirror.com
+
+# 云内带宽充裕,产物并发下载可开大(上限 16;0 = 自动 4)。
+rrdArtifactsPrefetch: "8"
+
+secrets:
+  # rerun-cloud 的应用凭证 Secret 名(keys: tos_access_key, tos_secret_key, hf_token)。
+  # 与 rerun-cloud values 同字段路径,复用其值。
+  existingSecret: rerun-cloud-secrets
+
+ingress:
+  # false = 不走公网,用 port-forward(最安全):
+  #   kubectl -n <ns> port-forward pod/rerun-native-<name> 9092:8080
+  #   浏览器打开 http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
+  enabled: true
+  # rerun-cloud 网关声明的 ingressClass(缺省 = release 名为 rerun-cloud 时的派生值)。
+  className: rerun-cloud-apig
+  # host 只是网关分流键;每个会话 host 独享一个自动分配的 *.volceapi.com 域名。
+  # 空 = 从会话名派生(rerun-native-<name>.apig.internal)。
+  host: ""
+
+# native 会话就是为开 GB 级大文件存在的,内存给足。
+resources:
+  requests:
+    cpu: "2"
+    memory: 8Gi
+  limits:
+    cpu: "4"
+    memory: 16Gi

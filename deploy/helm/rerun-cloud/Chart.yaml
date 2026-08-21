@@ -1,0 +1,9 @@
+apiVersion: v2
+name: rerun-cloud
+description: >-
+  Rerun 云服务常驻部署(VKE):web viewer + catalog server + Daft 质检台 + APIG 网关入口。
+  Rerun 云服务常驻部署(web + catalog StatefulSet + Daft 质检台 + APIG 网关/gRPC 路由)。
+type: application
+version: 0.1.0
+# appVersion 跟随 rerun 镜像 tag 的语义版本;实际镜像由 values 里的 image.rerun 指定。
+appVersion: "0.36.0"

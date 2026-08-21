@@ -1,0 +1,101 @@
+# 云上 native viewer 会话:一个 pod + ClusterIP service(+ 可选的共享网关 Ingress)。
+# 能同时开多少个会话由 namespace 的资源配额说了算,软件层不做限制。
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "rerun-native-session.name" . }}
+  labels:
+    {{- include "rerun-native-session.labels" . | nindent 4 }}
+    app: rerun-native-session
+    session: {{ include "rerun-native-session.name" . }}
+spec:
+  restartPolicy: Never
+  # 密钥挂在 /run/secrets;关掉 SA token 自动挂载,避免与只读密钥卷撞车。
+  automountServiceAccountToken: false
+  containers:
+    - name: viewer
+      image: {{ required "image.rerun 必填(rerun 镜像;-f 复用 rerun-cloud 的 values 文件即可)" .Values.image.rerun | quote }}
+      env:
+        - name: MODE
+          value: native
+        - name: TOS_ENDPOINT
+          value: {{ .Values.tos.endpointInternal | quote }}
+        - name: TOS_REGION
+          value: {{ .Values.tos.region | quote }}
+        - name: TOS_RRD_ARTIFACTS_URL
+          value: {{ .Values.tos.rrdArtifactsUrl | quote }}
+        {{- with .Values.catalog.hfEndpoint }}
+        - name: HF_ENDPOINT
+          value: {{ . | quote }}
+        {{- end }}
+        - name: RRD_ARTIFACTS_PREFETCH
+          value: {{ .Values.rrdArtifactsPrefetch | quote }}
+        - name: SESSION_GEOMETRY
+          value: {{ .Values.geometry | quote }}
+        - name: SESSION_PASSWORD
+          value: {{ required "sessionPassword 必填(noVNC 会话密码)" .Values.sessionPassword | quote }}
+      ports:
+        - containerPort: 8080
+      readinessProbe:
+        httpGet:
+          path: /vnc.html
+          port: 8080
+        initialDelaySeconds: 3
+        periodSeconds: 5
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
+      volumeMounts:
+        - name: tos-secrets
+          mountPath: /run/secrets
+          readOnly: true
+        # 软件渲染需要足量共享内存(等价于 docker 的 shm_size: 1gb)。
+        - name: dshm
+          mountPath: /dev/shm
+  volumes:
+    - name: tos-secrets
+      secret:
+        secretName: {{ .Values.secrets.existingSecret }}
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+---
+# 会话的集群内 service:APIG Ingress 的后端(session 标签唯一,只选中本会话)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rerun-native-session.name" . }}
+  labels:
+    {{- include "rerun-native-session.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    session: {{ include "rerun-native-session.name" . }}
+  ports:
+    - name: novnc
+      port: 8080
+      targetPort: 8080
+{{- if .Values.ingress.enabled }}
+---
+# 本会话的公网入口:挂共享 APIG 网关,host 独享一个自动分配的 *.volceapi.com 域名
+# (noVNC 的 WebSocket 走 HTTP/1.1,网关可正常转发)。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "rerun-native-session.name" . }}
+  labels:
+    {{- include "rerun-native-session.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ include "rerun-native-session.host" . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "rerun-native-session.name" . }}
+                port:
+                  number: 8080
+{{- end }}

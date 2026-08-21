@@ -106,7 +106,7 @@ Against real TOS (needs `TOS_*` credentials):
 2. Open the same segment twice — `segment_store(seg)` and `segment_store(seg, direct=True)` — and compare `schema()`, chunk ids, and row counts: they must match exactly.
 3. Confirm the bytes bypass the server: watch the server's network I/O (or its logs — no `FetchChunks` calls appear for the direct read), or point `TOS_ENDPOINT` at the internal endpoint from an in-cluster pod and watch the EIP traffic graphs stay flat while the dataloader streams.
 
-For a step-by-step, demo-grade proof against the VKE deployment — including the most convincing variant, "kill the server after the metadata call and watch the direct read finish anyway" — see [`deploy/vke/direct-read-demo.md`](../deploy/vke/direct-read-demo.md).
+For a step-by-step, demo-grade proof against the cloud deployment — including the most convincing variant, "kill the server after the metadata call and watch the direct read finish anyway" — see [`docs/testing/direct-read-demo.md`](testing/direct-read-demo.md).
 
 ## The DataFusion / dataloader path
 

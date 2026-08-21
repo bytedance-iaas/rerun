@@ -1,0 +1,160 @@
+{{- if .Values.vllm.enabled }}
+# ══════════════════ 自托管 vLLM(质检台的 VLM 后端) ══════════════════
+# 独立 Deployment(不是 StatefulSet):权重下到 emptyDir、无持久态,重建即重来。
+# 权重占满 GPU、新旧 pod 不能并存 → Recreate 策略(先杀后起)。
+# 质检台的 VLM 类质检(task_success)通过 OpenAI 兼容 API 连它;endpoint 由本 chart
+# 自动注册进质检台 site.yaml 的 vlm_backends(见 configmap-curation.yaml,键名 self-hosted),
+# 界面直接能选,不用手抄集群内 DNS。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rerun-cloud.fullname" . }}-vllm
+  labels:
+    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vllm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "vllm") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "vllm") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- if .Values.vllm.nodeHostname }}
+      # 钉到指定 GPU 节点(抄目标节点的 kubernetes.io/hostname)。
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - {{ .Values.vllm.nodeHostname | quote }}
+      {{- end }}
+      {{- with .Values.vllm.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.vllm.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.vllm.weightFetch.image }}
+      initContainers:
+        # 权重预取:在 GPU 节点本地盘(emptyDir)下模型,不进镜像、不落 TOS。
+        # 幂等:已有 *.safetensors 且无 *.aria2 断点就秒跳过 → pod 重建不必重下。
+        # 走内网 oniond + 火山镜像源(deb.debian.org 公网在部分节点极慢)。
+        - name: fetch-weights
+          image: {{ . | quote }}
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              M=/models/{{ required "vllm.weightFetch.image 非空时必须给 vllm.weightFetch.modelName" $.Values.vllm.weightFetch.modelName }}
+              if ls "$M"/*.safetensors >/dev/null 2>&1 && ! ls "$M"/*.aria2 >/dev/null 2>&1; then
+                echo "权重已完整,跳过下载"; exit 0
+              fi
+              echo "=== 装 oniond(火山源,绕开 byted)==="
+              # apt 也走火山内网镜像:deb.debian.org 公网在部分节点极慢。
+              sed -i "s|http://deb.debian.org|https://mirrors.ivolces.com|g" /etc/apt/sources.list.d/debian.sources
+              apt-get update -qq
+              apt-get install -y -qq wget jq aria2 curl >/dev/null
+              MIRROR=http://mirrors.ivolces.com/extra-tools/debian
+              wget -q "$MIRROR/pool/main/o/onion-ai-data/onion-ai-data_2.4.6_amd64.deb" -O /tmp/o.deb
+              dpkg-deb -x /tmp/o.deb /tmp/x
+              install /tmp/x/usr/bin/oniond /usr/local/bin/oniond
+              ln -sf /usr/bin/aria2c /usr/local/bin/aria2c_byted
+              echo "=== 下 {{ $.Values.vllm.weightFetch.modelName }} 到本地盘 ==="
+              export BUCKET={{ required "vllm.weightFetch.image 非空时必须给 vllm.weightFetch.bucket" $.Values.vllm.weightFetch.bucket }}
+              oniond download model {{ $.Values.vllm.weightFetch.modelName }} --turbo --dir /models
+              echo "下载完成,文件数:"; ls -1 "$M" | wc -l
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      {{- end }}
+      containers:
+        - name: vllm
+          image: {{ .Values.vllm.image | quote }}
+          args:
+            - --model
+            - {{ required "vllm.enabled=true 时 vllm.model 必填(容器内本地路径或 HF repo id)" .Values.vllm.model | quote }}
+            {{- with .Values.vllm.servedModelName }}
+            - --served-model-name
+            - {{ . | quote }}
+            {{- end }}
+            - --port
+            - {{ .Values.vllm.port | quote }}
+            {{- with .Values.vllm.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.vllm.port }}
+              name: http
+          env:
+            # HF 直拉路径的镜像站与 token(oniond 流程用不到,但留空成本极低):
+            # 复用 catalog.hfEndpoint 与共用 secret 里的 hf_token(缺失则不注入)。
+            {{- with .Values.catalog.hfEndpoint }}
+            - name: HF_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+                  key: hf_token
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.vllm.port }}
+            # 大模型加载慢:给足重试窗口(60s 起,15s 一次,最多 ~10min)。
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 40
+          resources:
+            limits:
+              nvidia.com/gpu: {{ .Values.vllm.gpuCount }}
+              {{- with (.Values.vllm.resources.limits) }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+            {{- with (.Values.vllm.resources.requests) }}
+            requests:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        # 权重盘:emptyDir,用量计入容器 ephemeral-storage 限额(在 resources.limits 里配了才生效)。
+        - name: models
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.vllm.dshmSize }}
+---
+# vLLM 的集群内 Service(OpenAI 兼容 API)。质检台按
+# http://<name>.<ns>.svc.cluster.local:<port>/v1 连它(自动注册进 vlm_backends)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rerun-cloud.fullname" . }}-vllm
+  labels:
+    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vllm
+spec:
+  selector:
+    {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "vllm") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.vllm.port }}
+      targetPort: {{ .Values.vllm.port }}
+{{- end }}

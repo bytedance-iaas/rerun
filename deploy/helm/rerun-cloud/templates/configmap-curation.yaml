@@ -1,0 +1,32 @@
+{{- if .Values.daft.enabled }}
+# 质检台的站点配置。2026-08-19 云产品化:tos_buckets 段已退役 —— 数据面是
+# TOS 直连,桶与前缀由用户在界面上运行时给出,不再需要部署侧声明"接入了
+# 哪些桶"。现在这里只承载 VLM 后端预设。
+# 质检台没有 k8s 自动发现,可用后端只认这里的 vlm_backends:所以本 chart 部署的
+# 那个自托管 vLLM(vllm.enabled=true)必须由这里注入才能在界面上被选到 —— 下面把它
+# 以 self-hosted 键自动合进来(endpoint 指向 vLLM Service 的集群内 DNS,以 /v1 结尾)。
+# 用户在 daft.vlmBackends 里配的外部后端一并合入,同名以用户为准。
+# 改 values 后 helm upgrade,checksum 注解会让 curation pod 自动滚动重启生效。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rerun-cloud.fullname" . }}-curation-site
+  labels:
+    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    app.kubernetes.io/component: curation
+data:
+  site.yaml: |
+    {{- $backends := deepCopy (.Values.daft.vlmBackends | default dict) }}
+    {{- if .Values.vllm.enabled }}
+    {{- $endpoint := printf "http://%s-vllm.%s.svc.cluster.local:%v/v1" (include "rerun-cloud.fullname" .) .Release.Namespace (.Values.vllm.port | int) }}
+    {{- $auto := dict "endpoint" $endpoint "model" (.Values.vllm.servedModelName | default .Values.vllm.model) "service_type" "自托管 vLLM(本 chart 部署)" }}
+    {{- /* 用户 daft.vlmBackends 优先:同名 self-hosted 时保留用户的 */}}
+    {{- $backends = merge $backends (dict "self-hosted" $auto) }}
+    {{- end }}
+    {{- if $backends }}
+    vlm_backends:
+      {{- toYaml $backends | nindent 6 }}
+    {{- else }}
+    {}
+    {{- end }}
+{{- end }}

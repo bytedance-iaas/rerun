@@ -1,0 +1,138 @@
+# StatefulSet 而不是 Deployment:catalog 的库和缓存在 RWO 云盘上,StatefulSet
+# 保证同一时刻至多一个实例挂这块盘(节点故障时不会起出第二个 pod 抢盘)。
+# 注意:StatefulSet 的 selector 不可变,selectorLabels 定死后不能改。
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "rerun-cloud.fullname" . }}
+  labels:
+    {{- include "rerun-cloud.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rerun
+spec:
+  serviceName: {{ include "rerun-cloud.fullname" . }}-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "rerun") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rerun-cloud.selectorLabels" (dict "root" . "component" "rerun") | nindent 8 }}
+      annotations:
+        # 密钥内容变了自动滚动重启;existingSecret 场景 chart 看不到内容,改完需手动重启。
+        checksum/secrets: {{ print (include (print $.Template.BasePath "/secret-viewer.yaml") .) (include (print $.Template.BasePath "/secret-token.yaml") .) | sha256sum }}
+    spec:
+      # 密钥挂在 /run/secrets;关掉 SA token 自动挂载,避免与只读密钥卷撞车。
+      automountServiceAccountToken: false
+      containers:
+        # ---- 容器 1:web viewer(nginx + wasm + /tos-config.json) ----
+        - name: web
+          image: {{ required "image.rerun 必填(rerun 镜像地址)" .Values.image.rerun | quote }}
+          env:
+            - name: MODE
+              value: web
+            # web 模式下这个 endpoint 会下发给用户的浏览器,浏览器在公网,必须用公网 endpoint。
+            - name: TOS_ENDPOINT
+              value: {{ .Values.tos.endpointPublic | quote }}
+            - name: TOS_REGION
+              value: {{ .Values.tos.region | quote }}
+            - name: TOS_RRD_ARTIFACTS_URL
+              value: {{ .Values.tos.rrdArtifactsUrl | quote }}
+            - name: RRD_ARTIFACTS_PREFETCH
+              value: {{ .Values.web.rrdArtifactsPrefetch | quote }}
+            {{- with .Values.web.daftUrl }}
+            - name: DAFT_URL
+              value: {{ . | quote }}
+            {{- end }}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /healthz # 免认证的健康检查端点(开 Basic auth 后 / 会 401)
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          volumeMounts:
+            - name: tos-secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: rrd-cache
+              mountPath: /rrd-cache
+
+        # ---- 容器 2:catalog server ----
+        - name: catalog
+          image: {{ .Values.image.rerun | quote }}
+          env:
+            - name: MODE
+              value: server
+            # server 在云内跑,拉 TOS 走内网 endpoint 更快且不计公网流量。
+            - name: TOS_ENDPOINT
+              value: {{ .Values.tos.endpointInternal | quote }}
+            - name: TOS_REGION
+              value: {{ .Values.tos.region | quote }}
+            # 预签名 URL 用哪个 endpoint 签(只影响发给客户端的 URL)。
+            - name: RERUN_PRESIGN_ENDPOINT
+              value: {{ .Values.catalog.presignEndpoint | quote }}
+            {{- with .Values.catalog.hfEndpoint }}
+            - name: HF_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            # 桶 CORS 自助配置(/api/ensure-cors):viewer 打开新桶时由 server
+            # 补配桶的 CORS 规则(只追加,不覆盖别家规则)。
+            - name: RERUN_AUTO_CORS
+              value: {{ .Values.catalog.autoCors.enabled | ternary "1" "0" | quote }}
+            {{- with .Values.catalog.autoCors.origins }}
+            - name: RERUN_AUTO_CORS_ORIGINS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            # token 签名密钥不走环境变量(env 会出现在进程环境里,kubectl exec env
+            # 可见):以 0400 文件投影进 /run/secrets,entrypoint 自动发现。
+          ports:
+            - containerPort: 51234
+          readinessProbe:
+            tcpSocket:
+              port: 51234
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.catalog.resources | nindent 12 }}
+          volumeMounts:
+            - name: catalog-secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: server-data
+              mountPath: /server-data
+      volumes:
+        # web 容器只看得到应用凭证(AK/SK、hf_token、账号表),签名密钥不在其中。
+        - name: tos-secrets
+          secret:
+            secretName: {{ include "rerun-cloud.viewerSecretName" . }}
+        # catalog 容器在同一目录额外投影签名密钥,单文件 0400(仅属主可读)。
+        - name: catalog-secrets
+          projected:
+            sources:
+              - secret:
+                  name: {{ include "rerun-cloud.viewerSecretName" . }}
+              {{- if .Values.catalog.tokenAuth.enabled }}
+              - secret:
+                  name: {{ include "rerun-cloud.tokenSecretName" . }}
+                  items:
+                    - key: server_token_secret
+                      path: server_token_secret
+                      mode: 256 # 0400
+              {{- end }}
+        - name: rrd-cache
+          emptyDir: {} # nginx 的 WebDAV 回写目录(备用通道),丢了无所谓
+  # catalog 数据库 + 远端文件缓存。丢了能自愈(server 重新从 TOS 拉),但 catalog
+  # 注册记录也在上面,建议保留。helm uninstall 不会删这块 PVC。
+  volumeClaimTemplates:
+    - metadata:
+        name: server-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.catalog.storage.className | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.catalog.storage.size | quote }}
