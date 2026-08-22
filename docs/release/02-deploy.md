@@ -1,6 +1,9 @@
 # 部署指南
 
 本文把整套 Rerun 云服务部署到一个火山引擎 VKE 集群,使用 Helm chart(`deploy/helm/`)。
+常驻服务是 `dataverse` chart —— 一个 chart 打包 **ReRun**(web viewer + catalog server)与
+**质检台**(Daft)两个组件,以及它们共用的 APIG 网关入口;
+按需的 native viewer 会话是另一个 chart `rerun-native-session`(第 5 节)。
 全程约 30 分钟,其中等云资源(CLB、网关)就绪约 10 分钟。
 
 ## 1. 前提条件
@@ -17,7 +20,7 @@
 
   只有别的 apiVersion(或 grep 无输出)都算不满足,先找集群管理员装/升级 APIG 组件;
   (质检台不再需要 fsx CSI 驱动:数据面已改为 TOS SDK 直连,不挂载任何桶。)
-- 一个当前集群 VPC 内的子网 ID(给 CLB / 网关用)。查法 — 抄本集群任一正常 LoadBalancer Service 的注解:
+- （仅当**新建独立 APIG 网关**时,见 2.4)当前集群 VPC 内的子网 ID,给新网关及其前置 CLB 用;网关多副本高可用,建议备 2 个【不同可用区】的子网。复用已有网关(2.3 推荐做法)不需要子网。查法 — 抄本集群任一正常 LoadBalancer Service 的注解:
 
   ```sh
   kubectl get svc -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.service\.beta\.kubernetes\.io/volcengine-loadbalancer-subnet-id}{"\n"}{end}' | grep subnet-
@@ -96,10 +99,10 @@ export ARK_API_KEY=="##############"
 #    访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>)。
 #    ark_api_key 是质检台走火山方舟 VLM 后端用的 key(配套 base url 是普通配置,
 #    在 2.3 的 daft.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行:
-kubectl -n $RERUN_NS create secret generic rerun-cloud-secrets \
+kubectl -n $RERUN_NS create secret generic dataverse-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
-    --from-literal=ark_api_key="<火山方舟 API key>" \
+    --from-literal=ark_api_key="$ARK_API_KEY" \
     --from-literal=web_htpasswd="$(printf '%s\n%s\n' \
         "alice:$(openssl passwd -apr1 'pwd123')" \
         "bob:$(openssl passwd -apr1 'pwd456')")"
@@ -116,38 +119,53 @@ kubectl -n $RERUN_NS create secret generic rerun-cloud-secrets \
 
 ```yaml
 image:
-  rerun: <rerun 镜像,例 iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:TAG>
+  rerun: <rerun 镜像>
   curator: <robot_curator 镜像>
 
-network:
-  subnetId: <第 1 节查到的 subnet-xxx>
+apig:
+  # 复用集群里已有的 APIG 网关(推荐):填平台实例 id —— APIG 控制台
+  # https://console.volcengine.com/veapig → 实例列表里那一串。
+  # 复用时不需要 subnetIds(网关和它的前置 CLB 都已存在)。
+  existingInstanceId: <apig 实例 id>
+
+  # —— 或者:新建独立网关(见 2.4)。改用这种方式时,注释掉上面的 existingInstanceId,
+  #    放开下面的 subnetIds(第 1 节查到的,建议 2 个不同可用区的子网):
+  # subnetIds:
+  #   - <subnet-xxx（可用区 A）>
+  #   - <subnet-yyy（可用区 B）>
 
 tos:
   rrdArtifactsUrl: tos://<rrd 缓存路径>
 
 secrets:
-  existingSecret: rerun-cloud-secrets       # = 2.2 建的两个 Secret 之一
+  existingSecret: dataverse-secrets       # = 2.2 建的两个 Secret 之一
   existingTokenSecret: rerun-catalog-server-secrets
 ```
 
 密钥已在 2.2 建进集群,这里只引用 Secret 名字 — **values 文件里没有任何密钥**。
 后续增删登录账号见第 7 节。
 
-质检台(daft)的参数都带默认值,一般不用在这份文件里写:火山方舟 base url
-(`daft.arkBaseUrl`,默认北京)、CPU/内存与 `ephemeral-storage` 体积预检额度
-(`daft.resources`)等。要改就直接编辑 [`deploy/helm/rerun-cloud/values.yaml`](../../deploy/helm/rerun-cloud/values.yaml)
-里对应项(那里有逐项注释),或按需在本文件里覆盖同名键。
-方舟的 API key 是密钥,走 2.2 的 `ark_api_key`,不在这里配。
+集群里还没有 APIG 网关、或就是要一个独立网关,改用新建方式,见 **2.4**。
 
 缺省区域不是 cn-beijing、或要用其他开关(不部署质检台、内网 CLB、外部 Secret 等),
-参数全集和默认值见 [`deploy/helm/rerun-cloud/values.yaml`](../../deploy/helm/rerun-cloud/values.yaml) 的注释。
+参数全集和默认值见 [`deploy/helm/dataverse/values.yaml`](../../deploy/helm/dataverse/values.yaml) 的注释。
+
+### 2.4 改为新建独立 APIG 网关(可选)
+
+集群里还没有 APIG 网关,或想给本部署一个**独立**网关(独立前置 CLB、独立公网域名,按量计费),
+就用 2.3 `apig` 段里那几行注释掉的备选:**注释掉 `existingInstanceId`,放开 `subnetIds`**。
+
+- `subnetIds` 至少一个;网关多副本高可用,建议给 2 个【不同可用区】的子网(第 1 节查到的),
+  平台把网关副本和前置 CLB 摊到多可用区。
+- `existingInstanceId` 与 `subnetIds` 填一个即可:前者非空就走复用、`subnetIds` 被忽略;两者同时
+  留空会因缺 `subnetIds` 报错。
 
 ## 3. 安装
 
 namespace 和密钥都已在 2.2 就位,安装就一条命令:
 
 ```sh
-helm install rerun-cloud deploy/helm/rerun-cloud \
+helm install dataverse deploy/helm/dataverse \
     -n $RERUN_NS \
     -f deploy/secrets/values-prod.yaml
 ```
@@ -159,7 +177,7 @@ helm install rerun-cloud deploy/helm/rerun-cloud \
 
 ```sh
 kubectl -n $RERUN_NS get pods
-# 预期:rerun-cloud-0 2/2 Running,rerun-cloud-curation-0 1/1 Running
+# 预期:rerun-cloud-0 2/2 Running,dataverse-curation-0 1/1 Running
 
 kubectl get apiginstance -n $RERUN_NS
 # 等 PHASE=Running(偶发返回空列表,重试确认,不要据此断言实例不存在)
@@ -168,7 +186,7 @@ kubectl get apiginstance -n $RERUN_NS
 ### 4.2 查网关域名
 
 自动分配的 `*.volceapi.com` 域名只能在 APIG 控制台看,kubectl 查不到:
-[console.volcengine.com/veapig](https://console.volcengine.com/veapig) → 服务列表,找 host 为 `rerun-cloud-web.apig.internal` 的行,对应的域名就是整套服务的**唯一公网入口**:
+[console.volcengine.com/veapig](https://console.volcengine.com/veapig) → 服务列表,找 host 为 `dataverse-web.apig.internal` 的行,对应的域名就是整套服务的**唯一公网入口**:
 web viewer(`/`)、质检台(`/curation`)、catalog 的 gRPC(网关按路径分流到 51234,客户端连 `rerun+https://<域名>:443`)、SDK 下载(`/downloads/`)全在这一个域名上。
 查到后存进环境变量,后文引用:
 
@@ -232,7 +250,7 @@ kubectl -n $RERUN_NS exec rerun-cloud-0 -c catalog -- sh -c \
 
 ## 6. 云上 native viewer 会话(按需)
 
-前提:第 3 节的 rerun-cloud 已装好(会话复用它的凭证和网关)。
+前提:第 3 节的 dataverse 已装好(会话复用它的凭证和网关)。
 
 ```sh
 # 开一个会话,release 名 = 用户名(小写字母/数字/中划线)。
@@ -262,7 +280,7 @@ kubectl -n $RERUN_NS port-forward pod/rerun-native-qian 9092:8080
 升级(改了 values 之后执行):
 
 ```sh
-helm upgrade rerun-cloud deploy/helm/rerun-cloud -n $RERUN_NS \
+helm upgrade dataverse deploy/helm/dataverse -n $RERUN_NS \
     -f deploy/secrets/values-prod.yaml
 ```
 
@@ -272,7 +290,7 @@ helm upgrade rerun-cloud deploy/helm/rerun-cloud -n $RERUN_NS \
 
 ```sh
 # 先确保 AK/SK 环境变量已就位:set -a; source deploy/secrets/tos-keys.env; set +a
-kubectl -n $RERUN_NS create secret generic rerun-cloud-secrets \
+kubectl -n $RERUN_NS create secret generic dataverse-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
     --from-literal=ark_api_key="<火山方舟 API key>" \
@@ -282,24 +300,18 @@ kubectl -n $RERUN_NS create secret generic rerun-cloud-secrets \
         "carol:$(openssl passwd -apr1 'pwd789')")" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl -n $RERUN_NS rollout restart statefulset rerun-cloud rerun-cloud-curation
+kubectl -n $RERUN_NS rollout restart statefulset rerun-cloud dataverse-curation
 ```
 
 卸载:
 
 ```sh
-helm uninstall rerun-cloud -n $RERUN_NS
+helm uninstall dataverse -n $RERUN_NS
 # kubectl 直建的 Secret 不归 helm 管,如需彻底清理:
-# kubectl -n $RERUN_NS delete secret rerun-cloud-secrets rerun-catalog-server-secrets
+# kubectl -n $RERUN_NS delete secret dataverse-secrets rerun-catalog-server-secrets
 ```
 
 注意:
 
 - catalog 的数据盘 PVC(`server-data-rerun-cloud-0`)卸载时**不会删除**,注册记录都在;确认不要了再手动删;
 - 不要改 `apig.webHost` 和 ingressClass:改动需删 Ingress 重建,且换 host 等于换公网域名(CORS、用户书签全要跟着换)。
-
-## 8. 从旧 kubectl 模板部署迁移
-
-已经用 `kubectl apply -f deploy/vke/rerun-cloud.yaml` 部署过的环境,迁移步骤见
-[`deploy/helm/rerun-cloud/README.md`](../../deploy/helm/rerun-cloud/README.md) 的"从 kubectl 模板部署迁移"一节。
-要点:资源名和 selector 不同,须删旧建新;catalog 数据盘 PVC 同名,保留即可无缝复用;网关域名会重新分配。

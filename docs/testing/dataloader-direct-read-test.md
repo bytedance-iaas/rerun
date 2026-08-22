@@ -29,7 +29,7 @@
    ```
 
 2. **更新过的 server 镜像已部署**:预签名逻辑在 catalog server 里,必须是包含该改动的镜像。
-   云端重出镜像后 `kubectl apply -f deploy/vke/rerun-cloud.yaml`。
+   云端重出镜像后 `helm upgrade rerun-cloud deploy/helm/rerun-cloud -n rerun --reuse-values`。
 
 3. **一个已注册的 TOS 数据集**(LeRobot 结构),用 `dataset.register("tos://…")` 注册的、带 footer 的 rrd。
 

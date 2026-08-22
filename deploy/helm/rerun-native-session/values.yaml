@@ -1,0 +1,72 @@
+# One release = one session. The user name comes from the release name:
+#   helm install qian deploy/helm/rerun-native-session -n <ns> \
+#       -f <the same values file dataverse uses> --set sessionPassword=<session password>
+# Session resources are named rerun-native-<release name> (lowercase letters/digits/dashes).
+#
+# The field layout deliberately mirrors the dataverse chart's values (as a
+# subset): point -f at the same values-prod.yaml and the image, cache bucket and
+# credentials Secret name need not be repeated; fields this chart does not use
+# (curator, subnetId, daft.*, …) are simply ignored. The only thing that has to
+# be supplied separately is sessionPassword.
+# Prerequisite: dataverse is deployed in the same namespace (its credentials
+# Secret and APIG gateway are reused).
+
+image:
+  # The rerun image, the same one dataverse uses (same field path, so -f picks it up).
+  rerun: ""
+
+# Session password: noVNC asks for it when connecting (authentication at the VNC
+# protocol level). Mandatory when going over the public internet (Ingress).
+# It is per-session, passed with --set sessionPassword=… and kept out of the
+# shared values file.
+sessionPassword: ""
+
+# The remote desktop's *initial* resolution; connecting with resize=remote hands
+# it over to the browser window size.
+geometry: 1280x800
+
+tos:
+  # The session runs inside the cloud and uses the internal endpoint; switch to
+  # the public one when the cluster has no internal access to TOS.
+  endpointInternal: https://tos-s3-cn-beijing.ivolces.com
+  region: cn-beijing
+  # Cache bucket for rrd artifacts; reusing the value from values-prod keeps it
+  # consistent with the other viewers. "off" disables it.
+  rrdArtifactsUrl: "off"
+
+catalog:
+  # HF mirror; leave empty on clusters outside China to reach the official site.
+  # (Same field path as dataverse, so its value is reused.)
+  hfEndpoint: https://hf-mirror.com
+
+# Bandwidth inside the cloud is plentiful, so artifacts can be downloaded with
+# more concurrency (max 16; 0 = automatic, which is 4).
+rrdArtifactsPrefetch: "8"
+
+secrets:
+  # Name of dataverse's application-credentials Secret (keys: tos_access_key,
+  # tos_secret_key, hf_token).
+  # Same field path as dataverse's values, so its value is reused.
+  existingSecret: dataverse-secrets
+
+ingress:
+  # false = stay off the public internet and use port-forward (the safest option):
+  #   kubectl -n <ns> port-forward pod/rerun-native-<name> 9092:8080
+  #   then open http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
+  enabled: true
+  # The ingressClass dataverse's gateway declares (the default is what it derives
+  # from a release named dataverse).
+  className: dataverse-apig
+  # The host is only a gateway routing key; each session's host gets an
+  # automatically assigned *.volceapi.com domain of its own.
+  # Empty = derived from the session name (rerun-native-<name>.apig.internal).
+  host: ""
+
+# A native session exists precisely to open multi-gigabyte files — give it memory.
+resources:
+  requests:
+    cpu: "2"
+    memory: 8Gi
+  limits:
+    cpu: "4"
+    memory: 16Gi

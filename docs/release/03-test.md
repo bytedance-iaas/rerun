@@ -68,7 +68,7 @@ env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy -u ALL_PROXY -u al
 
 ```sh
 kubectl -n $RERUN_NS get pods
-# 预期:rerun-cloud-0 2/2 Running,rerun-cloud-curation-0 1/1 Running
+# 预期:rerun-cloud-0 2/2 Running,dataverse-curation-0 1/1 Running
 kubectl get apiginstance -n $RERUN_NS
 # 预期:PHASE=Running(偶发空列表是集群 API 抖动,重试)
 ```
@@ -192,7 +192,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 
 | 症状 | 原因与处理 |
 |---|---|
-| APIGInstance 一直 Pending | `describe apiginstance` 看 Events;`cannot be found from VPC` / `InvalidVPC.NotFound` = subnetId 抄了别的集群的,改对重装,不会自愈 |
+| APIGInstance 一直 Pending | `describe apiginstance` 看 Events;`cannot be found from VPC` / `InvalidVPC.NotFound` = `apig.subnetIds` 里某个子网抄了别的集群的,改对重装,不会自愈 |
 | `no matches for kind "APIGInstance"` | 集群没装 APIG 组件,VKE 控制台 → 组件管理 → 安装 |
 | `kubectl get apiginstance` 返回空列表 | 集群 API 偶发抖动,重试确认,别据此断言实例不存在 |
 | 质检跑批开头就报「缺少 TOS 凭证」 | curation 容器没拿到 `TOS_ACCESS_KEY/TOS_SECRET_KEY`:确认 `secrets.existingSecret` 指的 Secret 里有 `tos_access_key/tos_secret_key` 两个 key |
@@ -208,7 +208,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 | 办公网 curl 网关得到奇怪的 401/404/504 | 看响应头 `Server:`,`feilian-agw` = 飞连代答,请求没到服务;正常经 APIG 的响应是 `istio-envoy` |
 | 大数据集加载中页面崩溃 | wasm 内存上限(不足 4 GB);换 native viewer 会话 |
 | `/curation` 下静态资源/WS 全 404 | curator 镜像太旧,不支持子路径;换新镜像 |
-| `/curation` 全部 401,正确密码也进不去 | htpasswd 挂载坏了(鉴权 fail-closed 锁死);`kubectl -n $RERUN_NS logs rerun-cloud-curation-0` 找 "没有可用账号" |
+| `/curation` 全部 401,正确密码也进不去 | htpasswd 挂载坏了(鉴权 fail-closed 锁死);`kubectl -n $RERUN_NS logs dataverse-curation-0` 找 "没有可用账号" |
 
 ### 4.3 catalog / token
 
@@ -234,7 +234,7 @@ catalog 常规路径是网关域名(TLS),办公网一般放行;若报 `transport
 kubectl -n $RERUN_NS logs rerun-cloud-0 -c web            # web 容器(启动时打印认证状态)
 kubectl -n $RERUN_NS exec rerun-cloud-0 -c web -- tail -20 /var/log/nginx/access.log   # 实际请求/状态码
 kubectl -n $RERUN_NS logs rerun-cloud-0 -c catalog        # catalog(验签失败有告警)
-kubectl -n $RERUN_NS logs rerun-cloud-curation-0          # 质检台
+kubectl -n $RERUN_NS logs dataverse-curation-0          # 质检台
 kubectl -n kube-system logs deploy/apig-controller --tail=50   # 网关控制器
 ```
 

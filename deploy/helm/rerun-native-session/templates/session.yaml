@@ -1,0 +1,107 @@
+# A native viewer session in the cloud: one pod plus a ClusterIP service (plus
+# an optional Ingress on the shared gateway).
+# How many sessions can run at once is decided by the namespace's resource
+# quota — nothing in the software caps it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "rerun-native-session.name" . }}
+  labels:
+    {{- include "rerun-native-session.labels" . | nindent 4 }}
+    app: rerun-native-session
+    session: {{ include "rerun-native-session.name" . }}
+spec:
+  restartPolicy: Never
+  # Secrets are mounted at /run/secrets; SA-token automounting is off so it
+  # cannot collide with the read-only secret volume.
+  automountServiceAccountToken: false
+  containers:
+    - name: viewer
+      image: {{ required "image.rerun is required (the rerun image; pointing -f at dataverse's values file is enough)" .Values.image.rerun | quote }}
+      env:
+        - name: MODE
+          value: native
+        - name: TOS_ENDPOINT
+          value: {{ .Values.tos.endpointInternal | quote }}
+        - name: TOS_REGION
+          value: {{ .Values.tos.region | quote }}
+        - name: TOS_RRD_ARTIFACTS_URL
+          value: {{ .Values.tos.rrdArtifactsUrl | quote }}
+        {{- with .Values.catalog.hfEndpoint }}
+        - name: HF_ENDPOINT
+          value: {{ . | quote }}
+        {{- end }}
+        - name: RRD_ARTIFACTS_PREFETCH
+          value: {{ .Values.rrdArtifactsPrefetch | quote }}
+        - name: SESSION_GEOMETRY
+          value: {{ .Values.geometry | quote }}
+        - name: SESSION_PASSWORD
+          value: {{ required "sessionPassword is required (the noVNC session password)" .Values.sessionPassword | quote }}
+      ports:
+        - containerPort: 8080
+      readinessProbe:
+        httpGet:
+          path: /vnc.html
+          port: 8080
+        initialDelaySeconds: 3
+        periodSeconds: 5
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
+      volumeMounts:
+        - name: tos-secrets
+          mountPath: /run/secrets
+          readOnly: true
+        # Software rendering needs a decent amount of shared memory (the
+        # equivalent of docker's shm_size: 1gb).
+        - name: dshm
+          mountPath: /dev/shm
+  volumes:
+    - name: tos-secrets
+      secret:
+        secretName: {{ .Values.secrets.existingSecret }}
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+---
+# The session's in-cluster service: the backend behind the APIG Ingress (the
+# `session` label is unique, so it selects this session alone).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rerun-native-session.name" . }}
+  labels:
+    {{- include "rerun-native-session.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    session: {{ include "rerun-native-session.name" . }}
+  ports:
+    - name: novnc
+      port: 8080
+      targetPort: 8080
+{{- if .Values.ingress.enabled }}
+---
+# This session's public entry point: hangs off the shared APIG gateway, and its
+# host gets an automatically assigned *.volceapi.com domain of its own
+# (noVNC's WebSocket runs over HTTP/1.1, which the gateway forwards fine).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "rerun-native-session.name" . }}
+  labels:
+    {{- include "rerun-native-session.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ include "rerun-native-session.host" . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "rerun-native-session.name" . }}
+                port:
+                  number: 8080
+{{- end }}

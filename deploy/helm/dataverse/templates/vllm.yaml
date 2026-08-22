@@ -1,0 +1,173 @@
+{{- if .Values.vllm.enabled }}
+# ══════════════════ Self-hosted vLLM (the curation console's VLM backend) ══════════════════
+# A plain Deployment (not a StatefulSet): the weights land in an emptyDir and
+# nothing is persistent, so a rebuild simply starts over.
+# The weights fill the GPU and old and new pods cannot coexist → the Recreate
+# strategy (kill first, then start).
+# The console's VLM-based checks (task_success) reach it over the OpenAI-compatible
+# API; this chart registers the endpoint into the console's site.yaml
+# vlm_backends automatically (see configmap-curation.yaml, under the
+# `self-hosted` key), so it is selectable in the UI without anyone copying an
+# in-cluster DNS name by hand.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dataverse.fullname" . }}-vllm
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vllm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "dataverse.selectorLabels" (dict "root" . "component" "vllm") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dataverse.selectorLabels" (dict "root" . "component" "vllm") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- if .Values.vllm.nodeHostname }}
+      # Pin to a specific GPU node (copy the target node's kubernetes.io/hostname).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - {{ .Values.vllm.nodeHostname | quote }}
+      {{- end }}
+      {{- with .Values.vllm.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.vllm.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.vllm.weightFetch.image }}
+      initContainers:
+        # Weight prefetch: downloads the model onto the GPU node's local disk
+        # (emptyDir) — not into the image, not onto TOS.
+        # Idempotent: existing *.safetensors with no *.aria2 resume file skips
+        # instantly, so a pod rebuild does not re-download.
+        # Goes through the internal oniond and the Volcengine mirrors
+        # (deb.debian.org over the public internet is glacial on some nodes).
+        - name: fetch-weights
+          image: {{ . | quote }}
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              M=/models/{{ required "vllm.weightFetch.modelName is required whenever vllm.weightFetch.image is set" $.Values.vllm.weightFetch.modelName }}
+              if ls "$M"/*.safetensors >/dev/null 2>&1 && ! ls "$M"/*.aria2 >/dev/null 2>&1; then
+                echo "weights already complete, skipping download"; exit 0
+              fi
+              echo "=== installing oniond (Volcengine mirror, bypassing byted) ==="
+              # apt goes through the Volcengine internal mirror too: deb.debian.org
+              # over the public internet is glacial on some nodes.
+              sed -i "s|http://deb.debian.org|https://mirrors.ivolces.com|g" /etc/apt/sources.list.d/debian.sources
+              apt-get update -qq
+              apt-get install -y -qq wget jq aria2 curl >/dev/null
+              MIRROR=http://mirrors.ivolces.com/extra-tools/debian
+              wget -q "$MIRROR/pool/main/o/onion-ai-data/onion-ai-data_2.4.6_amd64.deb" -O /tmp/o.deb
+              dpkg-deb -x /tmp/o.deb /tmp/x
+              install /tmp/x/usr/bin/oniond /usr/local/bin/oniond
+              ln -sf /usr/bin/aria2c /usr/local/bin/aria2c_byted
+              echo "=== downloading {{ $.Values.vllm.weightFetch.modelName }} to the local disk ==="
+              export BUCKET={{ required "vllm.weightFetch.bucket is required whenever vllm.weightFetch.image is set" $.Values.vllm.weightFetch.bucket }}
+              oniond download model {{ $.Values.vllm.weightFetch.modelName }} --turbo --dir /models
+              echo "download complete, file count:"; ls -1 "$M" | wc -l
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      {{- end }}
+      containers:
+        - name: vllm
+          image: {{ .Values.vllm.image | quote }}
+          args:
+            - --model
+            - {{ required "vllm.enabled=true requires vllm.model (a path inside the container, or an HF repo id)" .Values.vllm.model | quote }}
+            {{- with .Values.vllm.servedModelName }}
+            - --served-model-name
+            - {{ . | quote }}
+            {{- end }}
+            - --port
+            - {{ .Values.vllm.port | quote }}
+            {{- with .Values.vllm.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.vllm.port }}
+              name: http
+          env:
+            # Mirror and token for the pull-straight-from-HF path (unused by the
+            # oniond flow, but costs nothing to leave in place): reuses
+            # catalog.hfEndpoint and the hf_token from the shared secret (not
+            # injected when absent).
+            {{- with .Values.catalog.hfEndpoint }}
+            - name: HF_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: hf_token
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.vllm.port }}
+            # Large models load slowly: leave a generous retry window (starts at
+            # 60s, every 15s, up to ~10min).
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 40
+          resources:
+            limits:
+              nvidia.com/gpu: {{ .Values.vllm.gpuCount }}
+              {{- with (.Values.vllm.resources.limits) }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+            {{- with (.Values.vllm.resources.requests) }}
+            requests:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        # Weight disk: an emptyDir, counted against the container's
+        # ephemeral-storage limit (in effect only once resources.limits sets one).
+        - name: models
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.vllm.dshmSize }}
+---
+# The in-cluster Service for vLLM (OpenAI-compatible API). The curation console
+# reaches it at http://<name>.<ns>.svc.cluster.local:<port>/v1 (registered into
+# vlm_backends automatically).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dataverse.fullname" . }}-vllm
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vllm
+spec:
+  selector:
+    {{- include "dataverse.selectorLabels" (dict "root" . "component" "vllm") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.vllm.port }}
+      targetPort: {{ .Values.vllm.port }}
+{{- end }}

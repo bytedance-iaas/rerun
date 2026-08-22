@@ -1,0 +1,49 @@
+# The StatefulSet's governing (headless) service: gives the pod a stable
+# in-cluster domain name.
+# In-cluster clients: rerun+http://{{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dataverse.rerunName" . }}-headless
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rerun
+spec:
+  clusterIP: None
+  selector:
+    {{- include "dataverse.selectorLabels" (dict "root" . "component" "rerun") | nindent 4 }}
+  ports:
+    - name: web
+      port: 80
+    # The catalog server serves two things on 51234: HTTP/1.1 (/api /catalog
+    # /version) and gRPC (HTTP/2). APIG decides the protocol from the Service
+    # port, so the one container port is exposed as two Service ports:
+    #   catalog (51234) for the HTTP/1.1 route, grpc (51235→51234) for the gRPC one.
+    # An APIG Ingress forwards over HTTP/2 as soon as it sees a port with
+    # name=grpc / appProtocol=grpc (see apig.yaml).
+    - name: catalog
+      port: 51234
+    - name: grpc
+      port: 51235
+      targetPort: 51234
+      appProtocol: grpc
+---
+# In-cluster service for the web viewer: the backend behind the APIG Ingress.
+# All public HTTP traffic goes through the gateway (HTTPS + Basic auth); web is
+# never attached to a public CLB directly.
+# Reached from inside the cluster (training jobs and the like) at: http://{{ include "dataverse.rerunName" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dataverse.rerunName" . }}-web
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rerun
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "dataverse.selectorLabels" (dict "root" . "component" "rerun") | nindent 4 }}
+  ports:
+    - name: web
+      port: 80
+      targetPort: 80

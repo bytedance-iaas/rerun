@@ -1,0 +1,116 @@
+# 云上「浏览器测试 pod」(VKE):在集群内跑一个 Chromium,用来测 web viewer。
+#
+# 为什么要它:web viewer 在浏览器里直接读 TOS 的字节范围。跑在办公网笔记本上时,
+# 飞连会限速 / 剥 x-amz-meta 头,大文件体验很差。把浏览器放到集群里(和 rerun-web
+# 同 namespace),浏览器→rerun-web、浏览器→TOS 全走 VPC 内网,又快又干净;你只是
+# 把这个浏览器的画面远程投出来(低带宽),办公网这一跳不再是瓶颈。
+#
+# ============================== 使用 ==============================
+#   kubectl apply -f browser-test.yaml
+#   kubectl -n rerun rollout status deploy/rerun-browser-test
+#   kubectl -n rerun port-forward deploy/rerun-browser-test 3000:3000
+#   # 浏览器打开 http://localhost:3000 (无需登录);里面 Chromium 自动打开 http://rerun-web/。
+#
+#   用完删掉:
+#   kubectl delete -f browser-test.yaml
+# =================================================================
+#
+# ⚠️ 镜像说明(踩过的坑):
+#   - 用 linuxserver/chromium,但【钉死一个 7 月的旧 tag】,不用 :latest。
+#     原因::latest 已在 2026-08 换成 Selkies(WebRTC)后端 —— 在无 GPU 的 pod 上不自动
+#     拉起浏览器、只有黑屏。7 月的 tag 仍是老 KasmVNC:开机 kiosk 打开 URL,纯 CPU 很稳。
+#   - 走 DaoCloud 国内镜像代理(docker.m.daocloud.io),直接拉、不用账号,且这个镜像拉得快。
+#     若某天 daocloud 抽风,换前缀 docker.1panel.live / docker.nju.edu.cn(后半不变)。
+#   - VNC_PW/登录:不设 CUSTOM_USER/PASSWORD => 网页桌面免登录(只经 port-forward 到 localhost,
+#     已被 kubectl 权限挡一道)。若挂公网 Ingress,务必加回认证。
+#
+# 前提:namespace rerun 已存在(见 rerun-cloud.yaml)。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rerun-browser-test
+  namespace: rerun
+  labels:
+    app: rerun-browser-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rerun-browser-test
+  template:
+    metadata:
+      labels:
+        app: rerun-browser-test
+    spec:
+      automountServiceAccountToken: false
+      # 【缓存复用策略】钉到早上成功拉过 :latest(旧 KasmVNC)的那台节点,配合下面的
+      # IfNotPresent => 直接吃本地缓存、零拉取,也避开另一台上重拉到的 Selkies 新版。
+      # ⚠️ 脆弱:该节点缓存被回收 / 换节点,IfNotPresent 就会重拉 :latest(=Selkies 黑屏)。
+      # 一旦验证可用,建议换成【钉死 7 月 tag】的持久做法(见 git 里上一版注释)。
+      nodeName: "192.168.3.32"
+      # Chromium 的 sandbox 需要放开 seccomp,否则标签页会崩。
+      securityContext:
+        seccompProfile:
+          type: Unconfined
+      containers:
+        - name: chromium
+          # :latest 配合上面 nodeName + IfNotPresent = 复用该节点早上缓存的旧 KasmVNC 版,不重拉。
+          image: "docker.m.daocloud.io/linuxserver/chromium:latest"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: Asia/Shanghai
+            # 启动参数 + 首页 URL。
+            # 容器无 GPU,新版 Chromium 默认禁 WebGL2 软件回退(SwiftShader),rerun 的 wgpu
+            # 起不来;下面几个 flag 强制走 ANGLE+SwiftShader 软件渲染(纯 CPU,大场景会慢但够测)。
+            # 若仍报 "webgl2 not available",在 viewer URL 后加 ?renderer=webgl。
+            # 末尾两个 flag:把 http://rerun-web 当 secure context,让浏览器暴露 WebCodecs
+            # 的 VideoDecoder(视频解码要用),否则 http 非 localhost 下它 "is not defined"。
+            # --unsafely-treat-insecure-origin-as-secure 需要配一个 --user-data-dir 才生效。
+            - name: CHROME_CLI
+              value: "--enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --ignore-gpu-blocklist --unsafely-treat-insecure-origin-as-secure=http://rerun-web --user-data-dir=/tmp/chrome-secure http://rerun-web/"
+          ports:
+            - name: http
+              containerPort: 3000 # web 桌面(http)
+            - name: https
+              containerPort: 3001 # web 桌面(https,自签证书)
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "4"
+              # web viewer 是重型 wasm,大数据集全进浏览器内存,给足。
+              memory: 12Gi
+          volumeMounts:
+            # Chromium 需要足量共享内存,否则渲染/标签页崩溃。
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rerun-browser-test
+  namespace: rerun
+spec:
+  type: ClusterIP
+  selector:
+    app: rerun-browser-test
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
