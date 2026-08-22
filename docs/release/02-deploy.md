@@ -177,7 +177,7 @@ helm install dataverse deploy/helm/dataverse \
 
 ```sh
 kubectl -n $RERUN_NS get pods
-# 预期:dataverse-0 2/2 Running,dataverse-curation-0 1/1 Running
+# 预期:rerun-cloud-0 2/2 Running,dataverse-curation-0 1/1 Running
 
 kubectl get apiginstance -n $RERUN_NS
 # 等 PHASE=Running(偶发返回空列表,重试确认,不要据此断言实例不存在)
@@ -234,17 +234,17 @@ token 的签发见第 5 节。
 签发在 **catalog 容器内**执行 — 签名密钥只存在于集群里(0400 文件),不出集群;因此**能签发 token 的人 = 有该 namespace `kubectl exec` 权限的人**,由集群 RBAC 管控:
 
 ```sh
-kubectl -n $RERUN_NS exec dataverse-0 -c catalog -- sh -c \
+kubectl -n $RERUN_NS exec rerun-cloud-0 -c catalog -- sh -c \
     "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
         --user zhang --permission read --expiration 90d \
         --server-host $GW_DOMAIN \
-        --server-host dataverse-headless.$RERUN_NS.svc.cluster.local"
+        --server-host rerun-cloud-headless.$RERUN_NS.svc.cluster.local"
 ```
 
 - `--permission` 取 `read` 或 `read-write`(注册数据集需要后者);
 - `--server-host` 是允许用这个 token 连的地址,可多个:网关域名给云外客户端,集群内域名给云内训练任务;自测要走 port-forward 的再加 `--server-host 127.0.0.1`;
 - 用户侧先装 SDK:部署自带分发点,浏览器开 `https://$GW_DOMAIN/downloads/sdk/` 看 wheel 文件名,`pip install "https://<用户名>:<密码>@$GW_DOMAIN/downloads/sdk/<wheel 文件名>"` — 与在跑的 server 出自同一次构建,版本天然一致;
-- 用法:云外 `CatalogClient("rerun+https://$GW_DOMAIN:443", token=<token>)`,云内 `CatalogClient("rerun+http://dataverse-headless.<ns>.svc.cluster.local:51234", token=<token>)`。
+- 用法:云外 `CatalogClient("rerun+https://$GW_DOMAIN:443", token=<token>)`,云内 `CatalogClient("rerun+http://rerun-cloud-headless.<ns>.svc.cluster.local:51234", token=<token>)`。
 
 安全边界说明:能读该 namespace Secret 或能 exec 进 pod 的人依然拿得到签名密钥 — 这一层靠收紧 namespace 的 RBAC(最小授权)兜底;0400 文件挡的是密钥被 pod 内非属主进程误读和被顺手带出。
 
@@ -300,7 +300,7 @@ kubectl -n $RERUN_NS create secret generic dataverse-secrets \
         "carol:$(openssl passwd -apr1 'pwd789')")" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl -n $RERUN_NS rollout restart statefulset dataverse dataverse-curation
+kubectl -n $RERUN_NS rollout restart statefulset rerun-cloud dataverse-curation
 ```
 
 卸载:
@@ -313,5 +313,5 @@ helm uninstall dataverse -n $RERUN_NS
 
 注意:
 
-- catalog 的数据盘 PVC(`server-data-dataverse-0`)卸载时**不会删除**,注册记录都在;确认不要了再手动删;
+- catalog 的数据盘 PVC(`server-data-rerun-cloud-0`)卸载时**不会删除**,注册记录都在;确认不要了再手动删;
 - 不要改 `apig.webHost` 和 ingressClass:改动需删 Ingress 重建,且换 host 等于换公网域名(CORS、用户书签全要跟着换)。

@@ -7,6 +7,17 @@
 {{- end -}}
 {{- end -}}
 
+{{/*
+ReRun component resource name. The bundle (chart/release, the shared gateway and
+Secrets) is `dataverse`, but the ReRun web-viewer + catalog workload keeps its own
+identity `rerun-cloud` — so its StatefulSet, pod (`rerun-cloud-0`), its Services
+and its PVC (`server-data-rerun-cloud-0`) all carry this name, while the Daft
+console and the gateway stay `dataverse-*`.
+*/}}
+{{- define "dataverse.rerunName" -}}
+rerun-cloud
+{{- end -}}
+
 {{/* Labels shared by every object */}}
 {{- define "dataverse.labels" -}}
 app.kubernetes.io/name: {{ .Chart.Name }}

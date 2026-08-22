@@ -2,7 +2,7 @@ dataverse (two components: ReRun + the curation console) has been submitted. Nex
 
 1. Wait for the pods:
      kubectl -n {{ .Release.Namespace }} get pods
-   Expect {{ include "dataverse.fullname" . }}-0 at 2/2{{ if .Values.daft.enabled }} and {{ include "dataverse.fullname" . }}-curation-0 at 1/1{{ end }}.
+   Expect {{ include "dataverse.rerunName" . }}-0 at 2/2{{ if .Values.daft.enabled }} and {{ include "dataverse.fullname" . }}-curation-0 at 1/1{{ end }}.
 {{- if .Values.apig.enabled }}
 
 2. Gateway readiness and the domain:
@@ -22,15 +22,15 @@ dataverse (two components: ReRun + the curation console) has been submitted. Nex
 {{- if .Values.catalog.tokenAuth.enabled }}
 
 Issuing a catalog token for a user (signed inside the catalog container, so the secret never leaves the cluster; whoever can exec can sign):
-  kubectl -n {{ .Release.Namespace }} exec {{ include "dataverse.fullname" . }}-0 -c catalog -- sh -c \
+  kubectl -n {{ .Release.Namespace }} exec {{ include "dataverse.rerunName" . }}-0 -c catalog -- sh -c \
       "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
           --user <name> --permission read --expiration 90d \
-          --server-host <gateway domain> --server-host {{ include "dataverse.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
+          --server-host <gateway domain> --server-host {{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
 {{- end }}
 
 In-cluster access (never leaves the private network):
-  web:    http://{{ include "dataverse.fullname" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
-  server: rerun+http://{{ include "dataverse.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
+  web:    http://{{ include "dataverse.rerunName" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
+  server: rerun+http://{{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
 {{- if .Values.daft.enabled }}
 
 Curation data-plane self-check:

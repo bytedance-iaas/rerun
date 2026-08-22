@@ -1,10 +1,10 @@
 # The StatefulSet's governing (headless) service: gives the pod a stable
 # in-cluster domain name.
-# In-cluster clients: rerun+http://{{ include "dataverse.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
+# In-cluster clients: rerun+http://{{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "dataverse.fullname" . }}-headless
+  name: {{ include "dataverse.rerunName" . }}-headless
   labels:
     {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: rerun
@@ -31,11 +31,11 @@ spec:
 # In-cluster service for the web viewer: the backend behind the APIG Ingress.
 # All public HTTP traffic goes through the gateway (HTTPS + Basic auth); web is
 # never attached to a public CLB directly.
-# Reached from inside the cluster (training jobs and the like) at: http://{{ include "dataverse.fullname" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
+# Reached from inside the cluster (training jobs and the like) at: http://{{ include "dataverse.rerunName" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "dataverse.fullname" . }}-web
+  name: {{ include "dataverse.rerunName" . }}-web
   labels:
     {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: rerun

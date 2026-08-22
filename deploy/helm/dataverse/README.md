@@ -77,7 +77,7 @@ If a single GPU cannot hold the model, raise `vllm.gpuCount` to 2 and add `--ten
 ## Uninstalling, and the data
 
 - `helm uninstall dataverse -n rerun`.
-- The catalog's data PVC (`server-data-<fullname>-0`) is managed by volumeClaimTemplates and is **not deleted on uninstall**; delete it by hand once you are sure.
+- The catalog's data PVC (`server-data-rerun-cloud-0`) is managed by volumeClaimTemplates and is **not deleted on uninstall**; delete it by hand once you are sure.
 - The curation console mounts no PV: its workspace is an emptyDir (dataset cache / batch staging / task state), so deleting the pod loses only the cache and the task history. Deliveries are uploaded to the user's bucket under a "write the completeness marker last" protocol and are never lost.
 - Once the APIG gateway instance is deleted, the domain assigned to it stops working.
 

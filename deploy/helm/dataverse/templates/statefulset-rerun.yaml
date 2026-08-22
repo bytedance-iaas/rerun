@@ -7,12 +7,12 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "dataverse.fullname" . }}
+  name: {{ include "dataverse.rerunName" . }}
   labels:
     {{- include "dataverse.labels" . | nindent 4 }}
     app.kubernetes.io/component: rerun
 spec:
-  serviceName: {{ include "dataverse.fullname" . }}-headless
+  serviceName: {{ include "dataverse.rerunName" . }}-headless
   replicas: 1
   selector:
     matchLabels:

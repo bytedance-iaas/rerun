@@ -69,21 +69,21 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "dataverse.fullname" . }}-headless
+                name: {{ include "dataverse.rerunName" . }}-headless
                 port:
                   number: 51234
           - path: /catalog
             pathType: Prefix
             backend:
               service:
-                name: {{ include "dataverse.fullname" . }}-headless
+                name: {{ include "dataverse.rerunName" . }}-headless
                 port:
                   number: 51234
           - path: /version
             pathType: Prefix
             backend:
               service:
-                name: {{ include "dataverse.fullname" . }}-headless
+                name: {{ include "dataverse.rerunName" . }}-headless
                 port:
                   number: 51234
           {{- if .Values.daft.enabled }}
@@ -104,7 +104,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "dataverse.fullname" . }}-web
+                name: {{ include "dataverse.rerunName" . }}-web
                 port:
                   number: 80
 ---
@@ -144,7 +144,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "dataverse.fullname" . }}-headless
+                name: {{ include "dataverse.rerunName" . }}-headless
                 # Reference by NUMBER, not name: the APIG controller's CreateUpstream API
                 # requires a numeric K8SService.Port (a named port fails with
                 # MissingParameter.UpstreamSpec.K8SService.Port). 51235 is the `grpc`
