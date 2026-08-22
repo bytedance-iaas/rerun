@@ -1,9 +1,13 @@
 {{- if .Values.apig.enabled }}
-# 前提:集群里有 APIGInstance CRD(loadbalancer.vke.volcengine.com/v1beta1,
-# 火山引擎 VKE 平台侧安装)。安装报 "no matches for kind APIGInstance" 就是缺它;
-# 不在 VKE 上或自备入口时,设 apig.enabled=false。
-# APIG 网关:HTTPS 终结(自带 *.volceapi.com 域名和证书)+ 按 host/路径分流。
-# 认证不在网关做(网关 JWT 会挡浏览器直接打开页面),在后端做。
+# Requires the APIGInstance CRD in the cluster
+# (loadbalancer.vke.volcengine.com/v1beta1, installed by the Volcengine VKE
+# platform). An install failing with "no matches for kind APIGInstance" is
+# missing it; set apig.enabled=false when not on VKE, or when bringing your own
+# ingress.
+# The APIG gateway terminates HTTPS (with its own *.volceapi.com domain and
+# certificate) and routes by host and path.
+# Authentication deliberately does not happen at the gateway (gateway JWT would
+# block opening the pages in a browser) — the backends do it.
 apiVersion: loadbalancer.vke.volcengine.com/v1beta1
 kind: APIGInstance
 metadata:
@@ -12,33 +16,38 @@ metadata:
     {{- include "dataverse.labels" . | nindent 4 }}
 spec:
   {{- if .Values.apig.existingInstanceId }}
-  # 适配已有网关实例,不新建:网关和它的前置 CLB 都已就位,所以不需要 subnetId。
+  # Adopt an existing gateway instead of creating one: the gateway and the CLB
+  # in front of it already exist, so no subnetId is needed.
   id: {{ .Values.apig.existingInstanceId | quote }}
   {{- else }}
-  # 新建网关:平台要在子网里起网关实例 + 前置 CLB,这就是「只有新建才要 subnetIds」的原因。
-  # 网关是多副本高可用,给 2 个不同可用区的子网,平台把副本 + CLB 摊到多可用区。
+  # Creating a gateway: the platform brings up the gateway instance plus the CLB
+  # in front of it inside a subnet — which is why subnetIds is needed only here.
+  # The gateway is replicated for HA, so give it two subnets in different
+  # availability zones and the platform spreads the replicas and the CLB across them.
   common:
     network:
       {{- if not .Values.apig.subnetIds }}
-      {{- fail "apig.subnetIds 必填(新建 APIG 网关所在子网,至少一个;高可用建议给 2 个不同可用区的子网,须都在当前集群 VPC 内;若要适配已有网关请改设 apig.existingInstanceId)" }}
+      {{- fail "apig.subnetIds is required: the subnet(s) a newly created APIG gateway lives in, at least one — for HA prefer two subnets in different availability zones, all inside this cluster's VPC. To adopt an existing gateway, set apig.existingInstanceId instead." }}
       {{- end }}
       subnetIds:
         {{- toYaml .Values.apig.subnetIds | nindent 8 }}
-    # resource: 省略 => 平台默认(实测 small_1 CLB / 1c2g / 2 副本)。
+    # resource: omitted => platform defaults (observed: small_1 CLB / 1c2g / 2 replicas).
   {{- end }}
   name: {{ include "dataverse.fullname" . }}-apig
   ingress:
     enable: true
     enableAllNamespaces: false
-    # 本实例专属的 ingressClass,从 release 名派生,避免与集群里其他 APIG 实例
-    # 抢同一个 class(两个实例声明同一个 class 会互相抢 Ingress)。
+    # An ingressClass private to this instance, derived from the release name so
+    # it cannot clash with another APIG instance in the cluster (two instances
+    # declaring the same class fight over each other's Ingresses).
     ingressClasses: [{{ include "dataverse.ingressClassName" . }}]
     watchNamespaces: [{{ .Release.Namespace }}]
 ---
-# Web viewer 的入口:host 独享一个自动分配的 *.volceapi.com 域名。
-# host 只是网关内部的分流键,不需要真实 DNS。
-# ⚠️ 改 host 或换 ingressClass 时 in-place apply 不干净(ADDRESS 残留旧 IP):
-#   删掉这个 Ingress 再 helm upgrade。
+# The web viewer's entry point: the host gets an automatically assigned
+# *.volceapi.com domain of its own.
+# The host is only a routing key inside the gateway — it needs no real DNS.
+# ⚠️ Changing the host or the ingressClass does not apply cleanly in place (the
+#   ADDRESS keeps the old IP): delete this Ingress, then helm upgrade.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -51,10 +60,11 @@ spec:
     - host: {{ include "dataverse.webHost" . }}
       http:
         paths:
-          # catalog 的纯 HTTP 端点,同域直达(HTTP/1.1 过网关):
-          #   /api      浏览器同域调用(ensure-cors 等)
-          #   /catalog  presign / sources(训练直读要用)
-          #   /version  免认证健康检查
+          # The catalog's plain-HTTP endpoints, reachable on the same domain
+          # (HTTP/1.1 through the gateway):
+          #   /api      same-origin calls from the browser (ensure-cors and friends)
+          #   /catalog  presign / sources (needed for direct reads during training)
+          #   /version  unauthenticated health check
           - path: /api
             pathType: Prefix
             backend:
@@ -77,9 +87,11 @@ spec:
                 port:
                   number: 51234
           {{- if .Values.daft.enabled }}
-          # 同域名按路径分流:/curation = Daft 质检台,其余 = web viewer。
-          # 网关不剥前缀,质检台自己把全部路由注册在 /curation 下(--root-path)。
-          # viewer 的 Diagnose 按钮缺省就指向同域 /curation。
+          # One domain, split by path: /curation is the Daft curation console,
+          # everything else is the web viewer.
+          # The gateway does not strip the prefix — the console registers all of
+          # its routes under /curation itself (--root-path).
+          # The viewer's Diagnose buttons point at the same-origin /curation by default.
           - path: {{ .Values.daft.rootPath }}
             pathType: Prefix
             backend:
@@ -96,12 +108,14 @@ spec:
                 port:
                   number: 80
 ---
-# catalog 的 gRPC 入口:与 web 同一个 host(同一个域名),按路径分流 —— gRPC 的
-# 方法路径天然带服务全名前缀(/rerun.cloud.v1alpha1.RerunCloudService/…),与
-# viewer/质检台互不冲突。单独一条 Ingress,因为 backend-protocol 注解作用于
-# 整条 Ingress,而同 host 的纯 HTTP 路径(上面)不能按 gRPC 转发。
-# 实测(2026-08-20):unary/注册/流式 relay 全部经网关通过;路由变更有约
-# 20-40s 生效延迟。
+# The catalog's gRPC entry point: the same host (the same domain) as web, split
+# by path — a gRPC method path naturally carries the fully qualified service name
+# as its prefix (/rerun.cloud.v1alpha1.RerunCloudService/…), so it cannot collide
+# with the viewer or the curation console. It is a separate Ingress because the
+# backend-protocol annotation applies to the whole Ingress, and the plain-HTTP
+# paths on the same host (above) must not be forwarded as gRPC.
+# Verified 2026-08-20: unary calls, registration and streaming relay all pass
+# through the gateway; route changes take roughly 20-40s to take effect.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -109,12 +123,15 @@ metadata:
   labels:
     {{- include "dataverse.labels" . | nindent 4 }}
   annotations:
-    # 让网关对上游按 gRPC(HTTP/2)转发。APIG 主要按 Service 端口判定协议:下面 backend 指向
-    # headless 的 `grpc` 端口(name=grpc / appProtocol=grpc,见 services-rerun.yaml),APIG 会
-    # 自动用 HTTP/2。这条 backend-protocol 注解作为兜底一并保留(单靠它在 APIG 适配层不稳,
-    # 会退化成 HTTP/1.1 → 后端 gRPC 收到非 h2 请求回 HTTP 400 "grpc-status missing")。
+    # Make the gateway forward to the upstream as gRPC (HTTP/2). APIG decides the
+    # protocol mainly from the Service port: the backend below points at
+    # headless's `grpc` port (name=grpc / appProtocol=grpc, see
+    # services-rerun.yaml), so APIG picks HTTP/2 on its own. This
+    # backend-protocol annotation is kept as a belt-and-suspenders (on its own it
+    # is unreliable in the APIG adapter, degrading to HTTP/1.1 → the gRPC backend
+    # sees a non-h2 request and answers HTTP 400 "grpc-status missing").
     nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
-    # 大批量注册等长调用不止 60s(网关缺省),放宽到 10 分钟。
+    # Long calls such as bulk registration outlast the gateway's default 60s — widen it to 10 minutes.
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 spec:

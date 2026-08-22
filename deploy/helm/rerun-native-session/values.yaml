@@ -1,55 +1,68 @@
-# 一个 release = 一个会话。用户名取自 release 名:
+# One release = one session. The user name comes from the release name:
 #   helm install qian deploy/helm/rerun-native-session -n <ns> \
-#       -f <dataverse 用的同一份 values 文件> --set sessionPassword=<会话密码>
-# 会话资源名为 rerun-native-<release 名>(小写字母/数字/中划线)。
+#       -f <the same values file dataverse uses> --set sessionPassword=<session password>
+# Session resources are named rerun-native-<release name> (lowercase letters/digits/dashes).
 #
-# 字段结构刻意与 dataverse chart 的 values 对齐(取其子集):直接复用同一份
-# values-prod.yaml,镜像/缓存桶/凭证 Secret 名都不用重复填;文件里多余的字段
-# (curator、subnetId、daft.* 等)会被本 chart 忽略。必须单独给的只有 sessionPassword。
-# 前提:dataverse 已部署在同一 namespace(复用它的凭证 Secret 和 APIG 网关)。
+# The field layout deliberately mirrors the dataverse chart's values (as a
+# subset): point -f at the same values-prod.yaml and the image, cache bucket and
+# credentials Secret name need not be repeated; fields this chart does not use
+# (curator, subnetId, daft.*, …) are simply ignored. The only thing that has to
+# be supplied separately is sessionPassword.
+# Prerequisite: dataverse is deployed in the same namespace (its credentials
+# Secret and APIG gateway are reused).
 
 image:
-  # rerun 镜像,和 dataverse 用同一个(同字段路径,-f 复用即得)。
+  # The rerun image, the same one dataverse uses (same field path, so -f picks it up).
   rerun: ""
 
-# 会话密码:noVNC 连接时要求输入(VNC 协议层认证)。走公网(Ingress)必须设。
-# 每个会话独立,用 --set sessionPassword=… 传,不放共享 values 文件。
+# Session password: noVNC asks for it when connecting (authentication at the VNC
+# protocol level). Mandatory when going over the public internet (Ingress).
+# It is per-session, passed with --set sessionPassword=… and kept out of the
+# shared values file.
 sessionPassword: ""
 
-# 远程桌面的【初始】分辨率;用 resize=remote 连接时会被浏览器窗口尺寸接管。
+# The remote desktop's *initial* resolution; connecting with resize=remote hands
+# it over to the browser window size.
 geometry: 1280x800
 
 tos:
-  # 会话在云内跑,走内网 endpoint;集群没开内网访问 TOS 时换公网。
+  # The session runs inside the cloud and uses the internal endpoint; switch to
+  # the public one when the cluster has no internal access to TOS.
   endpointInternal: https://tos-s3-cn-beijing.ivolces.com
   region: cn-beijing
-  # rrd 产物缓存桶;复用 values-prod 里的值即与其他 viewer 一致。"off" 关闭。
+  # Cache bucket for rrd artifacts; reusing the value from values-prod keeps it
+  # consistent with the other viewers. "off" disables it.
   rrdArtifactsUrl: "off"
 
 catalog:
-  # HF 镜像站;海外集群置空直连官方。(与 dataverse 同字段路径,复用其值。)
+  # HF mirror; leave empty on clusters outside China to reach the official site.
+  # (Same field path as dataverse, so its value is reused.)
   hfEndpoint: https://hf-mirror.com
 
-# 云内带宽充裕,产物并发下载可开大(上限 16;0 = 自动 4)。
+# Bandwidth inside the cloud is plentiful, so artifacts can be downloaded with
+# more concurrency (max 16; 0 = automatic, which is 4).
 rrdArtifactsPrefetch: "8"
 
 secrets:
-  # dataverse 的应用凭证 Secret 名(keys: tos_access_key, tos_secret_key, hf_token)。
-  # 与 dataverse values 同字段路径,复用其值。
+  # Name of dataverse's application-credentials Secret (keys: tos_access_key,
+  # tos_secret_key, hf_token).
+  # Same field path as dataverse's values, so its value is reused.
   existingSecret: dataverse-secrets
 
 ingress:
-  # false = 不走公网,用 port-forward(最安全):
+  # false = stay off the public internet and use port-forward (the safest option):
   #   kubectl -n <ns> port-forward pod/rerun-native-<name> 9092:8080
-  #   浏览器打开 http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
+  #   then open http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
   enabled: true
-  # dataverse 网关声明的 ingressClass(缺省 = release 名为 dataverse 时的派生值)。
+  # The ingressClass dataverse's gateway declares (the default is what it derives
+  # from a release named dataverse).
   className: dataverse-apig
-  # host 只是网关分流键;每个会话 host 独享一个自动分配的 *.volceapi.com 域名。
-  # 空 = 从会话名派生(rerun-native-<name>.apig.internal)。
+  # The host is only a gateway routing key; each session's host gets an
+  # automatically assigned *.volceapi.com domain of its own.
+  # Empty = derived from the session name (rerun-native-<name>.apig.internal).
   host: ""
 
-# native 会话就是为开 GB 级大文件存在的,内存给足。
+# A native session exists precisely to open multi-gigabyte files — give it memory.
 resources:
   requests:
     cpu: "2"

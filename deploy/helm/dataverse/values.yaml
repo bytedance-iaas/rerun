@@ -1,72 +1,92 @@
-# dataverse chart 的默认配置(一个 chart 打包 ReRun 与质检台两个组件)。
-# 必填项(不填 helm 会报错并指明缺什么):
-#   image.rerun、apig.subnetIds(仅新建网关时,即 apig.existingInstanceId 为空),
-#   daft.enabled 时的 image.curator,
-#   以及密钥 —— 推荐 kubectl 直建 Secret 后配三个 existing*Secret 引用(values 零密钥,
-#   见部署文档);开发环境也可直填 secrets.* 字段由 chart 渲染。
-# 真实值不要写进本文件:另建一个 gitignore 挡住的 values 文件(例:values-prod.yaml),
+# Default configuration for the dataverse chart (one chart bundling two
+# components: ReRun and the curation console).
+# Required (helm errors out and names what is missing):
+#   image.rerun, apig.subnetIds (only when creating a gateway, i.e.
+#   apig.existingInstanceId is empty), image.curator when daft.enabled,
+#   and the secrets — preferably create the Secrets with kubectl and reference
+#   them through the three existing*Secret fields (zero secrets in values, see
+#   the deployment guide); for development you can also fill in the secrets.*
+#   fields and let the chart render them.
+# Keep real values out of this file: put them in a separate, gitignored values
+# file (e.g. values-prod.yaml) and run
 #   helm install dataverse deploy/helm/dataverse -n rerun --create-namespace -f values-prod.yaml
 
 image:
-  # rerun 镜像(web viewer 和 catalog server 同一个镜像,例:
-  # iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:<tag>)。
+  # The rerun image (one image for both the web viewer and the catalog server,
+  # e.g. iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:<tag>).
   rerun: ""
-  # robot_curator 镜像。两条底线:≥ Daft 仓库 commit 412b91ce8(子路径支持,
-  # 旧镜像挂在 /curation 下静态资源/WS 全 404);且须含 htpasswd 鉴权支持
-  # (CURATION_UI_HTPASSWD_FILE,2026-08-17 之后的构建),旧镜像收不到账号配置
-  # 会以无鉴权状态运行。
+  # The robot_curator image. Two hard requirements: at least Daft repo commit
+  # 412b91ce8 (sub-path support — with an older image every static asset and WS
+  # under /curation 404s), and htpasswd authentication support
+  # (CURATION_UI_HTPASSWD_FILE, builds after 2026-08-17), since an older image
+  # never receives the account configuration and would run unauthenticated.
   curator: ""
 
 tos:
   region: cn-beijing
-  # 公网 endpoint:下发给浏览器和云外客户端用。
+  # Public endpoint: handed to browsers and to clients outside the cloud.
   endpointPublic: https://tos-s3-cn-beijing.volces.com
-  # 内网 endpoint:云内组件访问 TOS 用,快且不计公网流量。
-  # 集群没开内网访问 TOS 时,把它也改成公网 endpoint。
+  # Internal endpoint: used by in-cloud components to reach TOS — faster, and no
+  # public traffic billed.
+  # Point this at the public endpoint too when the cluster has no internal
+  # access to TOS.
   endpointInternal: https://tos-s3-cn-beijing.ivolces.com
-  # fsx CSI(TOS 模式)用的挂载 server 地址。
-  # ⚠️ 2026-08-19 起质检台不再挂载 TOS(改 SDK 直连),本值当前无消费者;
-  # 保留是为将来别的组件要挂载时不用再查一遍。
+  # Mount server address for the fsx CSI (TOS mode).
+  # ⚠️ Since 2026-08-19 the curation console no longer mounts TOS (it uses the
+  # SDK directly), so nothing consumes this value today; it is kept so the next
+  # component that does need a mount need not look it up again.
   fsxServer: tos-cn-beijing.ivolces.com
-  # 转换后 rrd 产物的缓存桶;"off" 关闭缓存。
+  # Cache bucket for converted rrd artifacts; "off" disables the cache.
   rrdArtifactsUrl: "off"
 
 secrets:
-  # 非空 = 密钥由集群里已存在的同名 Secret 提供(需含下方各 key 名),
-  # chart 不再渲染 viewer-secrets,本节其余字段忽略,认证开关只看
-  # web.basicAuth.enabled / catalog.tokenAuth.enabled。
-  # 质检台的 TOS 直连凭证(TOS_ACCESS_KEY/TOS_SECRET_KEY 环境变量)也从
-  # 这份 Secret 取 tos_access_key / tos_secret_key 两个 key。
+  # Non-empty = the secrets come from an existing Secret of that name (which
+  # must carry the keys below). The chart stops rendering viewer-secrets, the
+  # rest of this section is ignored, and the authentication switches are
+  # governed solely by web.basicAuth.enabled / catalog.tokenAuth.enabled.
+  # The curation console's direct-TOS credentials (the TOS_ACCESS_KEY /
+  # TOS_SECRET_KEY environment variables) also come from this Secret, out of the
+  # tos_access_key / tos_secret_key keys.
   existingSecret: ""
   tosAccessKey: ""
   tosSecretKey: ""
-  # HuggingFace token,访问私有 HF 数据集才需要;留空则不写入。
+  # HuggingFace token, needed only for private HF datasets; left empty it is not written.
   hfToken: ""
-  # 火山方舟(Ark)API key,质检台的 VLM 类质检走方舟 MaaS 时用(注入成质检台的
-  # ARK_API_KEY 环境变量)。留空则不写入,质检台不启用方舟后端。base url 不是密钥,
-  # 见 daft.arkBaseUrl。用 existingSecret 时改为在那份 Secret 里加 key: ark_api_key。
+  # Volcengine Ark API key, used when the console's VLM-based checks run against
+  # Ark MaaS (injected as the console's ARK_API_KEY). Left empty it is not
+  # written and the Ark backend stays off. The base url is not a secret — see
+  # daft.arkBaseUrl. With existingSecret, add an `ark_api_key` key to that Secret instead.
   arkApiKey: ""
-  # Basic auth 密码表(Apache htpasswd 格式):每行「用户名:密码哈希」,哈希用
-  # openssl passwd -apr1 或 htpasswd -B 生成。多用户用 YAML 块写法一行一个。
-  # web viewer 和 Daft 质检台共用这一份:同域名部署,任意账号登录一次两边通行。
-  # web.basicAuth.enabled=false 时忽略(两边都不设防)。
+  # Basic auth password table (Apache htpasswd format): one
+  # `username:password-hash` per line, hashes from `openssl passwd -apr1` or
+  # `htpasswd -B`. For several users, use a YAML block with one per line.
+  # The web viewer and the Daft curation console share this one table: same
+  # domain, so one login with any account gets you into both.
+  # Ignored when web.basicAuth.enabled=false (neither side is protected then).
   webHtpasswd: ""
-  # catalog token 签名密钥所在的已有 Secret 名(须含 key: server_token_secret)。
-  # 推荐:kubectl 管道直建,密钥不落盘、不进 values —— 见部署文档。
-  # 密钥只会以 0400 文件挂进 catalog 容器,web / native 会话都看不到。
+  # Name of the existing Secret holding the catalog token-signing secret (must
+  # carry the key server_token_secret).
+  # Preferably create it straight through a kubectl pipe, so it never touches
+  # disk or values — see the deployment guide.
+  # It is only ever mounted into the catalog container as a 0400 file; neither
+  # the web nor the native session can see it.
   existingTokenSecret: ""
-  # 开发用后备:签名密钥直填 values(rerun server generate-secret 生成,只生成
-  # 一次;拿到它的人能签任意权限 token)。生产环境用上面的 existingTokenSecret。
-  # catalog.tokenAuth.enabled=false 时两者都忽略。
+  # Development fallback: the signing secret filled into values directly
+  # (generate it once with `rerun server generate-secret`; whoever holds it can
+  # sign a token with any permission). Use existingTokenSecret above in production.
+  # Both are ignored when catalog.tokenAuth.enabled=false.
   serverTokenSecret: ""
 
 web:
-  # 关闭 = 页面无认证,仅限内网/本地调试;公网必须开。
+  # Off = unauthenticated pages, for private-network or local debugging only;
+  # anything public must have it on.
   basicAuth:
     enabled: true
-  # 打开数据集时并发下载几个现成 rrd 产物;0 = 自动(浏览器 3)。
+  # How many ready-made rrd artifacts to download in parallel when opening a
+  # dataset; 0 = automatic (3 in the browser).
   rrdArtifactsPrefetch: "0"
-  # Diagnose 按钮目标地址覆盖。空 = 同域 /curation(本 chart 的标准拓扑,一般不用动)。
+  # Override for where the Diagnose button points. Empty = same-origin
+  # /curation (this chart's standard topology — rarely worth touching).
   daftUrl: ""
   resources:
     requests:
@@ -77,22 +97,29 @@ web:
       memory: 2Gi
 
 catalog:
-  # 关闭 = 无认证裸奔,仅限内网调试。
+  # Off = wide open, for private-network debugging only.
   tokenAuth:
     enabled: true
-  # 桶 CORS 自助配置:web viewer 打开一个桶时,经同域 /api/ensure-cors 请 server
-  # 检查并补配该桶的 CORS(只追加我们的规则,不动别家的)。需要 AK/SK 有桶管理
-  # 权限;关掉则回到部署文档里的手动配置流程。
+  # Self-service bucket CORS: when the web viewer opens a bucket, it asks the
+  # server through the same-origin /api/ensure-cors to check and fill in that
+  # bucket's CORS rules (appending ours, never touching anyone else's). Requires
+  # an AK/SK with bucket administration rights; turning it off falls back to the
+  # manual procedure in the deployment guide.
   autoCors:
     enabled: true
-    # 放行的浏览器 origin 列表;空 = 自动(该区域的网关通配域名 + 本地调试 origin)。
+    # Browser origins to allow; empty = automatic (the region's gateway wildcard
+    # domain plus the local debugging origin).
     origins: []
-  # dataloader 直读的预签名 URL 用哪个 endpoint 签(只影响发给客户端的 URL)。
-  # 缺省公网:云外训练客户端才连得上。客户端在同一 VPC 内跑时改成内网 endpoint。
+  # Which endpoint the presigned URLs for direct dataloader reads are signed for
+  # (affects only the URLs handed to clients).
+  # Public by default, so training clients outside the cloud can reach it. Switch
+  # to the internal endpoint when the clients run inside the same VPC.
   presignEndpoint: https://tos-s3-cn-beijing.volces.com
-  # HF 相关操作的镜像站;空 = 直连官方(海外集群用)。
+  # Mirror for HF operations; empty = straight to the official site (for
+  # clusters outside China).
   hfEndpoint: https://hf-mirror.com
-  # catalog 数据库 + 远端文件缓存盘(volumeClaimTemplates,uninstall 不会删)。
+  # The catalog database plus the remote-file cache disk (volumeClaimTemplates —
+  # uninstall does not delete it).
   storage:
     className: ebs-essd
     size: 100Gi
@@ -105,34 +132,49 @@ catalog:
       memory: 8Gi
 
 daft:
-  # false = 不部署质检台,连带跳过站点配置和 Ingress 的 /curation 路径。
+  # false = do not deploy the curation console, which also skips its site
+  # configuration and the Ingress's /curation path.
   enabled: true
-  # ★ 2026-08-19 云产品化:质检台不再静态挂载 TOS 桶,目标桶也不在部署时
-  #   配置 —— 数据集来源与交付去向都是用户在界面上运行时给的 tos:// 路径 +
-  #   地区,凭证用部署注入的 AK/SK(secrets.tosAccessKey/tosSecretKey)。
-  #   旧的 bucket / srcBucket / tosBuckets / dataRoot / deliveryPath / fsx.*
-  #   已全部退役,不再被任何模板消费;老 values 文件里残留这些键无害但无效。
+  # ★ 2026-08-19, cloud productization: the console no longer statically mounts
+  #   a TOS bucket, and the target bucket is not configured at deploy time
+  #   either — both the dataset source and the delivery destination are tos://
+  #   paths plus a region that the user supplies in the UI at runtime, using the
+  #   AK/SK injected by the deployment (secrets.tosAccessKey/tosSecretKey).
+  #   The old bucket / srcBucket / tosBuckets / dataRoot / deliveryPath / fsx.*
+  #   are all retired and no template consumes them; leaving them in an old
+  #   values file is harmless but has no effect.
   rootPath: /curation
-  # 「终端」页签(内嵌网页终端,**真 shell**,与 UI 共用 Basic auth)。排障用;
-  # 对 shell 暴露有顾虑就设 false,页签不渲染、/ws/term 路由也不注册。
+  # The Terminal tab (an embedded web terminal on a **real shell**, behind the
+  # same Basic auth as the UI). Useful for triage; set it to false if exposing a
+  # shell is a concern — the tab is then not rendered and the /ws/term route is
+  # not registered.
   terminal: true
-  # VLM 后端预设,原样渲染进质检台的 site.yaml(键名/字段与其格式一致)。
-  # 空 = 只有出厂占位预设,VLM 类质检不可用(除非下方 vllm.enabled=true 自动注入一个)。
-  # 质检台的可用后端只认 site.yaml 里的 vlm_backends —— 没有 k8s 自动发现,所以要让
-  # 界面能选到某个 vLLM,它就必须出现在这里(本 chart 部署的那个由 vllm.enabled 自动注入)。
-  # 这里配的是【外部】已有的 vLLM/MaaS 后端(自动注入的 self-hosted 键会与它们合并,
-  # 同名时以这里为准)。每个后端至少要有 endpoint;endpoint 含 "YOUR-" 或为空的会被界面过滤掉。示例:
+  # Preconfigured VLM backends, rendered verbatim into the console's site.yaml
+  # (keys and fields follow its format).
+  # Empty = only the factory placeholder preset, so VLM-based checks are
+  # unavailable (unless vllm.enabled=true below injects one automatically).
+  # The console only offers the backends listed in site.yaml's vlm_backends —
+  # there is no k8s discovery, so a vLLM has to appear here to be selectable at
+  # all (the one this chart deploys is injected automatically by vllm.enabled).
+  # What belongs here are *external*, already-running vLLM/MaaS backends (the
+  # automatically injected `self-hosted` key is merged with them, and an entry
+  # of the same name here wins). Every backend needs at least an endpoint;
+  # entries whose endpoint is empty or contains "YOUR-" are filtered out by the
+  # UI. For example:
   # vlmBackends:
   #   h20-8b:
   #     endpoint: http://vllm-cosmos-8b.curation.svc.cluster.local:8000/v1
   #     model: nvidia/Cosmos-Reason2-8B
   #     api_key_env:
   #     hardware: NVIDIA H20
-  #     service_type: 自托管 vLLM
+  #     service_type: Self-hosted vLLM
   vlmBackends: {}
-  # 火山方舟(Ark)VLM 服务的 base url,注入成质检台的 ARK_BASE_URL 环境变量。
-  # 这是普通配置不是密钥;配套的 API key 走 secrets.arkApiKey(密钥)。
-  # 留空则不注入 ARK_BASE_URL(质检台不启用方舟后端时可不管)。
+  # Base url of the Volcengine Ark VLM service, injected as the console's
+  # ARK_BASE_URL environment variable.
+  # This is ordinary configuration, not a secret; the matching API key goes in
+  # secrets.arkApiKey.
+  # Left empty, ARK_BASE_URL is not injected (fine when the console does not use
+  # the Ark backend).
   arkBaseUrl: https://ark.cn-beijing.volces.com/api/v3
   resources:
     requests:
@@ -141,29 +183,43 @@ daft:
     limits:
       cpu: "8"
       memory: 16Gi
-      # 数据集缓存/跑批暂存的安全预算(emptyDir 计入容器 ephemeral-storage)。
-      # 配了它体积预检才启用:大数据集下载前先估"还能安全写多少",防止把 pod
-      # 写到被 kubelet 驱逐。按节点盘和数据集大小调;节点盘偏小就调低。
+      # Safety budget for the dataset cache and batch staging (emptyDir counts
+      # against the container's ephemeral-storage).
+      # Setting it is what enables the size precheck: before downloading a large
+      # dataset, the console estimates how much can still be written safely, so
+      # it cannot write the pod into a kubelet eviction. Tune it to the node's
+      # disk and the dataset sizes; lower it on nodes with small disks.
       ephemeral-storage: 50Gi
 
 vllm:
-  # false = 不部署自托管 LLM(默认)。打开需要一张 GPU 卡:质检台的 VLM 类质检
-  # (task_success)通过 OpenAI 兼容 API 连它。enabled=true 时 chart 会自动把它注册进
-  # 质检台的 vlm_backends(键名 self-hosted,见 configmap-curation.yaml),界面直接能选,
-  # 不用手抄集群内 DNS。它与 rerun / curation 同 namespace,是一个独立 Deployment。
+  # false = do not deploy a self-hosted LLM (the default). Turning it on needs a
+  # GPU: the console's VLM-based checks (task_success) reach it over the
+  # OpenAI-compatible API. With enabled=true the chart registers it into the
+  # console's vlm_backends automatically (under the `self-hosted` key, see
+  # configmap-curation.yaml), so it is selectable in the UI without copying an
+  # in-cluster DNS name by hand. It lives in the same namespace as rerun and
+  # curation, as a separate Deployment.
   enabled: false
-  # vLLM 服务镜像(OpenAI 兼容)。daocloud 代理拉官方镜像。
+  # The vLLM server image (OpenAI-compatible). Pulls the official image through
+  # the daocloud proxy.
   image: docker.m.daocloud.io/vllm/vllm-openai:latest
-  # 模型:容器内本地路径(权重由下方 weightFetch 下到 emptyDir,路径为 /models/<modelName>),
-  # 或直接填 HF repo id 让 vllm 自己拉(那样把 weightFetch.image 留空即可,配合 hfToken/hfEndpoint)。
+  # The model: either a path inside the container (weights fetched into an
+  # emptyDir by weightFetch below, landing at /models/<modelName>), or an HF repo
+  # id for vllm to pull itself (leave weightFetch.image empty for that, and pair
+  # it with hfToken/hfEndpoint).
   model: /models/Cosmos-Reason2-32B
-  # OpenAI 兼容 API 对外宣称的 model 名。质检台按这个名字发请求,必须与之匹配 ——
-  # 自动注册进 vlm_backends 的 model 字段就取它。空 = 用 model 本身(本地路径当名字不好看,
-  # 建议显式给一个规范名,如 nvidia/Cosmos-Reason2-32B)。
+  # The model name the OpenAI-compatible API advertises. The console sends
+  # requests under this name, so they have to match — the `model` field of the
+  # automatically registered vlm_backends entry is taken from it. Empty = use
+  # `model` itself (a local path makes for an ugly name, so prefer an explicit
+  # canonical one such as nvidia/Cosmos-Reason2-32B).
   servedModelName: nvidia/Cosmos-Reason2-32B
-  # 传给 vllm 的额外参数(--model/--served-model-name/--port 由 chart 拼好,别在这里重复)。
-  # 32B 单卡示例:权重 fp16 ~64GB,H20 96GB → 显存利用率提到 0.92、上下文收到 32768
-  # (KV 余量 ~20GB);实测 OOM 或上下文不够就上 2 卡并加 --tensor-parallel-size 2。
+  # Extra arguments for vllm (--model/--served-model-name/--port are assembled
+  # by the chart — do not repeat them here).
+  # A 32B single-GPU example: fp16 weights are ~64GB and an H20 has 96GB, so
+  # memory utilization goes to 0.92 and the context down to 32768 (~20GB left for
+  # the KV cache); if that OOMs or the context is too small, move to two GPUs and
+  # add --tensor-parallel-size 2.
   extraArgs:
     - --gpu-memory-utilization
     - "0.92"
@@ -171,53 +227,70 @@ vllm:
     - "32768"
     - --trust-remote-code
   port: 8000
-  # GPU 数量(= resources.limits."nvidia.com/gpu",无需在 resources 里重复写)。
+  # GPU count (= resources.limits."nvidia.com/gpu"; no need to repeat it in resources).
   gpuCount: 1
-  # 钉到指定节点:抄目标 GPU 节点的 kubernetes.io/hostname(参考里是某张空卡的 IP)。
-  # 空 = 不钉,调度器挑任意满足 GPU 请求的节点。
+  # Pin to a node: copy the target GPU node's kubernetes.io/hostname (in our
+  # reference setup that is the IP of a node with a free GPU).
+  # Empty = unpinned, and the scheduler picks any node that satisfies the GPU request.
   nodeHostname: ""
-  # 额外 nodeSelector / tolerations(挑特定卡型、容忍 GPU 污点时用)。
+  # Extra nodeSelector / tolerations (for picking a GPU model, or tolerating GPU taints).
   nodeSelector: {}
   tolerations: []
-  # /dev/shm 大小(张量并行 / 大 batch 需要;单卡也建议给足)。
+  # /dev/shm size (needed for tensor parallelism and large batches; worth being
+  # generous even on a single GPU).
   dshmSize: 16Gi
-  # 权重预取 initContainer:在 GPU 节点本地盘(emptyDir)下模型,不进镜像、不落 TOS。
-  # 默认走内网 oniond + 火山镜像源流程(与现有同事的部署一致)。
-  # image 留空 = 不跑 init 容器(改由 vllm 从 HF 直拉,或权重已在镜像里)。
+  # Weight-prefetch initContainer: downloads the model onto the GPU node's local
+  # disk (emptyDir) — not into the image, not onto TOS.
+  # By default it goes through the internal oniond and the Volcengine mirrors
+  # (matching how colleagues already deploy this).
+  # Leaving image empty = no init container (vllm then pulls from HF itself, or
+  # the weights are already in the image).
   weightFetch:
-    # 有装 oniond 能力的镜像(参考用的是 robot_curator 镜像)。空 = 不跑 init。
+    # An image that can install oniond (our reference uses the robot_curator
+    # image). Empty = no init container.
     image: iaas-us-cn-beijing.cr.volces.com/physicalai/robot_curator:83d61eefc84dc7e8ebf674a770a6cf1b1793b2a0
-    # oniond 下载用的 bucket。
+    # The bucket oniond downloads from.
     bucket: ai-infra
-    # oniond 下载的模型名(oniond download model <modelName> --dir /models),
-    # 权重落在 /models/<modelName>,应与上面的 model 本地路径对应。
+    # The model name oniond downloads (oniond download model <modelName> --dir
+    # /models); the weights land in /models/<modelName>, which must match the
+    # local `model` path above.
     modelName: Cosmos-Reason2-32B
-  # 额外资源(GPU 由 gpuCount 单独计;这里配 cpu/memory 等)。权重下到 emptyDir,
-  # 大模型很吃 ephemeral-storage,需要时在 limits 里配上,防止被 kubelet 驱逐。
+  # Extra resources (the GPU is counted separately via gpuCount; set cpu/memory
+  # and friends here). The weights go into an emptyDir and a large model eats
+  # ephemeral-storage, so set that in limits when needed to avoid a kubelet eviction.
   resources:
     requests:
       cpu: "2"
       memory: 8Gi
 
 apig:
-  # false = 不建网关也不建 Ingress(自备入口时用)。
+  # false = create neither the gateway nor the Ingress (for bringing your own ingress).
   enabled: true
-  # 非空 = 适配已有 APIG 实例(平台实例 id),此时 subnetId 忽略、不必填;
-  # 空 = 新建网关 + 前置 CLB,此时 subnetId 必填。
+  # Non-empty = adopt an existing APIG instance (the platform instance id);
+  # subnetId is then ignored and need not be set.
+  # Empty = create a gateway plus the CLB in front of it, and subnetId is required.
   existingInstanceId: ""
-  # 新建网关所在子网 ID 列表(仅新建时必填,至少一个;适配已有实例时忽略)。
-  # APIG 网关是多副本高可用,建议给 2 个【不同可用区】的子网,平台把网关实例
-  # 和它的前置 CLB 摊到多可用区。必须都是【当前集群】VPC 里的子网,跨集群抄会
-  # 报 cannot be found from VPC 且永远 Pending。查法:抄本集群任一正常
-  # LoadBalancer Service 的 volcengine-loadbalancer-subnet-id 注解。
+  # Subnet IDs for a newly created gateway (required only when creating one, at
+  # least one; ignored when adopting an existing instance).
+  # An APIG gateway is replicated for HA, so prefer two subnets in *different
+  # availability zones* and the platform spreads the gateway instances and their
+  # CLB across them. All of them must be subnets of *this cluster's* VPC —
+  # copying one from another cluster fails with "cannot be found from VPC" and
+  # stays Pending forever. To find them: copy the
+  # volcengine-loadbalancer-subnet-id annotation off any healthy LoadBalancer
+  # Service in this cluster.
   #   subnetIds:
-  #     - subnet-aaaa   # 可用区 A
-  #     - subnet-bbbb   # 可用区 B
+  #     - subnet-aaaa   # availability zone A
+  #     - subnet-bbbb   # availability zone B
   subnetIds: []
-  # 本实例专属的 ingressClass。空 = 从 release 名派生(<fullname>-apig)。
-  # 集群里已有别的 APIG 实例时,千万别与其声明同一个 class,两个实例会互相抢 Ingress。
+  # An ingressClass private to this instance. Empty = derived from the release
+  # name (<fullname>-apig).
+  # When the cluster already has another APIG instance, never declare the same
+  # class as it — the two instances would fight over each other's Ingresses.
   ingressClassName: ""
-  # Ingress 的 host,只是网关内部的分流键,不需要真实 DNS;平台按它分配
-  # *.volceapi.com 公网域名。空 = 从 release 名派生(<fullname>-web.apig.internal)。
-  # 改 host 要删掉 Ingress 重建(in-place apply 会残留旧 ADDRESS),部署后别轻易动。
+  # The Ingress host. It is only a routing key inside the gateway and needs no
+  # real DNS; the platform assigns a public *.volceapi.com domain based on it.
+  # Empty = derived from the release name (<fullname>-web.apig.internal).
+  # Changing the host means deleting and recreating the Ingress (an in-place
+  # apply leaves the old ADDRESS behind), so leave it alone once deployed.
   webHost: ""

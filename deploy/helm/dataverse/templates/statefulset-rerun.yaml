@@ -1,6 +1,9 @@
-# StatefulSet 而不是 Deployment:catalog 的库和缓存在 RWO 云盘上,StatefulSet
-# 保证同一时刻至多一个实例挂这块盘(节点故障时不会起出第二个 pod 抢盘)。
-# 注意:StatefulSet 的 selector 不可变,selectorLabels 定死后不能改。
+# A StatefulSet rather than a Deployment: the catalog's database and cache live
+# on an RWO cloud disk, and a StatefulSet guarantees at most one instance has it
+# mounted at a time (a node failure will not bring up a second pod fighting for
+# the disk).
+# Note: a StatefulSet's selector is immutable — selectorLabels cannot change
+# once this ships.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -19,19 +22,22 @@ spec:
       labels:
         {{- include "dataverse.selectorLabels" (dict "root" . "component" "rerun") | nindent 8 }}
       annotations:
-        # 密钥内容变了自动滚动重启;existingSecret 场景 chart 看不到内容,改完需手动重启。
+        # Rolls the pod automatically when the secret contents change; with
+        # existingSecret the chart cannot see them, so restart by hand after editing.
         checksum/secrets: {{ print (include (print $.Template.BasePath "/secret-viewer.yaml") .) (include (print $.Template.BasePath "/secret-token.yaml") .) | sha256sum }}
     spec:
-      # 密钥挂在 /run/secrets;关掉 SA token 自动挂载,避免与只读密钥卷撞车。
+      # Secrets are mounted at /run/secrets; SA-token automounting is off so it
+      # cannot collide with the read-only secret volume.
       automountServiceAccountToken: false
       containers:
-        # ---- 容器 1:web viewer(nginx + wasm + /tos-config.json) ----
+        # ---- Container 1: web viewer (nginx + wasm + /tos-config.json) ----
         - name: web
-          image: {{ required "image.rerun 必填(rerun 镜像地址)" .Values.image.rerun | quote }}
+          image: {{ required "image.rerun is required (the rerun image reference)" .Values.image.rerun | quote }}
           env:
             - name: MODE
               value: web
-            # web 模式下这个 endpoint 会下发给用户的浏览器,浏览器在公网,必须用公网 endpoint。
+            # In web mode this endpoint is handed to the user's browser, which
+            # sits on the public internet — it has to be the public endpoint.
             - name: TOS_ENDPOINT
               value: {{ .Values.tos.endpointPublic | quote }}
             - name: TOS_REGION
@@ -48,7 +54,7 @@ spec:
             - containerPort: 80
           readinessProbe:
             httpGet:
-              path: /healthz # 免认证的健康检查端点(开 Basic auth 后 / 会 401)
+              path: /healthz # Unauthenticated health endpoint (with Basic auth on, / returns 401)
               port: 80
             initialDelaySeconds: 2
             periodSeconds: 5
@@ -61,34 +67,38 @@ spec:
             - name: rrd-cache
               mountPath: /rrd-cache
 
-        # ---- 容器 2:catalog server ----
+        # ---- Container 2: catalog server ----
         - name: catalog
           image: {{ .Values.image.rerun | quote }}
           env:
             - name: MODE
               value: server
-            # server 在云内跑,拉 TOS 走内网 endpoint 更快且不计公网流量。
+            # The server runs inside the cloud, so reaching TOS over the
+            # internal endpoint is faster and bills no public traffic.
             - name: TOS_ENDPOINT
               value: {{ .Values.tos.endpointInternal | quote }}
             - name: TOS_REGION
               value: {{ .Values.tos.region | quote }}
-            # 预签名 URL 用哪个 endpoint 签(只影响发给客户端的 URL)。
+            # Which endpoint presigned URLs are signed for (affects only the URLs handed to clients).
             - name: RERUN_PRESIGN_ENDPOINT
               value: {{ .Values.catalog.presignEndpoint | quote }}
             {{- with .Values.catalog.hfEndpoint }}
             - name: HF_ENDPOINT
               value: {{ . | quote }}
             {{- end }}
-            # 桶 CORS 自助配置(/api/ensure-cors):viewer 打开新桶时由 server
-            # 补配桶的 CORS 规则(只追加,不覆盖别家规则)。
+            # Self-service bucket CORS (/api/ensure-cors): when the viewer opens
+            # a new bucket, the server fills in the bucket's CORS rules (append
+            # only — it never overwrites someone else's).
             - name: RERUN_AUTO_CORS
               value: {{ .Values.catalog.autoCors.enabled | ternary "1" "0" | quote }}
             {{- with .Values.catalog.autoCors.origins }}
             - name: RERUN_AUTO_CORS_ORIGINS
               value: {{ join "," . | quote }}
             {{- end }}
-            # token 签名密钥不走环境变量(env 会出现在进程环境里,kubectl exec env
-            # 可见):以 0400 文件投影进 /run/secrets,entrypoint 自动发现。
+            # The token-signing secret deliberately skips the environment (env
+            # shows up in the process environment, visible to `kubectl exec env`):
+            # it is projected into /run/secrets as a 0400 file and the entrypoint
+            # discovers it.
           ports:
             - containerPort: 51234
           readinessProbe:
@@ -105,11 +115,13 @@ spec:
             - name: server-data
               mountPath: /server-data
       volumes:
-        # web 容器只看得到应用凭证(AK/SK、hf_token、账号表),签名密钥不在其中。
+        # The web container only ever sees the application credentials (AK/SK,
+        # hf_token, account table) — the signing secret is not among them.
         - name: tos-secrets
           secret:
             secretName: {{ include "dataverse.viewerSecretName" . }}
-        # catalog 容器在同一目录额外投影签名密钥,单文件 0400(仅属主可读)。
+        # The catalog container gets the signing secret projected into the same
+        # directory, as a single 0400 file (owner-readable only).
         - name: catalog-secrets
           projected:
             sources:
@@ -124,9 +136,10 @@ spec:
                       mode: 256 # 0400
               {{- end }}
         - name: rrd-cache
-          emptyDir: {} # nginx 的 WebDAV 回写目录(备用通道),丢了无所谓
-  # catalog 数据库 + 远端文件缓存。丢了能自愈(server 重新从 TOS 拉),但 catalog
-  # 注册记录也在上面,建议保留。helm uninstall 不会删这块 PVC。
+          emptyDir: {} # nginx's WebDAV write-back directory (a fallback path); losing it costs nothing
+  # The catalog database plus the remote-file cache. Losing it is survivable
+  # (the server re-fetches from TOS), but the catalog's registration records live
+  # here too, so keep it. helm uninstall does not delete this PVC.
   volumeClaimTemplates:
     - metadata:
         name: server-data

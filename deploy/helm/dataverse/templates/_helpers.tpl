@@ -1,4 +1,4 @@
-{{/* 资源名前缀:release 名已含 chart 名时直接用 release 名(如 release 就叫 dataverse) */}}
+{{/* Resource-name prefix: use the release name as-is when it already contains the chart name (e.g. a release simply called `dataverse`) */}}
 {{- define "dataverse.fullname" -}}
 {{- if contains .Chart.Name .Release.Name -}}
 {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
@@ -7,7 +7,7 @@
 {{- end -}}
 {{- end -}}
 
-{{/* 公共标签 */}}
+{{/* Labels shared by every object */}}
 {{- define "dataverse.labels" -}}
 app.kubernetes.io/name: {{ .Chart.Name }}
 app.kubernetes.io/instance: {{ .Release.Name }}
@@ -16,8 +16,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
-selector 标签:StatefulSet 的 selector 不可变,这组标签定死后不能再改,
-所以只放最小集,不含版本号。组件名由调用方传入("rerun" / "curation")。
+Selector labels: a StatefulSet's selector is immutable, so this set can never
+change once it ships — keep it minimal and free of the version. The caller
+passes the component name ("rerun" / "curation").
 */}}
 {{- define "dataverse.selectorLabels" -}}
 app.kubernetes.io/name: {{ .root.Chart.Name }}
@@ -25,27 +26,27 @@ app.kubernetes.io/instance: {{ .root.Release.Name }}
 app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 
-{{/* 凭证 Secret 名:existingSecret 优先,否则 chart 自己渲染的那个 */}}
+{{/* Credentials Secret: existingSecret wins, otherwise the one this chart renders */}}
 {{- define "dataverse.viewerSecretName" -}}
 {{- .Values.secrets.existingSecret | default (printf "%s-secrets" (include "dataverse.fullname" .)) -}}
 {{- end -}}
 
-{{/* token 签名密钥 Secret 名:existingTokenSecret 优先 */}}
+{{/* Token-signing-secret name: existingTokenSecret wins */}}
 {{- define "dataverse.tokenSecretName" -}}
 {{- .Values.secrets.existingTokenSecret | default (printf "%s-token-secret" (include "dataverse.fullname" .)) -}}
 {{- end -}}
 
-{{/* TOS 挂载凭证 Secret 名(fsx CSI 用) */}}
+{{/* TOS mount-credentials Secret (used by the fsx CSI) */}}
 {{- define "dataverse.fsxSecretName" -}}
 {{- .Values.daft.fsx.existingSecret | default (printf "%s-daft-fsx-key" (include "dataverse.fullname" .)) -}}
 {{- end -}}
 
-{{/* ingressClass:显式配置优先,否则从 release 名派生,避免多实例撞 class */}}
+{{/* ingressClass: an explicit setting wins, otherwise derive it from the release name so two installs cannot claim the same class */}}
 {{- define "dataverse.ingressClassName" -}}
 {{- .Values.apig.ingressClassName | default (printf "%s-apig" (include "dataverse.fullname" .)) -}}
 {{- end -}}
 
-{{/* Ingress host(网关分流键,非真实 DNS) */}}
+{{/* Ingress host (a gateway routing key, not real DNS) */}}
 {{- define "dataverse.webHost" -}}
 {{- .Values.apig.webHost | default (printf "%s-web.apig.internal" (include "dataverse.fullname" .)) -}}
 {{- end -}}

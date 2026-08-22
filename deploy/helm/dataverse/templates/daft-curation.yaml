@@ -1,18 +1,24 @@
 {{- if .Values.daft.enabled }}
-# ══════════════════ Daft 质检台(robot-curation UI) ══════════════════
-# 2026-08-19 云产品化改造:**不再静态挂载任何 TOS 桶**。数据面 = TOS 直连:
-# 用户在界面上给「数据集 tos:// 路径 + 地区」和「输出 tos:// 路径 + 地区 +
-# 交付名」,跑批进程用部署注入的 AK/SK(下方 TOS_* env)经 SDK 直读直写,
-# 桶与前缀全部是运行时输入 —— 部署时不需要也不应该配置任何目标桶
-# (daft.bucket / daft.srcBucket / daft.dataRoot / daft.deliveryPath 均已退役)。
-# 镜像要求:含 TOS 直连支持的 robot_curator 镜像(Daft 仓库
-# qian/daft-integrate-TOS 分支,curation/tos_store.py 在即可)。
+# ══════════════════ Daft curation console (robot-curation UI) ══════════════════
+# 2026-08-19, cloud productization: **no TOS bucket is statically mounted any
+# more**. The data plane talks to TOS directly: the user supplies a dataset
+# tos:// path + region and an output tos:// path + region + delivery name in the
+# UI, and the batch process reads and writes through the SDK using the AK/SK
+# injected by the deployment (the TOS_* env below). Buckets and prefixes are
+# entirely runtime input — the deployment neither needs nor should configure a
+# target bucket (daft.bucket / daft.srcBucket / daft.dataRoot /
+# daft.deliveryPath are all retired).
+# Image requirement: a robot_curator image with direct-TOS support (the Daft
+# repo's qian/daft-integrate-TOS branch — having curation/tos_store.py is enough).
 #
-# 与 rerun 分开的 StatefulSet(不进同一个 pod):质检管线是 CPU 密集的批处理,
-# 和交互式 viewer 分开互不拖累,升级 viewer 也不会杀正在跑的质检任务。
-# /data 是 emptyDir 工作区(数据集下载缓存 + 跑批产出暂存 + 任务状态):
-# 真正的交付以「完整性标志最后传」的协议上传到用户指定的桶,pod 重启丢掉的
-# 只是缓存与任务历史,不丢交付。
+# A StatefulSet separate from rerun (deliberately not the same pod): the
+# curation pipeline is CPU-heavy batch work, so keeping it apart from the
+# interactive viewer means neither drags the other down, and upgrading the
+# viewer does not kill a curation run in flight.
+# /data is an emptyDir workspace (dataset download cache + batch output staging
+# + task state): the actual delivery is uploaded to the user's bucket under a
+# "write the completeness marker last" protocol, so a pod restart loses only the
+# cache and the task history, never a delivery.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -37,11 +43,12 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: curation
-          # 镜像 entrypoint 就是 `curation`。
-          image: {{ required "daft.enabled=true 时 image.curator 必填(robot_curator 镜像地址)" .Values.image.curator | quote }}
-          # --delivery/--data-root 指本地工作区:交付根空着也能启动(镜像内
-          # 自动放占位交付);「任务台」的跑批输入输出都是 tos:// URL,
-          # 这两个本地目录只承载任务状态与占位。
+          # The image's entrypoint is `curation` itself.
+          image: {{ required "daft.enabled=true requires image.curator (the robot_curator image reference)" .Values.image.curator | quote }}
+          # --delivery/--data-root point at the local workspace: an empty
+          # delivery root still starts (the image drops in a placeholder
+          # delivery). Batch input and output on the task board are tos:// URLs,
+          # so these two local directories only carry task state and placeholders.
           args:
             - ui
             - --delivery
@@ -54,24 +61,30 @@ spec:
             - containerPort: 7860
           env:
             {{- if .Values.web.basicAuth.enabled }}
-            # 与 web viewer 共用同一份 htpasswd 账号表(同域名部署,任意账号
-            # 登录一次两边通行);验证也同为哈希比对,不再需要明文账号。
+            # Shares the htpasswd account table with the web viewer (same
+            # domain, so one login with any account gets you into both);
+            # verification is a hash comparison too, so no plaintext account is needed.
             - name: CURATION_UI_HTPASSWD_FILE
               value: /etc/curation-auth/htpasswd
             {{- end }}
             - name: CURATION_CONFIG
               value: /etc/curation/site.yaml
             {{- if .Values.daft.terminal }}
-            # 「终端」页签(内嵌 xterm,真 shell,与 UI 同一份 Basic auth 保护)。
-            # 镜像不默认开,由这里显式注入;不想要 shell 就在 values 关掉。
+            # The Terminal tab (an embedded xterm on a real shell, behind the
+            # same Basic auth as the UI). The image leaves it off by default and
+            # this injects it explicitly — turn it off in values if you do not
+            # want a shell.
             - name: CURATION_TERMINAL
               value: "1"
             {{- end }}
-            # TOS 直连凭证:桶来自用户输入,凭证来自部署(与 viewer 的
-            # tos-config.json 同一对 AK/SK,同一份 secret)。环境变量名与
-            # Daft 引擎 TosConfig.from_env 一致。端点给内网形式(pod 在 VPC
-            # 内,快且不计公网流量);代码只取其中的「地区 + 内外网」两个事实,
-            # 用户选异地区时自动换成对应公网端点。
+            # Direct-TOS credentials: the bucket comes from the user, the
+            # credentials from the deployment (the same AK/SK pair, from the same
+            # secret, as the viewer's tos-config.json). The variable names match
+            # the Daft engine's TosConfig.from_env. The endpoint is given in its
+            # internal form (the pod sits in the VPC — faster, and no public
+            # traffic billed); the code reads only two facts out of it, region
+            # and internal-vs-public, and swaps in the matching public endpoint
+            # when the user picks another region.
             - name: TOS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
@@ -84,9 +97,11 @@ spec:
                   key: tos_secret_key
             - name: TOS_ENDPOINT
               value: {{ .Values.tos.endpointInternal | quote }}
-            # 火山方舟(Ark)VLM 后端接入:API key 走 secret(缺省不设,用 existingSecret
-            # 又没这个 key 时 optional 保证不炸),base url 是普通配置。环境变量名与
-            # Daft 引擎读取一致(ARK_API_KEY / ARK_BASE_URL)。
+            # Volcengine Ark VLM backend: the API key comes from the secret
+            # (unset by default, and `optional` keeps it from blowing up when
+            # existingSecret has no such key), while the base url is ordinary
+            # configuration. The variable names match what the Daft engine reads
+            # (ARK_API_KEY / ARK_BASE_URL).
             {{- if or .Values.secrets.arkApiKey .Values.secrets.existingSecret }}
             - name: ARK_API_KEY
               valueFrom:
@@ -99,12 +114,14 @@ spec:
             - name: ARK_BASE_URL
               value: {{ . | quote }}
             {{- end }}
-            # 数据集下载缓存固定到 /data(emptyDir),与任务状态同一块盘。
+            # The dataset download cache is pinned to /data (emptyDir), the
+            # same disk as the task state.
             - name: CURATION_TOS_CACHE
               value: /data/tos-cache
             {{- if hasKey ((.Values.daft.resources).limits | default dict) "ephemeral-storage" }}
-            # 容器存储限额(downward API):体积预检用它算"还能安全写多少",
-            # 防止大数据集把 pod 写到被 kubelet 驱逐。
+            # The container's storage limit (downward API): the size precheck
+            # uses it to work out how much can still be written safely, so a
+            # large dataset cannot write the pod into a kubelet eviction.
             - name: CURATION_EPHEMERAL_LIMIT_BYTES
               valueFrom:
                 resourceFieldRef:
@@ -113,12 +130,14 @@ spec:
             {{- end }}
           readinessProbe:
             httpGet:
-              path: /healthz # 直连容器端口,不带前缀(带前缀的 /curation/healthz 也通)
+              path: /healthz # Straight to the container port, unprefixed (the prefixed /curation/healthz works too)
               port: 7860
             initialDelaySeconds: 5
             periodSeconds: 10
-          # 质检管线吃 CPU(光流/视频解码/质检全在 CPU 上)。给 limits 配上
-          # ephemeral-storage 才能启用体积预检(见上方 downward API 注入)。
+          # The curation pipeline is CPU-bound (optical flow, video decoding and
+          # the checks themselves all run on CPU). Setting ephemeral-storage in
+          # limits is what enables the size precheck (see the downward API
+          # injection above).
           resources:
             {{- toYaml .Values.daft.resources | nindent 12 }}
           volumeMounts:
@@ -132,8 +151,9 @@ spec:
             - name: site-config
               mountPath: /etc/curation
       volumes:
-        # 本地工作区:数据集缓存 / 跑批暂存 / 任务状态。emptyDir 用量计入
-        # 容器 ephemeral-storage 限额(daft.resources.limits 配了就生效)。
+        # Local workspace: dataset cache / batch staging / task state. emptyDir
+        # usage counts against the container's ephemeral-storage limit (in effect
+        # as soon as daft.resources.limits sets one).
         - name: scratch
           emptyDir: {}
         {{- if .Values.web.basicAuth.enabled }}
@@ -148,8 +168,8 @@ spec:
           configMap:
             name: {{ include "dataverse.fullname" . }}-curation-site
 ---
-# /curation 的后端;同时是 daft StatefulSet 的 governing service
-# (headless 即可,APIG Ingress 按 endpoints 转发)。
+# The backend behind /curation, and at the same time the daft StatefulSet's
+# governing service (headless is enough — the APIG Ingress forwards by endpoints).
 apiVersion: v1
 kind: Service
 metadata:

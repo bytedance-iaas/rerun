@@ -1,39 +1,39 @@
-dataverse(ReRun + 质检台两个组件)已提交部署。接下来:
+dataverse (two components: ReRun + the curation console) has been submitted. Next:
 
-1. 等 pod 就绪:
+1. Wait for the pods:
      kubectl -n {{ .Release.Namespace }} get pods
-   预期:{{ include "dataverse.fullname" . }}-0 为 2/2{{ if .Values.daft.enabled }},{{ include "dataverse.fullname" . }}-curation-0 为 1/1{{ end }}。
+   Expect {{ include "dataverse.fullname" . }}-0 at 2/2{{ if .Values.daft.enabled }} and {{ include "dataverse.fullname" . }}-curation-0 at 1/1{{ end }}.
 {{- if .Values.apig.enabled }}
 
-2. 网关就绪与域名:
-     kubectl get apiginstance -A          # PHASE=Running 即就绪(偶发空列表,重试确认)
+2. Gateway readiness and the domain:
+     kubectl get apiginstance -A          # PHASE=Running means ready (an occasional empty list just needs a retry)
      kubectl -n {{ .Release.Namespace }} get ingress -o wide
-   自动分配的 *.volceapi.com 域名只能在 APIG 控制台看:
-     https://console.volcengine.com/veapig → 服务列表(host = {{ include "dataverse.webHost" . }})
-   kubectl 查不到这个域名。这个域名承载全部入口:
-     /            web viewer(Basic auth)
-     {{ .Values.daft.rootPath }}   质检台(与 viewer 共用账号表){{ if not .Values.daft.enabled }}(daft.enabled=false,未部署){{ end }}
-     gRPC         catalog server —— Python 里:
-                    CatalogClient("rerun+https://<域名>:443"{{ if .Values.catalog.tokenAuth.enabled }}, token=<token>{{ end }})
-     /downloads/  SDK wheel 下载(Linux + macOS;viewer 内置于 wheel)
+   The automatically assigned *.volceapi.com domain is only visible in the APIG console:
+     https://console.volcengine.com/veapig → service list (host = {{ include "dataverse.webHost" . }})
+   kubectl cannot show you this domain. It carries every entry point:
+     /            web viewer (Basic auth)
+     {{ .Values.daft.rootPath }}   curation console (same account table as the viewer){{ if not .Values.daft.enabled }} (daft.enabled=false, not deployed){{ end }}
+     gRPC         catalog server —— from Python:
+                    CatalogClient("rerun+https://<domain>:443"{{ if .Values.catalog.tokenAuth.enabled }}, token=<token>{{ end }})
+     /downloads/  SDK wheel downloads (Linux + macOS; the viewer ships inside the wheel)
 
-3. 浏览器打开 https://<域名>{{ if .Values.web.basicAuth.enabled }},用账号表里的账号登录{{ end }}。
+3. Open https://<domain> in a browser{{ if .Values.web.basicAuth.enabled }} and sign in with an account from the table{{ end }}.
 {{- end }}
 {{- if .Values.catalog.tokenAuth.enabled }}
 
-给用户签发 catalog token(在 catalog 容器内签,密钥不出集群;能签的人 = 有 exec 权限的人):
+Issuing a catalog token for a user (signed inside the catalog container, so the secret never leaves the cluster; whoever can exec can sign):
   kubectl -n {{ .Release.Namespace }} exec {{ include "dataverse.fullname" . }}-0 -c catalog -- sh -c \
       "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
-          --user <名字> --permission read --expiration 90d \
-          --server-host <网关域名> --server-host {{ include "dataverse.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
+          --user <name> --permission read --expiration 90d \
+          --server-host <gateway domain> --server-host {{ include "dataverse.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
 {{- end }}
 
-集群内访问(不出公网):
+In-cluster access (never leaves the private network):
   web:    http://{{ include "dataverse.fullname" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
   server: rerun+http://{{ include "dataverse.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
 {{- if .Values.daft.enabled }}
 
-质检台数据面自检:
+Curation data-plane self-check:
   kubectl -n {{ .Release.Namespace }} exec {{ include "dataverse.fullname" . }}-curation-0 -- ls /mnt/tos
-  应看到 datasets/ 和 deliveries/。
+  You should see datasets/ and deliveries/.
 {{- end }}

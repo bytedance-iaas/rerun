@@ -1,86 +1,88 @@
 # dataverse Helm chart
 
-Dataverse 云服务常驻部署的 Helm chart:**一个 chart 打包 ReRun 与质检台两个组件**,外加它们共用的网关入口。
+The Helm chart for the always-on Dataverse cloud deployment: **one chart bundling two components, ReRun and the curation console**, plus the gateway entry point they share.
 
-| 组件 | 内容 |
+| Component | Contents |
 |---|---|
-| **ReRun** | rerun StatefulSet(web viewer + catalog server 两容器)+ 集群内 Service(web / headless gRPC) |
-| **质检台** | Daft 质检台 StatefulSet(TOS 直连,凭证复用应用 Secret 里的 AK/SK)+ 站点配置 ConfigMap;`daft.enabled=false` 可整体关掉 |
+| **ReRun** | The rerun StatefulSet (two containers: web viewer + catalog server) and its in-cluster Services (web / headless gRPC) |
+| **Curation console** | The Daft StatefulSet (direct TOS access, reusing the AK/SK from the application Secret) and its site-configuration ConfigMap; `daft.enabled=false` turns the whole thing off |
 
-共用部分:凭证与 token 签名密钥 Secret、APIG 网关实例与按路径分流的 Ingress(含 catalog 的 gRPC 路由);
-可选的自托管 vLLM(`vllm.enabled=true`)只服务质检台。
+Shared between them: the credentials and token-signing Secrets, the APIG gateway instance, and the path-routed Ingress (including the catalog's gRPC route).
+The optional self-hosted vLLM (`vllm.enabled=true`) serves the curation console alone.
 
-按需的云上 native viewer 会话是独立 chart:[`../rerun-native-session`](../rerun-native-session/)。
+On-demand native viewer sessions in the cloud are a separate chart: [`../rerun-native-session`](../rerun-native-session/).
 
-## 安装
+## Installing
 
-推荐流程(密钥 kubectl 直建、values 零密钥,完整步骤见 docs/release/02-deploy.md):
+The recommended flow — Secrets created with kubectl, zero secrets in values (full steps in docs/release/02-deploy.md):
 
 ```sh
-# 1. 建 namespace 和两个 Secret(应用凭证 / token 签名密钥;
-#    签名密钥用管道直建,不落盘):
+# 1. Create the namespace and the two Secrets (application credentials / token
+#    signing secret; the signing secret goes through a pipe so it never touches disk):
 kubectl create namespace rerun
 kubectl -n rerun create secret generic dataverse-secrets \
     --from-literal=tos_access_key=… --from-literal=tos_secret_key=… \
     --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 'pw123')" \
-    --from-literal=ark_api_key=…   # 可选:质检台走火山方舟 VLM 后端时才需要
+    --from-literal=ark_api_key=…   # optional: only for the Volcengine Ark VLM backend
 rerun server generate-secret | kubectl -n rerun create secret generic \
     rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
 
-# 2. values 里只引用名字(secrets.existingSecret / secrets.existingTokenSecret)
-#    + 非密钥配置,然后安装:
+# 2. values only references those names (secrets.existingSecret /
+#    secrets.existingTokenSecret) alongside the non-secret configuration; then install:
 helm install dataverse deploy/helm/dataverse -n rerun -f deploy/secrets/values-prod.yaml
 
-# 3. 照安装结束打印的 NOTES 走完部署后步骤(查域名、配 CORS、签 token)。
+# 3. Follow the NOTES printed at the end of the install for the post-deployment
+#    steps (find the domain, configure CORS, issue tokens).
 ```
 
-开发环境也可不建 Secret,直填 `secrets.*` 字段由 chart 渲染(见 values.yaml 注释)。
-签名密钥只以 0400 文件挂进 catalog 容器(projected 卷),不进环境变量,web / native 会话不可见;签发 token 用 `kubectl exec` 在容器内做,密钥不出集群。
+For development you can skip the Secrets entirely and fill in the `secrets.*` fields for the chart to render (see the comments in values.yaml).
+The signing secret is mounted into the catalog container as a 0400 file (a projected volume) and never as an environment variable, so the web and native sessions cannot see it; tokens are issued inside the container with `kubectl exec`, and the secret never leaves the cluster.
 
-release 名建议就叫 `dataverse`:资源名前缀 = release 名,这样和文档里的名字一致。
+Name the release `dataverse`: the resource-name prefix is the release name, which keeps it consistent with the names used throughout the docs.
 
-## 常用开关
+## Common switches
 
-| value | 作用 |
+| value | Effect |
 |---|---|
-| `daft.enabled=false` | 不部署质检台(连带跳过站点配置与 `/curation` 路由),只留 ReRun |
-| `vllm.enabled=true` | 在同 namespace 部署一个自托管 vLLM(GPU),并自动注册成质检台的一个 VLM 后端 |
-| `secrets.arkApiKey` / `daft.arkBaseUrl` | 质检台接火山方舟(Ark)VLM 后端:API key(密钥,注入 `ARK_API_KEY`)+ base url(普通配置,注入 `ARK_BASE_URL`)。用 `existingSecret` 时把 key 加进那份 Secret(key 名 `ark_api_key`) |
-| `vllm.model` / `vllm.servedModelName` / `vllm.gpuCount` / `vllm.nodeHostname` | 选模型、对外模型名、GPU 卡数、钉到哪个 GPU 节点 |
-| `apig.enabled=false` | 不建网关和 Ingress(自备入口) |
-| `apig.existingInstanceId` | 适配已有 APIG 实例而不新建(设了就不用填 `apig.subnetIds`) |
-| `web.basicAuth.enabled=false` / `catalog.tokenAuth.enabled=false` | 关认证(仅限内网调试) |
-| `secrets.existingSecret` | 密钥由外部 Secret 提供,chart 不渲染明文 |
-| `catalog.hfEndpoint=""` | 海外集群直连 HuggingFace 官方 |
+| `daft.enabled=false` | Do not deploy the curation console (which also skips its site configuration and the `/curation` route), leaving ReRun alone |
+| `vllm.enabled=true` | Deploy a self-hosted vLLM (GPU) in the same namespace and register it automatically as one of the console's VLM backends |
+| `secrets.arkApiKey` / `daft.arkBaseUrl` | Wire the console to the Volcengine Ark VLM backend: the API key (a secret, injected as `ARK_API_KEY`) plus the base url (ordinary configuration, injected as `ARK_BASE_URL`). With `existingSecret`, add the key to that Secret instead (as `ark_api_key`) |
+| `vllm.model` / `vllm.servedModelName` / `vllm.gpuCount` / `vllm.nodeHostname` | Pick the model, its advertised name, the GPU count, and which GPU node to pin to |
+| `apig.enabled=false` | Create neither the gateway nor the Ingress (bring your own) |
+| `apig.existingInstanceId` | Adopt an existing APIG instance rather than creating one (setting it makes `apig.subnetIds` unnecessary) |
+| `web.basicAuth.enabled=false` / `catalog.tokenAuth.enabled=false` | Turn authentication off (private-network debugging only) |
+| `secrets.existingSecret` | Secrets come from an external Secret and the chart renders no plaintext |
+| `catalog.hfEndpoint=""` | Reach the official HuggingFace directly (clusters outside China) |
 
-## 自托管 vLLM(可选,给质检台用)
+## Self-hosted vLLM (optional, for the curation console)
 
-`vllm.enabled=true` 时,chart 在同 namespace 多起一个独立的 vLLM `Deployment` + `Service`(需要 GPU)。
-质检台的可用后端只认 `site.yaml` 里的 `vlm_backends`,没有 k8s 自动发现 —— 所以打开这个开关后,chart 会把这个 vLLM 以 `self-hosted` 键自动注入 `vlm_backends`(endpoint 指向它的集群内 DNS,以 `/v1` 结尾),质检台界面直接能选到,不用手抄地址。
+With `vllm.enabled=true` the chart brings up one more standalone vLLM `Deployment` + `Service` in the same namespace (a GPU is required).
+The console only offers the backends listed in `site.yaml`'s `vlm_backends` — there is no k8s discovery — so turning this switch on also makes the chart inject that vLLM into `vlm_backends` under the `self-hosted` key (its endpoint pointing at the in-cluster DNS name, ending in `/v1`), and it becomes selectable in the console's UI without anyone copying an address by hand.
 
-权重默认走内网 `oniond` + 火山镜像源的 initContainer 下到 `emptyDir`(不进镜像、不落 TOS,pod 重建时按 `*.safetensors`/`*.aria2` 幂等跳过)。
-不想用这套流程,把 `vllm.weightFetch.image` 留空,`vllm.model` 填 HF repo id,让 vLLM 自己从 HF 拉(会复用 `catalog.hfEndpoint` 镜像站和共用 secret 里的 `hf_token`)。
+By default the weights are fetched into an `emptyDir` by an initContainer going through the internal `oniond` and the Volcengine mirrors (not into the image, not onto TOS; a pod rebuild skips idempotently based on `*.safetensors` / `*.aria2`).
+To skip that flow, leave `vllm.weightFetch.image` empty and set `vllm.model` to an HF repo id so vLLM pulls from HF itself (reusing the `catalog.hfEndpoint` mirror and the `hf_token` from the shared secret).
 
-关键点:`vllm.servedModelName` 必须与质检台发请求用的模型名一致 —— 自动注入的后端 `model` 字段就取它,所以一般不用管;换模型改 `vllm.model`(本地路径 `/models/<weightFetch.modelName>`,与 `weightFetch.modelName` 对应)。
-单卡放不下就把 `vllm.gpuCount` 提到 2 并在 `vllm.extraArgs` 加 `--tensor-parallel-size 2`。
+The one thing that matters: `vllm.servedModelName` has to match the model name the console sends requests under — the injected backend's `model` field is taken from it, so it usually takes care of itself.
+To change models, change `vllm.model` (the local path `/models/<weightFetch.modelName>`, matching `weightFetch.modelName`).
+If a single GPU cannot hold the model, raise `vllm.gpuCount` to 2 and add `--tensor-parallel-size 2` to `vllm.extraArgs`.
 
-## 升级与配置变更
+## Upgrades and configuration changes
 
-- `helm upgrade dataverse deploy/helm/dataverse -n rerun -f …` 即可;
-  Secret / 站点配置内容变化通过 checksum 注解自动滚动重启 pod
-  (`secrets.existingSecret` 场景 chart 看不到内容,改完外部 Secret 需手动 `kubectl rollout restart`)。
-- **不要改的字段**:StatefulSet 的 selector 标签(k8s 不允许,改 = 删了重建);
-  `apig.webHost` 与 ingressClass(in-place 改会残留旧 ADDRESS,要删 Ingress 重建,且换 host = 换公网域名)。
+- `helm upgrade dataverse deploy/helm/dataverse -n rerun -f …` is all it takes;
+  changes to Secret or site-configuration contents roll the pods automatically through the checksum annotations
+  (with `secrets.existingSecret` the chart cannot see the contents, so after editing the external Secret, `kubectl rollout restart` by hand).
+- **Fields not to change**: the StatefulSet's selector labels (k8s does not allow it — changing them means delete and recreate);
+  `apig.webHost` and the ingressClass (an in-place change leaves the old ADDRESS behind and needs the Ingress recreated, and a new host means a new public domain).
 
-## 卸载与数据
+## Uninstalling, and the data
 
-- `helm uninstall dataverse -n rerun`。
-- catalog 的数据盘 PVC(`server-data-<fullname>-0`)由 volumeClaimTemplates 管理,**uninstall 不删**;确认不要了再手动删 PVC。
-- 质检台不挂 PV:工作区是 emptyDir(数据集缓存 / 跑批暂存 / 任务状态),pod 删了只丢缓存与任务历史;交付按「完整性标志最后传」上传到用户桶,不丢。
-- APIG 网关实例删除后,自动分配的域名随之失效。
+- `helm uninstall dataverse -n rerun`.
+- The catalog's data PVC (`server-data-<fullname>-0`) is managed by volumeClaimTemplates and is **not deleted on uninstall**; delete it by hand once you are sure.
+- The curation console mounts no PV: its workspace is an emptyDir (dataset cache / batch staging / task state), so deleting the pod loses only the cache and the task history. Deliveries are uploaded to the user's bucket under a "write the completeness marker last" protocol and are never lost.
+- Once the APIG gateway instance is deleted, the domain assigned to it stops working.
 
-## 已知前提
+## Assumptions
 
-- 集群在火山引擎 VKE 上,且已装 APIGInstance CRD(`loadbalancer.vke.volcengine.com/v1beta1`);
-- 新建网关时 `apig.subnetIds` 至少给一个当前集群 VPC 里的子网(网关高可用,建议给 2 个不同可用区的子网;适配已有实例走 `apig.existingInstanceId` 则不需要);
-- robot_curator 镜像 ≥ Daft 仓库 commit 412b91ce8(子路径支持)。
+- The cluster runs on Volcengine VKE and has the APIGInstance CRD installed (`loadbalancer.vke.volcengine.com/v1beta1`);
+- when creating a gateway, `apig.subnetIds` needs at least one subnet from this cluster's VPC (the gateway is replicated for HA, so two subnets in different availability zones are recommended; adopting an existing instance through `apig.existingInstanceId` needs none);
+- the robot_curator image is at least Daft repo commit 412b91ce8 (sub-path support).

@@ -1,4 +1,4 @@
-{{/* 会话名:rerun-native-<release 名> */}}
+{{/* Session name: rerun-native-<release name> */}}
 {{- define "rerun-native-session.name" -}}
 {{- printf "rerun-native-%s" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
