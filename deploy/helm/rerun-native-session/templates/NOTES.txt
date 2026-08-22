@@ -1,18 +1,18 @@
-native viewer 会话 {{ include "rerun-native-session.name" . }} 已启动。
+The native viewer session {{ include "rerun-native-session.name" . }} is up.
 
 {{- if .Values.ingress.enabled }}
 
-访问(公网,经共享 APIG 网关):
-  域名在 APIG 控制台查(host = {{ include "rerun-native-session.host" . }}):
-    https://console.volcengine.com/veapig → 服务列表
-  浏览器打开 https://<域名>/vnc.html?autoconnect=true&resize=remote
-  连接时输入会话密码。
+Access (public, through the shared APIG gateway):
+  Find the domain in the APIG console (host = {{ include "rerun-native-session.host" . }}):
+    https://console.volcengine.com/veapig → service list
+  Open https://<domain>/vnc.html?autoconnect=true&resize=remote in a browser
+  and enter the session password when connecting.
 {{- else }}
 
-访问(port-forward):
+Access (port-forward):
   kubectl -n {{ .Release.Namespace }} port-forward pod/{{ include "rerun-native-session.name" . }} 9092:8080
-  浏览器打开 http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
+  Open http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale in a browser
 {{- end }}
 
-用完删掉(节点资源按运行计费,别忘了):
+Delete it when you are done — node resources are billed for as long as it runs:
   helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

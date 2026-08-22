@@ -1,0 +1,188 @@
+{{- if .Values.daft.enabled }}
+# ══════════════════ Daft curation console (robot-curation UI) ══════════════════
+# 2026-08-19, cloud productization: **no TOS bucket is statically mounted any
+# more**. The data plane talks to TOS directly: the user supplies a dataset
+# tos:// path + region and an output tos:// path + region + delivery name in the
+# UI, and the batch process reads and writes through the SDK using the AK/SK
+# injected by the deployment (the TOS_* env below). Buckets and prefixes are
+# entirely runtime input — the deployment neither needs nor should configure a
+# target bucket (daft.bucket / daft.srcBucket / daft.dataRoot /
+# daft.deliveryPath are all retired).
+# Image requirement: a robot_curator image with direct-TOS support (the Daft
+# repo's qian/daft-integrate-TOS branch — having curation/tos_store.py is enough).
+#
+# A StatefulSet separate from rerun (deliberately not the same pod): the
+# curation pipeline is CPU-heavy batch work, so keeping it apart from the
+# interactive viewer means neither drags the other down, and upgrading the
+# viewer does not kill a curation run in flight.
+# /data is an emptyDir workspace (dataset download cache + batch output staging
+# + task state): the actual delivery is uploaded to the user's bucket under a
+# "write the completeness marker last" protocol, so a pod restart loses only the
+# cache and the task history, never a delivery.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dataverse.fullname" . }}-curation
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: curation
+spec:
+  serviceName: {{ include "dataverse.fullname" . }}-curation
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 8 }}
+      annotations:
+        checksum/secrets: {{ include (print $.Template.BasePath "/secret-viewer.yaml") . | sha256sum }}
+        checksum/site-config: {{ include (print $.Template.BasePath "/configmap-curation.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: curation
+          # The image's entrypoint is `curation` itself.
+          image: {{ required "daft.enabled=true requires image.curator (the robot_curator image reference)" .Values.image.curator | quote }}
+          # --delivery/--data-root point at the local workspace: an empty
+          # delivery root still starts (the image drops in a placeholder
+          # delivery). Batch input and output on the task board are tos:// URLs,
+          # so these two local directories only carry task state and placeholders.
+          args:
+            - ui
+            - --delivery
+            - /data/deliveries
+            - --data-root
+            - /data/datasets
+            - --root-path
+            - {{ .Values.daft.rootPath | quote }}
+          ports:
+            - containerPort: 7860
+          env:
+            {{- if .Values.web.basicAuth.enabled }}
+            # Shares the htpasswd account table with the web viewer (same
+            # domain, so one login with any account gets you into both);
+            # verification is a hash comparison too, so no plaintext account is needed.
+            - name: CURATION_UI_HTPASSWD_FILE
+              value: /etc/curation-auth/htpasswd
+            {{- end }}
+            - name: CURATION_CONFIG
+              value: /etc/curation/site.yaml
+            {{- if .Values.daft.terminal }}
+            # The Terminal tab (an embedded xterm on a real shell, behind the
+            # same Basic auth as the UI). The image leaves it off by default and
+            # this injects it explicitly — turn it off in values if you do not
+            # want a shell.
+            - name: CURATION_TERMINAL
+              value: "1"
+            {{- end }}
+            # Direct-TOS credentials: the bucket comes from the user, the
+            # credentials from the deployment (the same AK/SK pair, from the same
+            # secret, as the viewer's tos-config.json). The variable names match
+            # the Daft engine's TosConfig.from_env. The endpoint is given in its
+            # internal form (the pod sits in the VPC — faster, and no public
+            # traffic billed); the code reads only two facts out of it, region
+            # and internal-vs-public, and swaps in the matching public endpoint
+            # when the user picks another region.
+            - name: TOS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: tos_access_key
+            - name: TOS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: tos_secret_key
+            - name: TOS_ENDPOINT
+              value: {{ .Values.tos.endpointInternal | quote }}
+            # Volcengine Ark VLM backend: the API key comes from the secret
+            # (unset by default, and `optional` keeps it from blowing up when
+            # existingSecret has no such key), while the base url is ordinary
+            # configuration. The variable names match what the Daft engine reads
+            # (ARK_API_KEY / ARK_BASE_URL).
+            {{- if or .Values.secrets.arkApiKey .Values.secrets.existingSecret }}
+            - name: ARK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: ark_api_key
+                  optional: true
+            {{- end }}
+            {{- with .Values.daft.arkBaseUrl }}
+            - name: ARK_BASE_URL
+              value: {{ . | quote }}
+            {{- end }}
+            # The dataset download cache is pinned to /data (emptyDir), the
+            # same disk as the task state.
+            - name: CURATION_TOS_CACHE
+              value: /data/tos-cache
+            {{- if hasKey ((.Values.daft.resources).limits | default dict) "ephemeral-storage" }}
+            # The container's storage limit (downward API): the size precheck
+            # uses it to work out how much can still be written safely, so a
+            # large dataset cannot write the pod into a kubelet eviction.
+            - name: CURATION_EPHEMERAL_LIMIT_BYTES
+              valueFrom:
+                resourceFieldRef:
+                  containerName: curation
+                  resource: limits.ephemeral-storage
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz # Straight to the container port, unprefixed (the prefixed /curation/healthz works too)
+              port: 7860
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # The curation pipeline is CPU-bound (optical flow, video decoding and
+          # the checks themselves all run on CPU). Setting ephemeral-storage in
+          # limits is what enables the size precheck (see the downward API
+          # injection above).
+          resources:
+            {{- toYaml .Values.daft.resources | nindent 12 }}
+          volumeMounts:
+            - name: scratch
+              mountPath: /data
+            {{- if .Values.web.basicAuth.enabled }}
+            - name: curation-auth
+              mountPath: /etc/curation-auth
+              readOnly: true
+            {{- end }}
+            - name: site-config
+              mountPath: /etc/curation
+      volumes:
+        # Local workspace: dataset cache / batch staging / task state. emptyDir
+        # usage counts against the container's ephemeral-storage limit (in effect
+        # as soon as daft.resources.limits sets one).
+        - name: scratch
+          emptyDir: {}
+        {{- if .Values.web.basicAuth.enabled }}
+        - name: curation-auth
+          secret:
+            secretName: {{ include "dataverse.viewerSecretName" . }}
+            items:
+              - key: web_htpasswd
+                path: htpasswd
+        {{- end }}
+        - name: site-config
+          configMap:
+            name: {{ include "dataverse.fullname" . }}-curation-site
+---
+# The backend behind /curation, and at the same time the daft StatefulSet's
+# governing service (headless is enough — the APIG Ingress forwards by endpoints).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dataverse.fullname" . }}-curation
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: curation
+spec:
+  clusterIP: None
+  selector:
+    {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 4 }}
+  ports:
+    - name: ui
+      port: 7860
+      targetPort: 7860
+{{- end }}

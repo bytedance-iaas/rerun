@@ -1,0 +1,154 @@
+{{- if .Values.apig.enabled }}
+# Requires the APIGInstance CRD in the cluster
+# (loadbalancer.vke.volcengine.com/v1beta1, installed by the Volcengine VKE
+# platform). An install failing with "no matches for kind APIGInstance" is
+# missing it; set apig.enabled=false when not on VKE, or when bringing your own
+# ingress.
+# The APIG gateway terminates HTTPS (with its own *.volceapi.com domain and
+# certificate) and routes by host and path.
+# Authentication deliberately does not happen at the gateway (gateway JWT would
+# block opening the pages in a browser) — the backends do it.
+apiVersion: loadbalancer.vke.volcengine.com/v1beta1
+kind: APIGInstance
+metadata:
+  name: {{ include "dataverse.fullname" . }}-apig-instance
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.apig.existingInstanceId }}
+  # Adopt an existing gateway instead of creating one: the gateway and the CLB
+  # in front of it already exist, so no subnetId is needed.
+  id: {{ .Values.apig.existingInstanceId | quote }}
+  {{- else }}
+  # Creating a gateway: the platform brings up the gateway instance plus the CLB
+  # in front of it inside a subnet — which is why subnetIds is needed only here.
+  # The gateway is replicated for HA, so give it two subnets in different
+  # availability zones and the platform spreads the replicas and the CLB across them.
+  common:
+    network:
+      {{- if not .Values.apig.subnetIds }}
+      {{- fail "apig.subnetIds is required: the subnet(s) a newly created APIG gateway lives in, at least one — for HA prefer two subnets in different availability zones, all inside this cluster's VPC. To adopt an existing gateway, set apig.existingInstanceId instead." }}
+      {{- end }}
+      subnetIds:
+        {{- toYaml .Values.apig.subnetIds | nindent 8 }}
+    # resource: omitted => platform defaults (observed: small_1 CLB / 1c2g / 2 replicas).
+  {{- end }}
+  name: {{ include "dataverse.fullname" . }}-apig
+  ingress:
+    enable: true
+    enableAllNamespaces: false
+    # An ingressClass private to this instance, derived from the release name so
+    # it cannot clash with another APIG instance in the cluster (two instances
+    # declaring the same class fight over each other's Ingresses).
+    ingressClasses: [{{ include "dataverse.ingressClassName" . }}]
+    watchNamespaces: [{{ .Release.Namespace }}]
+---
+# The web viewer's entry point: the host gets an automatically assigned
+# *.volceapi.com domain of its own.
+# The host is only a routing key inside the gateway — it needs no real DNS.
+# ⚠️ Changing the host or the ingressClass does not apply cleanly in place (the
+#   ADDRESS keeps the old IP): delete this Ingress, then helm upgrade.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "dataverse.fullname" . }}-web
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ include "dataverse.ingressClassName" . }}
+  rules:
+    - host: {{ include "dataverse.webHost" . }}
+      http:
+        paths:
+          # The catalog's plain-HTTP endpoints, reachable on the same domain
+          # (HTTP/1.1 through the gateway):
+          #   /api      same-origin calls from the browser (ensure-cors and friends)
+          #   /catalog  presign / sources (needed for direct reads during training)
+          #   /version  unauthenticated health check
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.fullname" . }}-headless
+                port:
+                  number: 51234
+          - path: /catalog
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.fullname" . }}-headless
+                port:
+                  number: 51234
+          - path: /version
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.fullname" . }}-headless
+                port:
+                  number: 51234
+          {{- if .Values.daft.enabled }}
+          # One domain, split by path: /curation is the Daft curation console,
+          # everything else is the web viewer.
+          # The gateway does not strip the prefix — the console registers all of
+          # its routes under /curation itself (--root-path).
+          # The viewer's Diagnose buttons point at the same-origin /curation by default.
+          - path: {{ .Values.daft.rootPath }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.fullname" . }}-curation
+                port:
+                  number: 7860
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.fullname" . }}-web
+                port:
+                  number: 80
+---
+# The catalog's gRPC entry point: the same host (the same domain) as web, split
+# by path — a gRPC method path naturally carries the fully qualified service name
+# as its prefix (/rerun.cloud.v1alpha1.RerunCloudService/…), so it cannot collide
+# with the viewer or the curation console. It is a separate Ingress because the
+# backend-protocol annotation applies to the whole Ingress, and the plain-HTTP
+# paths on the same host (above) must not be forwarded as gRPC.
+# Verified 2026-08-20: unary calls, registration and streaming relay all pass
+# through the gateway; route changes take roughly 20-40s to take effect.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "dataverse.fullname" . }}-catalog-grpc
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+  annotations:
+    # Make the gateway forward to the upstream as gRPC (HTTP/2). APIG decides the
+    # protocol mainly from the Service port: the backend below points at
+    # headless's `grpc` port (name=grpc / appProtocol=grpc, see
+    # services-rerun.yaml), so APIG picks HTTP/2 on its own. This
+    # backend-protocol annotation is kept as a belt-and-suspenders (on its own it
+    # is unreliable in the APIG adapter, degrading to HTTP/1.1 → the gRPC backend
+    # sees a non-h2 request and answers HTTP 400 "grpc-status missing").
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+    # Long calls such as bulk registration outlast the gateway's default 60s — widen it to 10 minutes.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: {{ include "dataverse.ingressClassName" . }}
+  rules:
+    - host: {{ include "dataverse.webHost" . }}
+      http:
+        paths:
+          - path: /rerun.cloud.v1alpha1.RerunCloudService
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.fullname" . }}-headless
+                # Reference by NUMBER, not name: the APIG controller's CreateUpstream API
+                # requires a numeric K8SService.Port (a named port fails with
+                # MissingParameter.UpstreamSpec.K8SService.Port). 51235 is the `grpc`
+                # Service port (appProtocol=grpc → APIG builds an HTTP/2 upstream).
+                port:
+                  number: 51235
+{{- end }}

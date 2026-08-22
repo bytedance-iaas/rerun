@@ -8,7 +8,7 @@ One image (`rerun-viewer-unified`) built from this repo, three modes selected by
 
 Both viewers support "Open from Volcengine TOS…" and "Open from Hugging Face…" (streaming LeRobot v2/v3, MCAP/file repos, single files).
 
-The same image builds and runs both **locally** (throttled defaults survive an 8 GB Docker Desktop VM) and in the **cloud / CI** (lift the throttles, point downloads at mirrors — see below). The cloud deployment is a Helm chart — see [`helm/rerun-cloud/`](helm/rerun-cloud/README.md), plus [`helm/rerun-native-session/`](helm/rerun-native-session/README.md) for on-demand native-viewer sessions.
+The same image builds and runs both **locally** (throttled defaults survive an 8 GB Docker Desktop VM) and in the **cloud / CI** (lift the throttles, point downloads at mirrors — see below). The cloud deployment is the `dataverse` Helm chart, which bundles both components — ReRun (web viewer + catalog server) and the Daft curation console — see [`helm/dataverse/`](helm/dataverse/README.md), plus [`helm/rerun-native-session/`](helm/rerun-native-session/README.md) for on-demand native-viewer sessions.
 
 ## Layout
 
@@ -18,8 +18,9 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 | `docker-compose.yml` | Three services from the same image: `viewer` (web, `:9091`), `native-session` (native, `:9092`), `server` (catalog, `:9094`). |
 | `entrypoint.sh` | `MODE` dispatch: web renders `/tos-config.json` and runs nginx; native starts Xvnc + websockify + the viewer; server runs the catalog. |
 | `nginx.conf` | Static serving + `/tos-config.json` + WebDAV `PUT` on `/rrd-cache/` (phase-2 write-back) + `301 /rerun → /` (the gateway routes `/curation` to the Daft console, everything else here). |
-| `helm/rerun-cloud/` | The whole cloud stack as a Helm chart: rerun (web + catalog StatefulSet with a persistent volume) + the Daft curation console (StatefulSet on a TOS mount, served under `/curation`; the viewer's Diagnose buttons deep-link into it, `?dataset=<name>`) + the APIG gateway with path-routed Ingress (`/` = viewer, `/curation` = Daft) and a dedicated gRPC route for the catalog. `helm install rerun-cloud deploy/helm/rerun-cloud -f <your-values>.yaml`. |
+| `helm/dataverse/` | The whole cloud stack as one Helm chart bundling two components: **ReRun** (web + catalog StatefulSet with a persistent volume) and the **Daft curation console** (StatefulSet on a TOS mount, served under `/curation`; the viewer's Diagnose buttons deep-link into it, `?dataset=<name>`), plus the APIG gateway they share — path-routed Ingress (`/` = viewer, `/curation` = Daft) and a dedicated gRPC route for the catalog. `helm install dataverse deploy/helm/dataverse -f <your-values>.yaml`. |
 | `helm/rerun-native-session/` | On-demand native-viewer session (one pod per user), started/torn down per session. |
+| `publish_charts.sh` | Packages **both** charts (`helm/dataverse/` and `helm/rerun-native-session/`) and pushes them to the Volcengine OCI registry. Registry coordinates and the robot account come from the environment (`HELM_REGISTRY_HOST`, `HELM_REGISTRY_NAMESPACE`, `HELM_REGISTRY_USERNAME`, `HELM_REGISTRY_PASSWORD`); `DRY_RUN=1` packages and lints without logging in, `CHARTS="<name>"` restricts it to one chart. |
 | `novnc-paste-bridge.js` | Appended into noVNC's `ui.js` at build time so Cmd+V / Ctrl+V pastes into the native session in one step. |
 | `.env.example` | Non-secret settings: endpoint, region. Copy to `.env` (gitignored). |
 | `gen-ca-bundle.sh` | Exports macOS keychain certs so cargo can download deps behind a corporate TLS-intercepting proxy. Optional; skip on Linux / no proxy. |
@@ -153,7 +154,7 @@ The `ExposeHeader` entries for `x-amz-meta-rerun-*` are equally load-bearing: wi
 
 `entrypoint.sh` reads AK/SK/token from docker/k8s secrets (`/run/secrets/*`), falling back to `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` env vars. In `web` mode these are baked into `/tos-config.json` for the browser dialogs; in `native` and `server` modes they are exported into the viewer's environment.
 
-Two more optional secrets gate access to the browser-facing modes (see the auth commit / `helm/rerun-cloud/README.md`):
+Two more optional secrets gate access to the browser-facing modes (see the auth commit / `helm/dataverse/README.md`):
 
 - `web_htpasswd` (htpasswd format) — enables nginx Basic auth for the whole web mode, including `/tos-config.json`. Without it the site (and the default credentials) is readable by anyone who can reach it — fine locally, not on a public address. `/healthz` stays open for probes.
 - `session_password` / `SESSION_PASSWORD` env — enables the VNC password prompt on native sessions.

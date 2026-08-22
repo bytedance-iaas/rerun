@@ -1,8 +1,8 @@
 apiVersion: v2
 name: rerun-native-session
 description: >-
-  按需自助的云上 native viewer 会话(一人一个 release,用完 uninstall)。
-  按需自助的云上 native viewer 会话(一人一个 pod,用完即删)。
+  A self-service, on-demand native viewer session in the cloud
+  (one release per person, uninstall when done — one pod per person, deleted when done).
 type: application
 version: 0.1.0
 appVersion: "0.36.0"
