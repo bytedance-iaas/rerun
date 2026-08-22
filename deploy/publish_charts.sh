@@ -123,6 +123,12 @@ for chart in "${charts[@]}"; do
   # Word splitting is what carries the per-chart --set flags here, hence no quotes.
   # shellcheck disable=SC2046
   helm lint "${chart_dir}" $(lint_args_for "${chart}")
+  # `helm lint` is not enough on its own: on Helm 4 an unset `required` / a `fail`
+  # only logs at INFO and lint still exits 0, and `helm package` never renders the
+  # templates at all. So render here too — helm template exits non-zero on those,
+  # which is what actually keeps a chart that cannot build out of the registry.
+  # shellcheck disable=SC2046
+  helm template "${chart}" "${chart_dir}" $(lint_args_for "${chart}") >/dev/null
   mkdir -p "${work}/pkg/${chart}"
   helm package "${chart_dir}" --destination "${work}/pkg/${chart}"
   packages+=("$(echo "${work}/pkg/${chart}"/*.tgz)")
