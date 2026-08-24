@@ -2,7 +2,7 @@
 
 本文把整套 Rerun 云服务部署到一个火山引擎 VKE 集群,使用 Helm chart(`deploy/helm/`)。
 常驻服务是 `dataverse` chart —— 一个 chart 打包 **ReRun**(web viewer + catalog server)与
-**质检台**(Daft)两个组件,以及它们共用的 APIG 网关入口;
+**质检台**两个组件,以及它们共用的 APIG 网关入口;
 按需的 native viewer 会话是另一个 chart `rerun-native-session`(第 5 节)。
 全程约 30 分钟,其中等云资源(CLB、网关)就绪约 10 分钟。
 
@@ -98,7 +98,7 @@ export ARK_API_KEY=="##############"
 #    示例建两个账号 —— alice 密码 pwd123,bob 密码 pwd456(换成你要的;
 #    访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>)。
 #    ark_api_key 是质检台走火山方舟 VLM 后端用的 key(配套 base url 是普通配置,
-#    在 2.3 的 daft.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行:
+#    在 2.3 的 curator.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行:
 kubectl -n $RERUN_NS create secret generic dataverse-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
@@ -118,23 +118,37 @@ kubectl -n $RERUN_NS create secret generic dataverse-secrets \
 创建 `deploy/secrets/values-prod.yaml`(目录不存在先 `mkdir -p deploy/secrets`;该目录已被 gitignore 挡住),按注释替换尖括号里的值:
 
 ```yaml
+# 镜像仓库地址与 tag 分开填:chart 不跟踪镜像版本,tag 每次构建都不同,必须显式给。
 image:
-  rerun: <rerun 镜像>
-  curator: <robot_curator 镜像>
+  repository: <rerun 镜像仓库地址>
+  tag: <rerun 镜像 tag>
+
+curator:
+  image:
+    repository: <robot_curator 镜像仓库地址>
+    tag: <robot_curator 镜像 tag>
 
 apig:
-  # 复用集群里已有的 APIG 网关(推荐):填平台实例 id —— APIG 控制台
+  # 复用集群里已有的 APIG 网关(推荐):create 保持 false,填平台实例 id —— APIG 控制台
   # https://console.volcengine.com/veapig → 实例列表里那一串。
-  # 复用时不需要 subnetIds(网关和它的前置 CLB 都已存在)。
-  existingInstanceId: <apig 实例 id>
+  # 复用时不需要 subnetIds(网关和它的前置 CLB 都已存在),但必须填该网关声明的
+  # ingressClass,否则它不会接管本 release 的 Ingress。
+  create: false
+  existingId: <apig 实例 id>
+  ingressClassName: <该网关声明的 ingressClass>
 
-  # —— 或者:新建独立网关(见 2.4)。改用这种方式时,注释掉上面的 existingInstanceId,
+  # —— 或者:新建独立网关(见 2.4)。改用这种方式时,把 create 改成 true、
+  #    删掉 existingId(留着会写死 CRD 的不可变字段 spec.id,后续所有 upgrade 都会被拒),
   #    放开下面的 subnetIds(第 1 节查到的,建议 2 个不同可用区的子网):
+  # create: true
   # subnetIds:
   #   - <subnet-xxx（可用区 A）>
   #   - <subnet-yyy（可用区 B）>
 
 tos:
+  # 只填 region:公网/内网 TOS endpoint 都由它推导
+  # (https://tos-s3-<region>.volces.com 与 .ivolces.com),不需要手写。
+  region: cn-beijing
   rrdArtifactsUrl: tos://<rrd 缓存路径>
 
 secrets:
@@ -143,22 +157,28 @@ secrets:
 ```
 
 密钥已在 2.2 建进集群,这里只引用 Secret 名字 — **values 文件里没有任何密钥**。
+chart 不接受明文密钥输入,也不会自己渲染 Secret:helm 的 release 记录会原样保存 values,
+`helm get values` 就能读回来,所以这两个 Secret 名字是必填项,缺了会在渲染阶段直接报错。
 后续增删登录账号见第 7 节。
 
 集群里还没有 APIG 网关、或就是要一个独立网关,改用新建方式,见 **2.4**。
 
-缺省区域不是 cn-beijing、或要用其他开关(不部署质检台、内网 CLB、外部 Secret 等),
+区域不是 cn-beijing(改 `tos.region` 一处即可)、或要用其他开关(不部署质检台、presign 走内网等),
 参数全集和默认值见 [`deploy/helm/dataverse/values.yaml`](../../deploy/helm/dataverse/values.yaml) 的注释。
 
 ### 2.4 改为新建独立 APIG 网关(可选)
 
 集群里还没有 APIG 网关,或想给本部署一个**独立**网关(独立前置 CLB、独立公网域名,按量计费),
-就用 2.3 `apig` 段里那几行注释掉的备选:**注释掉 `existingInstanceId`,放开 `subnetIds`**。
+就用 2.3 `apig` 段里那几行注释掉的备选:**`create: true`,删掉 `existingId`,放开 `subnetIds`**。
 
 - `subnetIds` 至少一个;网关多副本高可用,建议给 2 个【不同可用区】的子网(第 1 节查到的),
-  平台把网关副本和前置 CLB 摊到多可用区。
-- `existingInstanceId` 与 `subnetIds` 填一个即可:前者非空就走复用、`subnetIds` 被忽略;两者同时
-  留空会因缺 `subnetIds` 报错。
+  平台把网关副本和前置 CLB 摊到多可用区,且必须是**本集群 VPC** 的子网(抄别的集群的会一直 Pending)。
+- `create: true` 时 `existingId` 必须留空:新网关的 id 会写在 APIGInstance 的 `status.id` 里,
+  Ingress 按 ingressClass 认领,不需要回填。填了就等于写 CRD 的不可变字段 `spec.id`,
+  之后每次 upgrade 都会被准入 webhook 拒绝(`spec.id: Forbidden: forbidden to update`)。
+  chart 会在渲染时直接拦下这个组合。
+- ⚠️ 这样建出来的网关会被 `helm uninstall` 一起删掉,自动分配的 `*.volceapi.com` 域名随之失效;
+  想保住它,**在卸载之前**先 `apig.retainOnDelete=true` 跑一次 upgrade。
 
 ## 3. 安装
 
@@ -253,19 +273,25 @@ kubectl -n $RERUN_NS exec rerun-cloud-0 -c catalog -- sh -c \
 前提:第 3 节的 dataverse 已装好(会话复用它的凭证和网关)。
 
 ```sh
+# 会话密码只能来自 Secret,chart 不接受明文输入(理由同 2.2:values 会原样进 release 记录)。
+# 先建这个会话专属的 Secret,key 必须是 session_password:
+kubectl -n $RERUN_NS create secret generic <unique_name>-vnc \
+    --from-literal=session_password=<会话密码>
+
 # 开一个会话,release 名 = 用户名(小写字母/数字/中划线)。
 # 直接复用 2.3 的 values 文件(镜像、缓存桶、凭证 Secret 全部沿用),
-# 只需另给一个会话密码:
+# 只需另给会话密码 Secret 的名字:
 helm install <unique_name> deploy/helm/rerun-native-session -n $RERUN_NS \
     -f deploy/secrets/values-prod.yaml \
-    --set sessionPassword=<会话密码>
+    --set existingPasswordSecret=<unique_name>-vnc
 
 # 域名同 4.2 的查法(host = rerun-native-qian.apig.internal),浏览器打开:
 #   https://<域名>/vnc.html?autoconnect=true&resize=remote
 # 输入会话密码,即进入云上原生 viewer 的远程桌面。
 
-# 用完删掉(占着节点资源):
+# 用完删掉(占着节点资源),密码 Secret 一并清掉:
 helm uninstall <unique_name> -n $RERUN_NS
+kubectl -n $RERUN_NS delete secret <unique_name>-vnc
 ```
 
 不想走公网:加 `--set ingress.enabled=false`,然后
@@ -314,4 +340,4 @@ helm uninstall dataverse -n $RERUN_NS
 注意:
 
 - catalog 的数据盘 PVC(`server-data-rerun-cloud-0`)卸载时**不会删除**,注册记录都在;确认不要了再手动删;
-- 不要改 `apig.webHost` 和 ingressClass:改动需删 Ingress 重建,且换 host 等于换公网域名(CORS、用户书签全要跟着换)。
+- 不要改 `apig.host` 和 ingressClass:改动需删 Ingress 重建,且换 host 等于换公网域名(CORS、用户书签全要跟着换)。
