@@ -1,296 +1,377 @@
-# Default configuration for the dataverse chart (one chart bundling two
-# components: ReRun and the curation console).
-# Required (helm errors out and names what is missing):
-#   image.rerun, apig.subnetIds (only when creating a gateway, i.e.
-#   apig.existingInstanceId is empty), image.curator when daft.enabled,
-#   and the secrets — preferably create the Secrets with kubectl and reference
-#   them through the three existing*Secret fields (zero secrets in values, see
-#   the deployment guide); for development you can also fill in the secrets.*
-#   fields and let the chart render them.
-# Keep real values out of this file: put them in a separate, gitignored values
-# file (e.g. values-prod.yaml) and run
-#   helm install dataverse deploy/helm/dataverse -n rerun --create-namespace -f values-prod.yaml
+# Dataverse: the always-on cloud deployment. One chart, two components — ReRun (the web viewer and
+# the catalog server, one pod with two containers) and the curation console — plus the APIG
+# gateway and the path-routed Ingresses in front of both.
+#
+# Nothing here is tuned for one cluster: no image, no gateway and no credentials are baked in.
+# A real install supplies four things — the two image references, the two Secret names, and how to
+# get a gateway (adopt one with apig.existingId, or provision one with apig.create=true).
+# Everything else has a default that works.
+#
+# ⚠️ Keep credentials out of this file. Create the Secrets with kubectl and reference them by name
+#    (secrets.existingSecret / secrets.existingTokenSecret), and put the rest of your deployment's
+#    values in a separate, gitignored file installed with `-f values-prod.yaml`. Helm stores values
+#    verbatim in the release history, where anyone who can run `helm get values` can read them.
 
+# Object names come from the RELEASE name — call the release `dataverse` and everything matches the
+# names used throughout the deployment guide. The ReRun workload is the one exception: its
+# StatefulSet, pod (rerun-cloud-0), Services and PVC (server-data-rerun-cloud-0) are always named
+# `rerun-cloud`, because that component keeps its own identity inside the bundle.
+
+# The ReRun image. One image serves both containers — MODE=web is the nginx + wasm viewer,
+# MODE=server is the catalog server — so there is a single reference for both.
 image:
-  # The rerun image (one image for both the web viewer and the catalog server,
-  # e.g. iaas-us-cn-beijing.cr.volces.com/physicalai/rerun:<tag>).
-  rerun: ""
-  # The robot_curator image. Two hard requirements: at least Daft repo commit
-  # 412b91ce8 (sub-path support — with an older image every static asset and WS
-  # under /curation 404s), and htpasswd authentication support
-  # (CURATION_UI_HTPASSWD_FILE, builds after 2026-08-17), since an older image
-  # never receives the account configuration and would run unauthenticated.
-  curator: ""
+  # Point this at whichever registry holds your build: your own registry, or a mirror of it.
+  repository: ""
+  # REQUIRED, and deliberately empty: the chart does not track the image. Builds are tagged per
+  # commit and there is no `latest`, so hardcoding one here would mean republishing the chart for
+  # every build — the chart version and the image version are not the same thing.
+  # Pass it at deploy time: `--set image.tag=<tag>`.
+  # ⚠️ Verify the tag exists before deploying: a tag that was never built gives ImagePullBackOff.
+  tag: ""
+  pullPolicy: IfNotPresent
 
+# Where the data lives. Everything the viewer, the catalog and the console read or write is a
+# `tos://` URL, and the bucket is named by the user at runtime — never configured here.
 tos:
+  # The ONLY field that has to be right. The two endpoints below and the presign endpoint are
+  # derived from it, following Volcengine's own naming:
+  #   public     https://tos-s3-<region>.volces.com    (browsers, and clients outside the cloud)
+  #   internal   https://tos-s3-<region>.ivolces.com   (in-cloud components: faster, no public
+  #                                                     traffic billed)
   region: cn-beijing
-  # Public endpoint: handed to browsers and to clients outside the cloud.
-  endpointPublic: https://tos-s3-cn-beijing.volces.com
-  # Internal endpoint: used by in-cloud components to reach TOS — faster, and no
-  # public traffic billed.
-  # Point this at the public endpoint too when the cluster has no internal
-  # access to TOS.
-  endpointInternal: https://tos-s3-cn-beijing.ivolces.com
-  # Mount server address for the fsx CSI (TOS mode).
-  # ⚠️ Since 2026-08-19 the curation console no longer mounts TOS (it uses the
-  # SDK directly), so nothing consumes this value today; it is kept so the next
-  # component that does need a mount need not look it up again.
-  fsxServer: tos-cn-beijing.ivolces.com
-  # Cache bucket for converted rrd artifacts; "off" disables the cache.
+
+  # Both empty on purpose — leave them that way unless the derived address is wrong for your
+  # deployment. The one case that needs an override is a cluster with no internal route to TOS:
+  # set endpointInternal to the public address so in-cluster components stop trying the ivolces
+  # one. A custom or S3-compatible endpoint goes here too.
+  endpointPublic: ""
+  endpointInternal: ""
+
+  # Cache bucket for converted rrd artifacts, as a `tos://bucket/prefix/` URL.
+  # "off" disables the cache: everything still works, datasets just get converted on every open.
   rrdArtifactsUrl: "off"
 
+# All credentials come from Secrets you create yourself. The chart never renders one: Helm stores
+# values verbatim in the release history, so a credential passed through values stays readable to
+# anyone who can run `helm get values`. Both names below are REQUIRED — rendering fails naming the
+# missing one rather than deploying something that cannot start.
+#
+# ⚠️ Both Secrets must live in the release's namespace. Kubernetes does not let a pod reference a
+#    Secret from another one, so sharing credentials across namespaces means creating the same
+#    Secret name in each — the name is what is common, not the object.
 secrets:
-  # Non-empty = the secrets come from an existing Secret of that name (which
-  # must carry the keys below). The chart stops rendering viewer-secrets, the
-  # rest of this section is ignored, and the authentication switches are
-  # governed solely by web.basicAuth.enabled / catalog.tokenAuth.enabled.
-  # The curation console's direct-TOS credentials (the TOS_ACCESS_KEY /
-  # TOS_SECRET_KEY environment variables) also come from this Secret, out of the
-  # tos_access_key / tos_secret_key keys.
+  # The application credentials every pod shares:
+  #
+  #   kubectl -n <namespace> create secret generic dataverse-secrets \
+  #       --from-literal=tos_access_key=<ak> \
+  #       --from-literal=tos_secret_key=<sk> \
+  #       --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 '<password>')"
+  #
+  # Keys, and what reads them:
+  #   tos_access_key / tos_secret_key   REQUIRED — the viewer, the catalog and the console
+  #   web_htpasswd                      REQUIRED when web.basicAuth.enabled — one
+  #                                     `username:password-hash` per line, in Apache htpasswd
+  #                                     format (`openssl passwd -apr1` or `htpasswd -B`). The
+  #                                     viewer and the console share this one table: same domain,
+  #                                     so one login opens both
+  #   hf_token                          optional — only for private HuggingFace datasets
+  #   ark_api_key                       optional — the console's Volcengine Ark VLM backend. The
+  #                                     matching base url is not a secret, see curator.arkBaseUrl
+  #
+  # The optional keys are read with `optional: true`, so leaving them out of the Secret simply
+  # leaves the matching feature off.
+  # ⚠️ The chart cannot see this Secret's contents, so editing it does NOT roll the pods. Run
+  #    `kubectl rollout restart` afterwards, or the old values stay live.
   existingSecret: ""
-  tosAccessKey: ""
-  tosSecretKey: ""
-  # HuggingFace token, needed only for private HF datasets; left empty it is not written.
-  hfToken: ""
-  # Volcengine Ark API key, used when the console's VLM-based checks run against
-  # Ark MaaS (injected as the console's ARK_API_KEY). Left empty it is not
-  # written and the Ark backend stays off. The base url is not a secret — see
-  # daft.arkBaseUrl. With existingSecret, add an `ark_api_key` key to that Secret instead.
-  arkApiKey: ""
-  # Basic auth password table (Apache htpasswd format): one
-  # `username:password-hash` per line, hashes from `openssl passwd -apr1` or
-  # `htpasswd -B`. For several users, use a YAML block with one per line.
-  # The web viewer and the Daft curation console share this one table: same
-  # domain, so one login with any account gets you into both.
-  # Ignored when web.basicAuth.enabled=false (neither side is protected then).
-  webHtpasswd: ""
-  # Name of the existing Secret holding the catalog token-signing secret (must
-  # carry the key server_token_secret).
-  # Preferably create it straight through a kubectl pipe, so it never touches
-  # disk or values — see the deployment guide.
-  # It is only ever mounted into the catalog container as a 0400 file; neither
-  # the web nor the native session can see it.
-  existingTokenSecret: ""
-  # Development fallback: the signing secret filled into values directly
-  # (generate it once with `rerun server generate-secret`; whoever holds it can
-  # sign a token with any permission). Use existingTokenSecret above in production.
-  # Both are ignored when catalog.tokenAuth.enabled=false.
-  serverTokenSecret: ""
 
+  # The signing secret for catalog tokens, in a Secret of its own so it can be mounted into the
+  # catalog container alone — neither the web viewer nor a native session can see it. Create it
+  # through a pipe, so it never touches disk:
+  #
+  #   rerun server generate-secret | kubectl -n <namespace> create secret generic \
+  #       rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
+  #
+  # The key must be `server_token_secret`. Whoever holds this value can sign a token with any
+  # permission. Required whenever catalog.tokenAuth.enabled.
+  existingTokenSecret: ""
+
+# The web viewer container: nginx serving the wasm viewer plus the browser's /tos-config.json.
 web:
-  # Off = unauthenticated pages, for private-network or local debugging only;
-  # anything public must have it on.
+  # HTTP Basic auth, from the web_htpasswd account table in the Secret above. Off means the pages
+  # are unauthenticated — private-network or local debugging only, and the chart refuses to render
+  # that combination together with a public APIG entry point.
   basicAuth:
     enabled: true
-  # How many ready-made rrd artifacts to download in parallel when opening a
-  # dataset; 0 = automatic (3 in the browser).
-  rrdArtifactsPrefetch: "0"
-  # Override for where the Diagnose button points. Empty = same-origin
-  # /curation (this chart's standard topology — rarely worth touching).
-  daftUrl: ""
-  resources:
-    requests:
-      cpu: 500m
-      memory: 512Mi
-    limits:
-      cpu: "2"
-      memory: 2Gi
 
+  # How many ready-made rrd artifacts the browser downloads in parallel when opening a dataset.
+  # 0 = automatic (3 in the browser).
+  rrdArtifactsPrefetch: "0"
+
+  # Where the viewer's Diagnose buttons point.
+  # Empty = the same-origin curator.rootPath, which is this chart's own topology (one domain, the
+  # console under /curation) and almost always what you want. Set it only when the console runs
+  # somewhere else entirely, e.g. https://curator.example.com.
+  curatorUrl: ""
+
+  # Serving static assets, so it stays small. The heavy lifting happens in the browser.
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits:   { cpu: "2",  memory: 2Gi }
+
+# The catalog server container: dataset registration, presigned reads, and the gRPC API.
 catalog:
-  # Off = wide open, for private-network debugging only.
+  # Signed tokens, verified against the secret above. Off means the catalog is wide open to anyone
+  # who can reach it — private-network debugging only, and refused together with a public entry
+  # point.
   tokenAuth:
     enabled: true
-  # Self-service bucket CORS: when the web viewer opens a bucket, it asks the
-  # server through the same-origin /api/ensure-cors to check and fill in that
-  # bucket's CORS rules (appending ours, never touching anyone else's). Requires
-  # an AK/SK with bucket administration rights; turning it off falls back to the
-  # manual procedure in the deployment guide.
+
+  # Self-service bucket CORS. A browser cannot read a TOS bucket that does not name the viewer's
+  # origin in its CORS rules, so when the viewer opens a bucket it asks the server, through the
+  # same-origin /api/ensure-cors, to check that bucket and fill in the missing rules — appending
+  # ours, never touching anyone else's.
+  # Needs an AK/SK with bucket administration rights; turning it off means doing it by hand for
+  # every bucket (the procedure is in the deployment guide).
   autoCors:
     enabled: true
-    # Browser origins to allow; empty = automatic (the region's gateway wildcard
-    # domain plus the local debugging origin).
+    # Browser origins to allow. Empty = automatic: the region's gateway wildcard domain plus the
+    # local debugging origin, which covers this chart's topology.
     origins: []
-  # Which endpoint the presigned URLs for direct dataloader reads are signed for
-  # (affects only the URLs handed to clients).
-  # Public by default, so training clients outside the cloud can reach it. Switch
-  # to the internal endpoint when the clients run inside the same VPC.
-  presignEndpoint: https://tos-s3-cn-beijing.volces.com
-  # Mirror for HF operations; empty = straight to the official site (for
-  # clusters outside China).
+
+  # Which network the presigned URLs are signed for. These URLs are handed to clients that read
+  # dataset files directly, so this is about where those clients sit — not about the server:
+  #   public     training clients outside the cloud (the default, and the safe one)
+  #   internal   every client runs inside this VPC; faster, and no public traffic billed
+  # ⚠️ A URL signed for one network does not work on the other: the signature covers the host.
+  presignNetwork: public
+
+  # Mirror for HuggingFace operations. Empty = go straight to the official site, which is the right
+  # setting for clusters outside China.
   hfEndpoint: https://hf-mirror.com
-  # The catalog database plus the remote-file cache disk (volumeClaimTemplates —
-  # uninstall does not delete it).
+
+  # The catalog database plus the remote-file cache disk, mounted at /server-data.
+  # ⚠️ This is a StatefulSet volumeClaimTemplate: IMMUTABLE after creation. Changing size or class
+  #    on an existing release makes `helm upgrade` fail, and `helm uninstall` deliberately leaves
+  #    the PVC (server-data-rerun-cloud-0) behind — delete it by hand to reclaim the disk.
   storage:
     className: ebs-essd
     size: 100Gi
-  resources:
-    requests:
-      cpu: "1"
-      memory: 2Gi
-    limits:
-      cpu: "4"
-      memory: 8Gi
 
-daft:
-  # false = do not deploy the curation console, which also skips its site
-  # configuration and the Ingress's /curation path.
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits:   { cpu: "4", memory: 8Gi }
+
+# The curation console: a separate StatefulSet, deliberately not a second container in the ReRun
+# pod. Curation is CPU-heavy batch work, so keeping it apart means neither component drags the
+# other down, and upgrading the viewer does not kill a curation run in flight.
+curator:
+  # false drops the console, its site-configuration ConfigMap and its Ingress path together.
   enabled: true
-  # ★ 2026-08-19, cloud productization: the console no longer statically mounts
-  #   a TOS bucket, and the target bucket is not configured at deploy time
-  #   either — both the dataset source and the delivery destination are tos://
-  #   paths plus a region that the user supplies in the UI at runtime, using the
-  #   AK/SK injected by the deployment (secrets.tosAccessKey/tosSecretKey).
-  #   The old bucket / srcBucket / tosBuckets / dataRoot / deliveryPath / fsx.*
-  #   are all retired and no template consumes them; leaving them in an old
-  #   values file is harmless but has no effect.
-  rootPath: /curation
-  # The Terminal tab (an embedded web terminal on a **real shell**, behind the
-  # same Basic auth as the UI). Useful for triage; set it to false if exposing a
-  # shell is a concern — the tab is then not rendered and the /ws/term route is
-  # not registered.
-  terminal: true
-  # Preconfigured VLM backends, rendered verbatim into the console's site.yaml
-  # (keys and fields follow its format).
-  # Empty = only the factory placeholder preset, so VLM-based checks are
-  # unavailable (unless vllm.enabled=true below injects one automatically).
-  # The console only offers the backends listed in site.yaml's vlm_backends —
-  # there is no k8s discovery, so a vLLM has to appear here to be selectable at
-  # all (the one this chart deploys is injected automatically by vllm.enabled).
-  # What belongs here are *external*, already-running vLLM/MaaS backends (the
-  # automatically injected `self-hosted` key is merged with them, and an entry
-  # of the same name here wins). Every backend needs at least an endpoint;
-  # entries whose endpoint is empty or contains "YOUR-" are filtered out by the
-  # UI. For example:
-  # vlmBackends:
-  #   h20-8b:
-  #     endpoint: http://vllm-cosmos-8b.curation.svc.cluster.local:8000/v1
-  #     model: nvidia/Cosmos-Reason2-8B
-  #     api_key_env:
-  #     hardware: NVIDIA H20
-  #     service_type: Self-hosted vLLM
-  vlmBackends: {}
-  # Base url of the Volcengine Ark VLM service, injected as the console's
-  # ARK_BASE_URL environment variable.
-  # This is ordinary configuration, not a secret; the matching API key goes in
-  # secrets.arkApiKey.
-  # Left empty, ARK_BASE_URL is not injected (fine when the console does not use
-  # the Ark backend).
-  arkBaseUrl: https://ark.cn-beijing.volces.com/api/v3
-  resources:
-    requests:
-      cpu: "2"
-      memory: 4Gi
-    limits:
-      cpu: "8"
-      memory: 16Gi
-      # Safety budget for the dataset cache and batch staging (emptyDir counts
-      # against the container's ephemeral-storage).
-      # Setting it is what enables the size precheck: before downloading a large
-      # dataset, the console estimates how much can still be written safely, so
-      # it cannot write the pod into a kubelet eviction. Tune it to the node's
-      # disk and the dataset sizes; lower it on nodes with small disks.
-      ephemeral-storage: 50Gi
 
+  image:
+    # The robot_curator image. A separate project from ReRun, on its own release cadence, so its
+    # tag never follows image.tag — both fields are required when the console is enabled.
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  # The URL path the console is served under, on the same domain as the viewer. One value, two
+  # uses: it is the console's own --root-path (it registers every route under it, and the gateway
+  # does not strip the prefix), and it is the Ingress path that routes to it.
+  # ⚠️ /curation is also the viewer's built-in fallback for the Diagnose buttons. Changing this
+  #    means setting web.curatorUrl to match, or those buttons land on a 404.
+  rootPath: /curation
+
+  # The Terminal tab: an embedded web terminal on a real shell, behind the same Basic auth as the
+  # rest of the console. Useful for triage. false does not render the tab and does not register the
+  # /ws/term route — set it if handing out a shell is a concern.
+  terminal: true
+
+  # VLM backends the console offers for its model-based checks, rendered verbatim into the
+  # console's site.yaml (keys and fields follow its format). There is no in-cluster discovery: a
+  # backend that is not listed cannot be selected in the UI at all.
+  # What belongs here are EXTERNAL, already-running vLLM or MaaS backends. The vLLM this chart can
+  # deploy (vllm.enabled=true) is merged in automatically under the `self-hosted` key; an entry of
+  # that name here wins over it.
+  # Every backend needs at least an endpoint; the UI filters out entries whose endpoint is empty or
+  # still contains "YOUR-". For example:
+  #   vlmBackends:
+  #     h20-8b:
+  #       endpoint: http://vllm-cosmos-8b.<namespace>.svc.cluster.local:8000/v1
+  #       model: nvidia/Cosmos-Reason2-8B
+  #       api_key_env:
+  #       hardware: NVIDIA H20
+  #       service_type: Self-hosted vLLM
+  vlmBackends: {}
+
+  # Base url of the Volcengine Ark VLM service, injected as the console's ARK_BASE_URL. Ordinary
+  # configuration, not a secret — the matching key is `ark_api_key` in secrets.existingSecret.
+  # Empty = not injected, which is correct when the console does not use the Ark backend.
+  arkBaseUrl: https://ark.cn-beijing.volces.com/api/v3
+
+  # The curation pipeline is CPU-bound: optical flow, video decoding and the checks themselves all
+  # run on CPU.
+  # ⚠️ ephemeral-storage is what enables the size precheck. The dataset cache and batch staging
+  #    live in an emptyDir, which counts against this limit, and the console reads the limit through
+  #    the downward API to work out how much it can still write — without it, a large dataset can
+  #    write the pod into a kubelet eviction. Tune it to the node's disk.
+  resources:
+    requests: { cpu: "2", memory: 4Gi }
+    limits:   { cpu: "8", memory: 16Gi, ephemeral-storage: 50Gi }
+
+# An optional self-hosted vLLM for the console's model-based checks, as a separate Deployment in
+# the same namespace. OFF by default: it needs a GPU, and the console works without it.
+# Turning it on also registers the endpoint in the console's backend list automatically (under the
+# `self-hosted` key), so it is selectable in the UI without anyone copying an in-cluster DNS name.
 vllm:
-  # false = do not deploy a self-hosted LLM (the default). Turning it on needs a
-  # GPU: the console's VLM-based checks (task_success) reach it over the
-  # OpenAI-compatible API. With enabled=true the chart registers it into the
-  # console's vlm_backends automatically (under the `self-hosted` key, see
-  # configmap-curation.yaml), so it is selectable in the UI without copying an
-  # in-cluster DNS name by hand. It lives in the same namespace as rerun and
-  # curation, as a separate Deployment.
   enabled: false
-  # The vLLM server image (OpenAI-compatible). Pulls the official image through
-  # the daocloud proxy.
-  image: docker.m.daocloud.io/vllm/vllm-openai:latest
-  # The model: either a path inside the container (weights fetched into an
-  # emptyDir by weightFetch below, landing at /models/<modelName>), or an HF repo
-  # id for vllm to pull itself (leave weightFetch.image empty for that, and pair
-  # it with hfToken/hfEndpoint).
+
+  image:
+    # The official OpenAI-compatible server image, pulled through the daocloud proxy.
+    repository: docker.m.daocloud.io/vllm/vllm-openai
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # The model: either a path inside the container (weights fetched into an emptyDir by weightFetch
+  # below, landing at /models/<modelName>), or an HF repo id for vLLM to pull itself — for that,
+  # leave weightFetch.image.repository empty and pair it with the Secret's hf_token key plus
+  # catalog.hfEndpoint.
   model: /models/Cosmos-Reason2-32B
-  # The model name the OpenAI-compatible API advertises. The console sends
-  # requests under this name, so they have to match — the `model` field of the
-  # automatically registered vlm_backends entry is taken from it. Empty = use
-  # `model` itself (a local path makes for an ugly name, so prefer an explicit
-  # canonical one such as nvidia/Cosmos-Reason2-32B).
+
+  # The model name the OpenAI-compatible API advertises, and the name the console sends requests
+  # under — the two have to match, which is why the registered backend's `model` field is taken
+  # from here. Empty = use `model` itself, which makes for an ugly name when that is a local path.
   servedModelName: nvidia/Cosmos-Reason2-32B
-  # Extra arguments for vllm (--model/--served-model-name/--port are assembled
-  # by the chart — do not repeat them here).
-  # A 32B single-GPU example: fp16 weights are ~64GB and an H20 has 96GB, so
-  # memory utilization goes to 0.92 and the context down to 32768 (~20GB left for
-  # the KV cache); if that OOMs or the context is too small, move to two GPUs and
-  # add --tensor-parallel-size 2.
+
+  # Extra vLLM arguments. --model, --served-model-name and --port are assembled by the chart; do
+  # not repeat them.
+  # These are sized for one 32B model on a single 96GB GPU: fp16 weights are ~64GB, so memory
+  # utilization goes to 0.92 and the context down to 32768, leaving ~20GB for the KV cache. If that
+  # OOMs, or the context is too small, move to two GPUs (gpuCount: 2) and add
+  # --tensor-parallel-size 2.
   extraArgs:
     - --gpu-memory-utilization
     - "0.92"
     - --max-model-len
     - "32768"
     - --trust-remote-code
+
   port: 8000
-  # GPU count (= resources.limits."nvidia.com/gpu"; no need to repeat it in resources).
+
+  # GPU count. This is resources.limits."nvidia.com/gpu" — do not also set it under resources.
   gpuCount: 1
-  # Pin to a node: copy the target GPU node's kubernetes.io/hostname (in our
-  # reference setup that is the IP of a node with a free GPU).
-  # Empty = unpinned, and the scheduler picks any node that satisfies the GPU request.
+
+  # Pin to one GPU node by its kubernetes.io/hostname. Empty = unpinned, and the scheduler picks
+  # any node that satisfies the GPU request, which is usually what you want.
   nodeHostname: ""
-  # Extra nodeSelector / tolerations (for picking a GPU model, or tolerating GPU taints).
+  # Extra scheduling constraints, for picking a GPU model or tolerating GPU taints.
   nodeSelector: {}
   tolerations: []
-  # /dev/shm size (needed for tensor parallelism and large batches; worth being
-  # generous even on a single GPU).
+
+  # /dev/shm, needed for tensor parallelism and large batches. Memory-backed, and worth being
+  # generous with even on a single GPU.
   dshmSize: 16Gi
-  # Weight-prefetch initContainer: downloads the model onto the GPU node's local
-  # disk (emptyDir) — not into the image, not onto TOS.
-  # By default it goes through the internal oniond and the Volcengine mirrors
-  # (matching how colleagues already deploy this).
-  # Leaving image empty = no init container (vllm then pulls from HF itself, or
-  # the weights are already in the image).
+
+  # Optional weight prefetch: an initContainer that downloads the model onto the GPU node's local
+  # disk (an emptyDir) before vLLM starts — not into the image, not onto TOS. It is idempotent, so
+  # a pod rebuild skips the download.
+  # ⚠️ Empty repository = no init container, and vLLM then pulls the model from HuggingFace itself.
+  #    That is the portable default; the download path below is Volcengine-internal (oniond plus
+  #    the ivolces mirrors) and only works inside that network.
   weightFetch:
-    # An image that can install oniond (our reference uses the robot_curator
-    # image). Empty = no init container.
-    image: iaas-us-cn-beijing.cr.volces.com/physicalai/robot_curator:83d61eefc84dc7e8ebf674a770a6cf1b1793b2a0
+    # Any image that can install oniond and run aria2 — the curator image already can, so pointing
+    # this at curator.image.repository/tag is the usual choice.
+    image:
+      repository: ""
+      tag: ""
     # The bucket oniond downloads from.
     bucket: ai-infra
-    # The model name oniond downloads (oniond download model <modelName> --dir
-    # /models); the weights land in /models/<modelName>, which must match the
-    # local `model` path above.
+    # The model oniond downloads (`oniond download model <modelName> --dir /models`). The weights
+    # land in /models/<modelName>, which is what `model` above must point at.
     modelName: Cosmos-Reason2-32B
-  # Extra resources (the GPU is counted separately via gpuCount; set cpu/memory
-  # and friends here). The weights go into an emptyDir and a large model eats
-  # ephemeral-storage, so set that in limits when needed to avoid a kubelet eviction.
-  resources:
-    requests:
-      cpu: "2"
-      memory: 8Gi
 
+  # CPU and memory only — the GPU is counted separately through gpuCount. The weights go into an
+  # emptyDir, so a large model eats ephemeral-storage: set a limit for it here when that matters,
+  # or the node's kubelet may evict the pod.
+  resources:
+    requests: { cpu: "2", memory: 8Gi }
+
+# The public HTTPS entry point, through Volcengine APIG. The gateway terminates TLS on an
+# auto-assigned *.volceapi.com domain and routes by host and path: `/` to the viewer,
+# curator.rootPath to the console, the catalog's HTTP and gRPC paths to the catalog server.
+#
+# Authentication deliberately does not happen at the gateway — a gateway-level JWT would make the
+# pages unopenable in a browser. The backends authenticate instead, which is why the chart refuses
+# to publish anything with web.basicAuth or catalog.tokenAuth turned off.
+#
+# ⚠️ Requires the APIGInstance CRD (loadbalancer.vke.volcengine.com/v1beta1), which the Volcengine
+#    VKE platform installs. An install failing with "no matches for kind APIGInstance" does not
+#    have it: set apig.enabled=false and bring your own ingress.
 apig:
-  # false = create neither the gateway nor the Ingress (for bringing your own ingress).
   enabled: true
-  # Non-empty = adopt an existing APIG instance (the platform instance id);
-  # subnetId is then ignored and need not be set.
-  # Empty = create a gateway plus the CLB in front of it, and subnetId is required.
-  existingInstanceId: ""
-  # Subnet IDs for a newly created gateway (required only when creating one, at
-  # least one; ignored when adopting an existing instance).
-  # An APIG gateway is replicated for HA, so prefer two subnets in *different
-  # availability zones* and the platform spreads the gateway instances and their
-  # CLB across them. All of them must be subnets of *this cluster's* VPC —
-  # copying one from another cluster fails with "cannot be found from VPC" and
-  # stays Pending forever. To find them: copy the
-  # volcengine-loadbalancer-subnet-id annotation off any healthy LoadBalancer
-  # Service in this cluster.
+
+  # Two ways to get a gateway, matching the APIGInstance CRD's own two modes:
+  #   create: false -> ADOPT an existing gateway (the CRD sets spec.id). Put its instance id, from
+  #                    the APIG console, in existingId, and ingressClassName MUST match the class
+  #                    that gateway declares or it will never claim the Ingresses.
+  #   create: true  -> PROVISION a new one (the CRD sets spec.name + spec.common). subnetIds is
+  #                    then REQUIRED and must be in this cluster's VPC. Takes a few minutes, and
+  #                    bills.
+  #
+  # ⚠️ With create=true, leave existingId EMPTY and keep it empty. The provisioned gateway reports
+  #    its id in the APIGInstance's status.id, and the Ingresses bind by ingress class, so nothing
+  #    has to be fed back. Writing existingId sets spec.id, which the CRD treats as immutable: the
+  #    admission webhook then rejects every later upgrade with
+  #      spec.id: Forbidden: forbidden to update, old: , new: <id>
+  #    and the release stays failed until the value is removed again.
+  # ⚠️ A gateway this chart provisioned is DELETED by `helm uninstall`, taking its auto-assigned
+  #    *.volceapi.com domain with it — a new one comes back under a different name. Adopt an
+  #    existing gateway for anything whose URL people have bookmarked.
+  create: false
+
+  # create=true only: keep the provisioned gateway when the release is uninstalled, instead of
+  # deleting it along with its *.volceapi.com domain. Turn it on BEFORE you need it — Helm decides
+  # what to retain from the manifest recorded in the release, so annotating the live object after
+  # the fact has no effect and the gateway still goes.
+  retainOnDelete: false
+
+  existingId: ""                  # create=false: REQUIRED, the gateway's instance id
+  instanceName: ""                # create=true: gateway name (default: <release>-apig)
+  # create=true: REQUIRED, at least one. The gateway is replicated for HA, so prefer two subnets in
+  # DIFFERENT availability zones and the platform spreads the replicas and their CLB across them.
+  # All of them must belong to THIS cluster's VPC — a subnet copied from another cluster fails with
+  # "cannot be found from VPC" and stays Pending forever. To find them, copy the
+  # volcengine-loadbalancer-subnet-id annotation off any healthy LoadBalancer Service in this
+  # cluster.
   #   subnetIds:
   #     - subnet-aaaa   # availability zone A
   #     - subnet-bbbb   # availability zone B
   subnetIds: []
-  # An ingressClass private to this instance. Empty = derived from the release
-  # name (<fullname>-apig).
-  # When the cluster already has another APIG instance, never declare the same
-  # class as it — the two instances would fight over each other's Ingresses.
+
+  # Gateway sizing. ALL OPTIONAL, and empty means "let the platform choose" — which is the right
+  # default. Fill in only what you deliberately want to control. Recommended if you do:
+  # instanceSpecCode 1c2g (IPv4), publicNetworkBillingType traffic (pay for what you use), and a
+  # 200 Mbps cap — the gateway proxies UI and API traffic, never dataset bytes (clients read those
+  # from TOS directly, through presigned URLs).
+  replicas: ""                    # gateway replicas — more than one is HA, and costs it
+  instanceSpecCode: ""            # e.g. 1c2g
+  clbSpecCode: ""                 # e.g. small_1
+  publicNetworkBillingType: ""    # e.g. traffic
+  publicNetworkBandwidth: ""      # Mbps, e.g. 200
+
+  # One gateway per ingress class: pointing two releases at the same class routes them to one
+  # gateway. Default is <release>-apig, which is unique as long as release names are.
+  # ⚠️ create=false: this must be the class the ADOPTED gateway declares, not the default.
+  # The rerun-native-session chart hangs its own Ingress off this same class, so whatever this
+  # resolves to is what that chart's ingress.className has to be set to.
   ingressClassName: ""
-  # The Ingress host. It is only a routing key inside the gateway and needs no
-  # real DNS; the platform assigns a public *.volceapi.com domain based on it.
-  # Empty = derived from the release name (<fullname>-web.apig.internal).
-  # Changing the host means deleting and recreating the Ingress (an in-place
-  # apply leaves the old ADDRESS behind), so leave it alone once deployed.
-  webHost: ""
+
+  # Internal placeholder host, never public DNS — it is only the key APIG routes on, and each
+  # distinct host is what earns its own managed *.volceapi.com domain. Every route in this chart
+  # shares it, which is what puts the viewer, the console and the catalog on ONE domain.
+  # Must not collide with a host already registered on the same gateway.
+  # ⚠️ Never put the auto-assigned *.volceapi.com name here.
+  # ⚠️ Changing it after deployment does not apply cleanly in place — the Ingress keeps its old
+  #    ADDRESS — and it means a new public domain, so bookmarks and bucket CORS rules follow.
+  host: ""                        # default: <release>-web.apig.internal
+  annotations: {}                 # binding annotations are added automatically from existingId

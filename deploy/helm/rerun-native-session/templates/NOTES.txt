@@ -1,18 +1,29 @@
-The native viewer session {{ include "rerun-native-session.name" . }} is up.
+Native viewer session {{ include "rerun-native-session.name" . }} is up in namespace {{ .Release.Namespace }}.
 
+1. Wait for the pod:
+
+     kubectl -n {{ .Release.Namespace }} get pod {{ include "rerun-native-session.name" . }}
 {{- if .Values.ingress.enabled }}
 
-Access (public, through the shared APIG gateway):
-  Find the domain in the APIG console (host = {{ include "rerun-native-session.host" . }}):
-    https://console.volcengine.com/veapig → service list
-  Open https://<domain>/vnc.html?autoconnect=true&resize=remote in a browser
-  and enter the session password when connecting.
+2. Find this session's domain. The host below is a routing key, not public DNS — its auto-assigned
+   *.volceapi.com domain is only visible in the APIG console:
+
+     https://console.volcengine.com/veapig -> service list (host = {{ include "rerun-native-session.host" . }})
+
+3. Open it, and enter the session password when noVNC asks:
+
+     https://<domain>/vnc.html?autoconnect=true&resize=remote
 {{- else }}
 
-Access (port-forward):
-  kubectl -n {{ .Release.Namespace }} port-forward pod/{{ include "rerun-native-session.name" . }} 9092:8080
-  Open http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale in a browser
+2. Reach it locally (ingress.enabled=false, so the session is not on the public internet):
+
+     kubectl -n {{ .Release.Namespace }} port-forward pod/{{ include "rerun-native-session.name" . }} 9092:8080
+
+   Then open http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
 {{- end }}
 
-Delete it when you are done — node resources are billed for as long as it runs:
-  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+⚠️ Delete the session when you are done — the pod holds its CPU and memory for as long as it runs.
+   The password Secret is yours, not the release's, so it needs its own line:
+
+     helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+     kubectl -n {{ .Release.Namespace }} delete secret {{ .Values.existingPasswordSecret }}

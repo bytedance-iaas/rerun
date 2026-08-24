@@ -1,0 +1,169 @@
+{{- if .Values.curator.enabled }}
+{{/*
+The curation console. A StatefulSet of its own, deliberately not a third container in the ReRun
+pod: curation is CPU-heavy batch work, so keeping it apart means neither component drags the other
+down, and upgrading the viewer does not kill a curation run in flight.
+
+No bucket is mounted and none is configured. The data plane talks to TOS through the SDK, with the
+dataset path, the output path and their regions all supplied by the user in the UI at runtime — the
+deployment only injects the credentials (TOS_* below).
+
+/data is an emptyDir workspace: the dataset download cache, batch output staging and task state. A
+delivery is uploaded to the user's bucket under a "write the completeness marker last" protocol, so
+a pod restart loses the cache and the task history, never a delivery.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dataverse.fullname" . }}-curation
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: curation
+spec:
+  serviceName: {{ include "dataverse.fullname" . }}-curation
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 8 }}
+      annotations:
+        # Rolls the pod when the site configuration changes. Secret contents are invisible to the
+        # chart, so rotated credentials need `kubectl rollout restart` instead.
+        checksum/site-config: {{ include (print $.Template.BasePath "/configmap-curation.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: curation
+          # The image's entrypoint is `curation` itself.
+          image: {{ include "dataverse.curator.image" . | quote }}
+          imagePullPolicy: {{ .Values.curator.image.pullPolicy }}
+          # --delivery and --data-root point at the local workspace. Batch input and output on the
+          # task board are tos:// URLs, so these two directories only carry task state and the
+          # placeholder delivery the image drops in to make an empty delivery root start cleanly.
+          args:
+            - ui
+            - --delivery
+            - /data/deliveries
+            - --data-root
+            - /data/datasets
+            - --root-path
+            - {{ .Values.curator.rootPath | quote }}
+          ports:
+            - containerPort: 7860
+          env:
+            {{- if .Values.web.basicAuth.enabled }}
+            # Shares the htpasswd account table with the web viewer: same domain, so one login opens
+            # both. Verification is a hash comparison here too, so no plaintext account is involved.
+            - name: CURATION_UI_HTPASSWD_FILE
+              value: /etc/curation-auth/htpasswd
+            {{- end }}
+            - name: CURATION_CONFIG
+              value: /etc/curation/site.yaml
+            {{- if .Values.curator.terminal }}
+            # The Terminal tab: an embedded xterm on a real shell, behind the same Basic auth as the
+            # UI. The image leaves it off by default and this switches it on.
+            - name: CURATION_TERMINAL
+              value: "1"
+            {{- end }}
+            # Credentials for direct TOS access: the bucket comes from the user, the credentials
+            # from the deployment — the same AK/SK pair, out of the same Secret, that the viewer's
+            # tos-config.json uses. The variable names match the engine's TosConfig.from_env.
+            # The endpoint is given in its internal form (the pod sits in the VPC — faster, no public
+            # traffic billed); the code reads only two facts out of it, the region and
+            # internal-vs-public, and swaps in the matching public endpoint when the user picks
+            # another region.
+            - name: TOS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: tos_access_key
+            - name: TOS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: tos_secret_key
+            - name: TOS_ENDPOINT
+              value: {{ include "dataverse.tos.endpointInternal" . | quote }}
+            # Volcengine Ark VLM backend. The key comes from the Secret — `optional` keeps the pod
+            # from failing when that Secret has no such key, which is how the backend stays off —
+            # while the base url is ordinary configuration. Both names are what the engine reads.
+            - name: ARK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: ark_api_key
+                  optional: true
+            {{- with .Values.curator.arkBaseUrl }}
+            - name: ARK_BASE_URL
+              value: {{ . | quote }}
+            {{- end }}
+            # The dataset download cache is pinned to /data (the emptyDir), the same disk as the
+            # task state.
+            - name: CURATION_TOS_CACHE
+              value: /data/tos-cache
+            {{- if hasKey ((.Values.curator.resources).limits | default dict) "ephemeral-storage" }}
+            # The container's storage limit, through the downward API: the size precheck uses it to
+            # work out how much can still be written safely, so a large dataset cannot write the pod
+            # into a kubelet eviction.
+            - name: CURATION_EPHEMERAL_LIMIT_BYTES
+              valueFrom:
+                resourceFieldRef:
+                  containerName: curation
+                  resource: limits.ephemeral-storage
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz # Straight to the container port, unprefixed (the prefixed one works too)
+              port: 7860
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.curator.resources | nindent 12 }}
+          volumeMounts:
+            - name: scratch
+              mountPath: /data
+            {{- if .Values.web.basicAuth.enabled }}
+            - name: curation-auth
+              mountPath: /etc/curation-auth
+              readOnly: true
+            {{- end }}
+            - name: site-config
+              mountPath: /etc/curation
+      volumes:
+        # The local workspace: dataset cache, batch staging and task state. emptyDir usage counts
+        # against the container's ephemeral-storage limit.
+        - name: scratch
+          emptyDir: {}
+        {{- if .Values.web.basicAuth.enabled }}
+        - name: curation-auth
+          secret:
+            secretName: {{ include "dataverse.viewerSecretName" . }}
+            items:
+              - key: web_htpasswd
+                path: htpasswd
+        {{- end }}
+        - name: site-config
+          configMap:
+            name: {{ include "dataverse.fullname" . }}-curation-site
+---
+# The backend behind the console's Ingress path, and at the same time the StatefulSet's governing
+# service. Headless is enough — the APIG Ingress forwards to endpoints.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dataverse.fullname" . }}-curation
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: curation
+spec:
+  clusterIP: None
+  selector:
+    {{- include "dataverse.selectorLabels" (dict "root" . "component" "curation") | nindent 4 }}
+  ports:
+    - name: ui
+      port: 7860
+      targetPort: 7860
+{{- end }}

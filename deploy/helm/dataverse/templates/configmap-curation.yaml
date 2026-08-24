@@ -1,18 +1,18 @@
-{{- if .Values.daft.enabled }}
-# Site configuration for the curation console. 2026-08-19, cloud
-# productization: the tos_buckets block is retired — the data plane talks to TOS
-# directly, and the user names the bucket and prefix at runtime in the UI, so
-# the deployment no longer declares "these are the buckets we are wired to".
-# All that is left here is the set of preconfigured VLM backends.
-# The console has no k8s discovery: the only backends it offers are the ones in
-# vlm_backends, so the self-hosted vLLM this chart deploys (vllm.enabled=true)
-# has to be injected here to be selectable at all — the block below merges it in
-# under the `self-hosted` key, with the endpoint pointing at the vLLM Service's
-# in-cluster DNS name and ending in /v1.
-# External backends configured in daft.vlmBackends are merged in as well, and
-# win on a name clash.
-# After changing values, helm upgrade: the checksum annotation rolls the
-# curation pod so the new config takes effect.
+{{- if .Values.curator.enabled }}
+{{/*
+Site configuration for the curation console. The only thing in it is the set of VLM backends the UI
+offers: buckets and prefixes are runtime input, so the deployment never declares "these are the
+buckets we are wired to".
+
+The console has no in-cluster discovery — the only backends it offers are the ones listed here — so
+the vLLM this chart can deploy (vllm.enabled=true) has to be injected to be selectable at all. It is
+merged in under the `self-hosted` key, with its endpoint pointing at the vLLM Service's in-cluster
+DNS name and ending in /v1. External backends from curator.vlmBackends are merged in as well, and
+win on a name clash.
+
+After changing values, `helm upgrade`: the checksum annotation on the curation pod rolls it so the
+new configuration takes effect.
+*/}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,11 +22,11 @@ metadata:
     app.kubernetes.io/component: curation
 data:
   site.yaml: |
-    {{- $backends := deepCopy (.Values.daft.vlmBackends | default dict) }}
+    {{- $backends := deepCopy (.Values.curator.vlmBackends | default dict) }}
     {{- if .Values.vllm.enabled }}
     {{- $endpoint := printf "http://%s-vllm.%s.svc.cluster.local:%v/v1" (include "dataverse.fullname" .) .Release.Namespace (.Values.vllm.port | int) }}
     {{- $auto := dict "endpoint" $endpoint "model" (.Values.vllm.servedModelName | default .Values.vllm.model) "service_type" "Self-hosted vLLM (deployed by this chart)" }}
-    {{- /* daft.vlmBackends wins: a user-defined `self-hosted` entry is kept as-is */}}
+    {{- /* curator.vlmBackends wins: a user-defined `self-hosted` entry is kept as-is */}}
     {{- $backends = merge $backends (dict "self-hosted" $auto) }}
     {{- end }}
     {{- if $backends }}

@@ -1,10 +1,26 @@
 apiVersion: v2
 name: dataverse
 description: >-
-  The always-on Dataverse cloud deployment (VKE): one chart bundling two
-  components — ReRun (web viewer + catalog server) and the Daft curation
-  console — plus the APIG gateway and gRPC route in front of them.
+  The always-on Dataverse cloud deployment on VKE: one chart bundling ReRun
+  (web viewer + catalog server) and the curation console, plus the APIG gateway
+  and the HTTP/gRPC routes in front of them.
 type: application
+
+# Chart version. Bump on every packaging change. Independent of the ReRun release below: the chart
+# can change without the application changing, and vice versa.
 version: 0.1.0
-# appVersion tracks the semantic version of the rerun image tag; the actual image comes from values' image.rerun.
+
+# The ReRun release this chart targets. Not the image tag — the chart pins no image (image.tag is
+# required at install time), so this tracks the repository version instead.
 appVersion: "0.36.0"
+
+keywords:
+  - rerun
+  - robotics
+  - data-curation
+  - kubernetes
+  - helm
+
+home: https://rerun.io/
+sources:
+  - https://github.com/rerun-io/rerun

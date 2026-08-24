@@ -1,9 +1,14 @@
-# A StatefulSet rather than a Deployment: the catalog's database and cache live
-# on an RWO cloud disk, and a StatefulSet guarantees at most one instance has it
-# mounted at a time (a node failure will not bring up a second pod fighting for
-# the disk).
-# Note: a StatefulSet's selector is immutable — selectorLabels cannot change
-# once this ships.
+{{/*
+The ReRun workload: the web viewer and the catalog server, in one pod, two containers. They ship in
+the same image (MODE=web / MODE=server) and are always upgraded together, so splitting them into
+two workloads would only add a second rollout to keep in step.
+
+A StatefulSet rather than a Deployment: the catalog's database and cache live on an RWO cloud disk,
+and a StatefulSet guarantees at most one instance has it mounted at a time — a node failure will not
+bring up a second pod fighting for the same disk.
+
+⚠️ A StatefulSet's selector is IMMUTABLE: the selector labels cannot change once this ships.
+*/}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -21,32 +26,32 @@ spec:
     metadata:
       labels:
         {{- include "dataverse.selectorLabels" (dict "root" . "component" "rerun") | nindent 8 }}
-      annotations:
-        # Rolls the pod automatically when the secret contents change; with
-        # existingSecret the chart cannot see them, so restart by hand after editing.
-        checksum/secrets: {{ print (include (print $.Template.BasePath "/secret-viewer.yaml") .) (include (print $.Template.BasePath "/secret-token.yaml") .) | sha256sum }}
     spec:
-      # Secrets are mounted at /run/secrets; SA-token automounting is off so it
-      # cannot collide with the read-only secret volume.
+      # Secrets are mounted at /run/secrets; SA-token automounting is off so it cannot collide with
+      # the read-only secret volume.
+      # ⚠️ Their contents are invisible to the chart, so editing a Secret does not roll this pod.
+      #    `kubectl rollout restart` is what picks up rotated credentials.
       automountServiceAccountToken: false
       containers:
-        # ---- Container 1: web viewer (nginx + wasm + /tos-config.json) ----
+        # ---- Container 1: the web viewer (nginx + wasm + /tos-config.json) ----
         - name: web
-          image: {{ required "image.rerun is required (the rerun image reference)" .Values.image.rerun | quote }}
+          image: {{ include "dataverse.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: MODE
               value: web
-            # In web mode this endpoint is handed to the user's browser, which
-            # sits on the public internet — it has to be the public endpoint.
+            # This endpoint is handed to the user's browser, which sits on the public internet — it
+            # has to be the public one.
             - name: TOS_ENDPOINT
-              value: {{ .Values.tos.endpointPublic | quote }}
+              value: {{ include "dataverse.tos.endpointPublic" . | quote }}
             - name: TOS_REGION
-              value: {{ .Values.tos.region | quote }}
+              value: {{ include "dataverse.tos.region" . | quote }}
             - name: TOS_RRD_ARTIFACTS_URL
               value: {{ .Values.tos.rrdArtifactsUrl | quote }}
             - name: RRD_ARTIFACTS_PREFETCH
               value: {{ .Values.web.rrdArtifactsPrefetch | quote }}
-            {{- with .Values.web.daftUrl }}
+            {{- with (include "dataverse.curatorUrl" .) }}
+            # Where the Diagnose buttons point. DAFT_URL is the image's name for it.
             - name: DAFT_URL
               value: {{ . | quote }}
             {{- end }}
@@ -67,38 +72,39 @@ spec:
             - name: rrd-cache
               mountPath: /rrd-cache
 
-        # ---- Container 2: catalog server ----
+        # ---- Container 2: the catalog server ----
         - name: catalog
-          image: {{ .Values.image.rerun | quote }}
+          image: {{ include "dataverse.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: MODE
               value: server
-            # The server runs inside the cloud, so reaching TOS over the
-            # internal endpoint is faster and bills no public traffic.
+            # The server runs inside the cloud, so reaching TOS over the internal endpoint is faster
+            # and bills no public traffic.
             - name: TOS_ENDPOINT
-              value: {{ .Values.tos.endpointInternal | quote }}
+              value: {{ include "dataverse.tos.endpointInternal" . | quote }}
             - name: TOS_REGION
-              value: {{ .Values.tos.region | quote }}
-            # Which endpoint presigned URLs are signed for (affects only the URLs handed to clients).
+              value: {{ include "dataverse.tos.region" . | quote }}
+            # Which network the presigned URLs are signed for (catalog.presignNetwork). This affects
+            # only the URLs handed to clients, not how the server itself reaches TOS.
             - name: RERUN_PRESIGN_ENDPOINT
-              value: {{ .Values.catalog.presignEndpoint | quote }}
+              value: {{ include "dataverse.presignEndpoint" . | quote }}
             {{- with .Values.catalog.hfEndpoint }}
             - name: HF_ENDPOINT
               value: {{ . | quote }}
             {{- end }}
-            # Self-service bucket CORS (/api/ensure-cors): when the viewer opens
-            # a new bucket, the server fills in the bucket's CORS rules (append
-            # only — it never overwrites someone else's).
+            # Self-service bucket CORS (/api/ensure-cors): when the viewer opens a new bucket, the
+            # server fills in that bucket's CORS rules — appending only, never overwriting rules
+            # someone else put there.
             - name: RERUN_AUTO_CORS
               value: {{ .Values.catalog.autoCors.enabled | ternary "1" "0" | quote }}
             {{- with .Values.catalog.autoCors.origins }}
             - name: RERUN_AUTO_CORS_ORIGINS
               value: {{ join "," . | quote }}
             {{- end }}
-            # The token-signing secret deliberately skips the environment (env
-            # shows up in the process environment, visible to `kubectl exec env`):
-            # it is projected into /run/secrets as a 0400 file and the entrypoint
-            # discovers it.
+            # The token-signing secret deliberately skips the environment (env shows up in the
+            # process environment, visible to `kubectl exec env`): it is projected into /run/secrets
+            # as a 0400 file and the entrypoint discovers it there.
           ports:
             - containerPort: 51234
           readinessProbe:
@@ -115,13 +121,13 @@ spec:
             - name: server-data
               mountPath: /server-data
       volumes:
-        # The web container only ever sees the application credentials (AK/SK,
-        # hf_token, account table) — the signing secret is not among them.
+        # The web container only ever sees the application credentials (AK/SK, hf_token, the account
+        # table) — the signing secret is not among them.
         - name: tos-secrets
           secret:
             secretName: {{ include "dataverse.viewerSecretName" . }}
-        # The catalog container gets the signing secret projected into the same
-        # directory, as a single 0400 file (owner-readable only).
+        # The catalog container gets the signing secret projected into the same directory, as a
+        # single 0400 file (owner-readable only).
         - name: catalog-secrets
           projected:
             sources:
@@ -137,9 +143,10 @@ spec:
               {{- end }}
         - name: rrd-cache
           emptyDir: {} # nginx's WebDAV write-back directory (a fallback path); losing it costs nothing
-  # The catalog database plus the remote-file cache. Losing it is survivable
-  # (the server re-fetches from TOS), but the catalog's registration records live
-  # here too, so keep it. helm uninstall does not delete this PVC.
+  # The catalog database plus the remote-file cache. Losing it is survivable — the server re-fetches
+  # from TOS — but the catalog's registration records live here too, so keep it.
+  # ⚠️ IMMUTABLE after creation: changing size or storageClassName fails the upgrade. And
+  #    `helm uninstall` does not delete this PVC; remove it by hand to reclaim the disk.
   volumeClaimTemplates:
     - metadata:
         name: server-data
