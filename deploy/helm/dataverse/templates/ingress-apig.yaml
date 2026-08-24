@@ -1,0 +1,112 @@
+{{/*
+Publishes everything the deployment exposes, on ONE host: the platform issues one managed
+*.volceapi.com domain per host, so a single host is what puts the viewer, the curation console and
+the catalog on the same public domain.
+
+Two Ingress objects, not one, because the backend-protocol annotation applies to a whole Ingress:
+the plain-HTTP routes below must not be forwarded as gRPC.
+*/}}
+{{- include "dataverse.apig.validate" . -}}
+{{- if .Values.apig.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "dataverse.fullname" . }}-web
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+  {{- with (include "dataverse.apig.annotations" . | trim) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ include "dataverse.apig.ingressClassName" . }}
+  rules:
+    - host: {{ include "dataverse.apig.host" . | quote }}
+      http:
+        paths:
+          # The catalog's plain-HTTP endpoints, on the same domain (HTTP/1.1 through the gateway):
+          #   /api      same-origin calls from the browser (ensure-cors and friends)
+          #   /catalog  presign / sources, which is what direct reads during training use
+          #   /version  unauthenticated health check
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.rerunName" . }}-headless
+                port:
+                  number: 51234
+          - path: /catalog
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.rerunName" . }}-headless
+                port:
+                  number: 51234
+          - path: /version
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.rerunName" . }}-headless
+                port:
+                  number: 51234
+          {{- if .Values.curator.enabled }}
+          # One domain, split by path: curator.rootPath is the curation console, everything else is
+          # the web viewer. The gateway does not strip the prefix — the console registers all of its
+          # routes under that path itself (--root-path).
+          - path: {{ .Values.curator.rootPath }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.fullname" . }}-curation
+                port:
+                  number: 7860
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.rerunName" . }}-web
+                port:
+                  number: 80
+---
+# The catalog's gRPC entry point, on the same host. A gRPC method path carries the fully qualified
+# service name as its prefix (/rerun.cloud.v1alpha1.RerunCloudService/…), so it cannot collide with
+# the viewer or the console.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "dataverse.fullname" . }}-catalog-grpc
+  labels:
+    {{- include "dataverse.labels" . | nindent 4 }}
+  annotations:
+    {{- with (include "dataverse.apig.annotations" . | trim) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+    # Make the gateway forward to the upstream as gRPC (HTTP/2). APIG decides the protocol mainly
+    # from the Service port: the backend below points at headless's `grpc` port (name=grpc /
+    # appProtocol=grpc, see services-rerun.yaml), so APIG picks HTTP/2 on its own. This annotation
+    # is belt-and-suspenders — on its own it is unreliable in the APIG adapter, degrading to
+    # HTTP/1.1, and the gRPC backend then answers HTTP 400 "grpc-status missing".
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+    # Long calls such as bulk registration outlast the gateway's default 60s — widen it to 10
+    # minutes.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: {{ include "dataverse.apig.ingressClassName" . }}
+  rules:
+    - host: {{ include "dataverse.apig.host" . | quote }}
+      http:
+        paths:
+          - path: /rerun.cloud.v1alpha1.RerunCloudService
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.rerunName" . }}-headless
+                # Reference by NUMBER, not name: the APIG controller's CreateUpstream API requires a
+                # numeric K8SService.Port (a named port fails with
+                # MissingParameter.UpstreamSpec.K8SService.Port). 51235 is the `grpc` Service port
+                # (appProtocol=grpc → APIG builds an HTTP/2 upstream).
+                port:
+                  number: 51235
+{{- end }}

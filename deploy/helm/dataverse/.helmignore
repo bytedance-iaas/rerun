@@ -1,5 +1,11 @@
+# Editor and OS noise, plus anything a local deployment might leave in the chart directory —
+# `helm package` would otherwise ship it inside the .tgz.
 .DS_Store
+.git/
+.gitignore
 *.swp
+*.swo
 *.bak
 *.orig
-.git/
+*~
+values-*.yaml

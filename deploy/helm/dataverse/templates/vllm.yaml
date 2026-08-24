@@ -1,14 +1,16 @@
 {{- if .Values.vllm.enabled }}
-# ══════════════════ Self-hosted vLLM (the curation console's VLM backend) ══════════════════
-# A plain Deployment (not a StatefulSet): the weights land in an emptyDir and
-# nothing is persistent, so a rebuild simply starts over.
-# The weights fill the GPU and old and new pods cannot coexist → the Recreate
-# strategy (kill first, then start).
-# The console's VLM-based checks (task_success) reach it over the OpenAI-compatible
-# API; this chart registers the endpoint into the console's site.yaml
-# vlm_backends automatically (see configmap-curation.yaml, under the
-# `self-hosted` key), so it is selectable in the UI without anyone copying an
-# in-cluster DNS name by hand.
+{{/*
+A self-hosted vLLM, serving the curation console's model-based checks.
+
+A plain Deployment, not a StatefulSet: the weights land in an emptyDir and nothing is persistent, so
+a rebuild simply starts over. The strategy is Recreate because the weights fill the GPU — an old and
+a new pod cannot coexist on it, so the old one has to go first.
+
+The console's model-based checks (task_success) reach it over the OpenAI-compatible API; this chart
+registers the endpoint in the console's site.yaml automatically (see configmap-curation.yaml, under
+the `self-hosted` key), so it is selectable in the UI without anyone copying an in-cluster DNS name
+by hand.
+*/}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -49,21 +51,21 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.vllm.weightFetch.image }}
+      {{- with .Values.vllm.weightFetch.image.repository }}
       initContainers:
         # Weight prefetch: downloads the model onto the GPU node's local disk
         # (emptyDir) — not into the image, not onto TOS.
         # Idempotent: existing *.safetensors with no *.aria2 resume file skips
         # instantly, so a pod rebuild does not re-download.
-        # Goes through the internal oniond and the Volcengine mirrors
-        # (deb.debian.org over the public internet is glacial on some nodes).
+        # Volcengine-internal: it installs oniond from the ivolces mirrors and
+        # downloads through it, so it only works inside that network.
         - name: fetch-weights
-          image: {{ . | quote }}
+          image: {{ printf "%s:%s" . ($.Values.vllm.weightFetch.image.tag | default "latest") | quote }}
           command: ["bash", "-c"]
           args:
             - |
               set -euo pipefail
-              M=/models/{{ required "vllm.weightFetch.modelName is required whenever vllm.weightFetch.image is set" $.Values.vllm.weightFetch.modelName }}
+              M=/models/{{ required "vllm.weightFetch.modelName is required whenever vllm.weightFetch.image.repository is set" $.Values.vllm.weightFetch.modelName }}
               if ls "$M"/*.safetensors >/dev/null 2>&1 && ! ls "$M"/*.aria2 >/dev/null 2>&1; then
                 echo "weights already complete, skipping download"; exit 0
               fi
@@ -79,7 +81,7 @@ spec:
               install /tmp/x/usr/bin/oniond /usr/local/bin/oniond
               ln -sf /usr/bin/aria2c /usr/local/bin/aria2c_byted
               echo "=== downloading {{ $.Values.vllm.weightFetch.modelName }} to the local disk ==="
-              export BUCKET={{ required "vllm.weightFetch.bucket is required whenever vllm.weightFetch.image is set" $.Values.vllm.weightFetch.bucket }}
+              export BUCKET={{ required "vllm.weightFetch.bucket is required whenever vllm.weightFetch.image.repository is set" $.Values.vllm.weightFetch.bucket }}
               oniond download model {{ $.Values.vllm.weightFetch.modelName }} --turbo --dir /models
               echo "download complete, file count:"; ls -1 "$M" | wc -l
           volumeMounts:
@@ -88,7 +90,8 @@ spec:
       {{- end }}
       containers:
         - name: vllm
-          image: {{ .Values.vllm.image | quote }}
+          image: {{ include "dataverse.vllm.image" . | quote }}
+          imagePullPolicy: {{ .Values.vllm.image.pullPolicy }}
           args:
             - --model
             - {{ required "vllm.enabled=true requires vllm.model (a path inside the container, or an HF repo id)" .Values.vllm.model | quote }}
@@ -105,10 +108,9 @@ spec:
             - containerPort: {{ .Values.vllm.port }}
               name: http
           env:
-            # Mirror and token for the pull-straight-from-HF path (unused by the
-            # oniond flow, but costs nothing to leave in place): reuses
-            # catalog.hfEndpoint and the hf_token from the shared secret (not
-            # injected when absent).
+            # Mirror and token for the pull-straight-from-HF path — unused when the weights are
+            # prefetched, but it costs nothing to leave in place. Reuses catalog.hfEndpoint and the
+            # hf_token from the shared Secret (neither is injected when absent).
             {{- with .Values.catalog.hfEndpoint }}
             - name: HF_ENDPOINT
               value: {{ . | quote }}

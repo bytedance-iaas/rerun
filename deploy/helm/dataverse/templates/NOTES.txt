@@ -1,39 +1,65 @@
-dataverse (two components: ReRun + the curation console) has been submitted. Next:
+dataverse is deployed as {{ include "dataverse.fullname" . }} in namespace {{ .Release.Namespace }}.
+
+ReRun:    {{ include "dataverse.rerunName" . }}-0 (2/2: web + catalog), disk server-data-{{ include "dataverse.rerunName" . }}-0 ({{ .Values.catalog.storage.size }}, {{ .Values.catalog.storage.className }})
+{{ if .Values.curator.enabled }}Curation: {{ include "dataverse.fullname" . }}-curation-0 (1/1){{ else }}Curation: not deployed (curator.enabled=false){{ end }}
+{{- if .Values.vllm.enabled }}
+vLLM:     {{ include "dataverse.fullname" . }}-vllm (1 GPU x {{ .Values.vllm.gpuCount }})
+{{- end }}
 
 1. Wait for the pods:
+
      kubectl -n {{ .Release.Namespace }} get pods
-   Expect {{ include "dataverse.rerunName" . }}-0 at 2/2{{ if .Values.daft.enabled }} and {{ include "dataverse.fullname" . }}-curation-0 at 1/1{{ end }}.
+
 {{- if .Values.apig.enabled }}
 
-2. Gateway readiness and the domain:
-     kubectl get apiginstance -A          # PHASE=Running means ready (an occasional empty list just needs a retry)
+2. Everything is published on {{ if .Values.apig.create }}the gateway this release provisions{{ else }}adopted gateway {{ .Values.apig.existingId }}{{ end }} (class {{ include "dataverse.apig.ingressClassName" . }}), on one host:
+
+     {{ include "dataverse.apig.host" . }}
+{{- if and .Values.apig.create (not .Values.apig.existingId) }}
+
+   A new gateway takes a few minutes to come up:
+
+     kubectl get apiginstance {{ include "dataverse.fullname" . }}-apig
      kubectl -n {{ .Release.Namespace }} get ingress -o wide
-   The automatically assigned *.volceapi.com domain is only visible in the APIG console:
-     https://console.volcengine.com/veapig → service list (host = {{ include "dataverse.webHost" . }})
-   kubectl cannot show you this domain. It carries every entry point:
-     /            web viewer (Basic auth)
-     {{ .Values.daft.rootPath }}   curation console (same account table as the viewer){{ if not .Values.daft.enabled }} (daft.enabled=false, not deployed){{ end }}
-     gRPC         catalog server —— from Python:
+
+   Later upgrades take no extra flags — leave apig.existingId empty and the routes stay bound:
+
+     helm upgrade {{ .Release.Name }} <chart> -n {{ .Release.Namespace }} --reuse-values
+{{- end }}
+
+3. Get the real URL. The host is a routing key, not public DNS. Its auto-assigned *.volceapi.com
+   domain is only visible in the APIG console, never through kubectl:
+
+     https://console.volcengine.com/veapig -> service list (host = {{ include "dataverse.apig.host" . }})
+
+   ⚠️ Do NOT verify by curling the CLB IP with a Host header: APIG answers 401 with error code
+      010002 that way for every host, working ones included. Test the assigned domain instead.
+
+   That one domain carries every entry point:
+
+     /            web viewer{{ if .Values.web.basicAuth.enabled }} (Basic auth){{ end }}
+     {{ if .Values.curator.enabled }}{{ printf "%-12s" .Values.curator.rootPath }} curation console{{ if .Values.web.basicAuth.enabled }} (same account table as the viewer){{ end }}{{ else }}(no curation console — curator.enabled=false){{ end }}
+     gRPC         catalog server, from Python:
                     CatalogClient("rerun+https://<domain>:443"{{ if .Values.catalog.tokenAuth.enabled }}, token=<token>{{ end }})
      /downloads/  SDK wheel downloads (Linux + macOS; the viewer ships inside the wheel)
+{{- else }}
 
-3. Open https://<domain> in a browser{{ if .Values.web.basicAuth.enabled }} and sign in with an account from the table{{ end }}.
+2. No public entry point (apig.enabled=false). Reach the viewer locally:
+
+     kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "dataverse.rerunName" . }}-web 8080:80
 {{- end }}
 {{- if .Values.catalog.tokenAuth.enabled }}
 
-Issuing a catalog token for a user (signed inside the catalog container, so the secret never leaves the cluster; whoever can exec can sign):
+Issuing a catalog token. It is signed inside the catalog container, so the secret never leaves the
+cluster — which also means whoever can exec into that pod can sign one:
+
   kubectl -n {{ .Release.Namespace }} exec {{ include "dataverse.rerunName" . }}-0 -c catalog -- sh -c \
       "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
           --user <name> --permission read --expiration 90d \
           --server-host <gateway domain> --server-host {{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
 {{- end }}
 
-In-cluster access (never leaves the private network):
-  web:    http://{{ include "dataverse.rerunName" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
-  server: rerun+http://{{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
-{{- if .Values.daft.enabled }}
+In-cluster access, which never leaves the private network:
 
-Curation data-plane self-check:
-  kubectl -n {{ .Release.Namespace }} exec {{ include "dataverse.fullname" . }}-curation-0 -- ls /mnt/tos
-  You should see datasets/ and deliveries/.
-{{- end }}
+  web:     http://{{ include "dataverse.rerunName" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
+  catalog: rerun+http://{{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
