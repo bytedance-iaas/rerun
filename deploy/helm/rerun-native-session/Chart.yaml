@@ -1,8 +1,23 @@
 apiVersion: v2
 name: rerun-native-session
 description: >-
-  A self-service, on-demand native viewer session in the cloud
-  (one release per person, uninstall when done — one pod per person, deleted when done).
+  A self-service, on-demand native viewer session in the cloud: one release per
+  person, one pod per session, uninstalled when done.
 type: application
+
+# Chart version. Bump on every packaging change. Independent of the ReRun release below.
 version: 0.1.0
+
+# The ReRun release this chart targets. Not the image tag — the chart pins no image (image.tag is
+# required at install time), so this tracks the repository version instead.
 appVersion: "0.36.0"
+
+keywords:
+  - rerun
+  - viewer
+  - kubernetes
+  - helm
+
+home: https://rerun.io/
+sources:
+  - https://github.com/rerun-io/rerun

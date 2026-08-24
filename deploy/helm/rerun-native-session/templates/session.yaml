@@ -1,7 +1,12 @@
-# A native viewer session in the cloud: one pod plus a ClusterIP service (plus
-# an optional Ingress on the shared gateway).
-# How many sessions can run at once is decided by the namespace's resource
-# quota — nothing in the software caps it.
+{{/*
+A native viewer session: one pod, one ClusterIP Service, and an optional Ingress on the gateway
+dataverse already provides. Nothing here is shared with other sessions, which is what lets a session
+be opened and thrown away with `helm install` / `helm uninstall`.
+
+How many sessions can run at once is decided by the namespace's resource quota — nothing in the
+software caps it.
+*/}}
+{{- include "rerun-native-session.password.validate" . }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -11,18 +16,21 @@ metadata:
     app: rerun-native-session
     session: {{ include "rerun-native-session.name" . }}
 spec:
+  # A session is a session: when the viewer exits, the pod is done. Nothing restarts it, and the
+  # stopped pod stays around so its logs can still be read — `helm uninstall` is what removes it.
   restartPolicy: Never
-  # Secrets are mounted at /run/secrets; SA-token automounting is off so it
-  # cannot collide with the read-only secret volume.
+  # Secrets are mounted at /run/secrets; SA-token automounting is off so it cannot collide with the
+  # read-only secret volume.
   automountServiceAccountToken: false
   containers:
     - name: viewer
-      image: {{ required "image.rerun is required (the rerun image; pointing -f at dataverse's values file is enough)" .Values.image.rerun | quote }}
+      image: {{ include "rerun-native-session.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
       env:
         - name: MODE
           value: native
         - name: TOS_ENDPOINT
-          value: {{ .Values.tos.endpointInternal | quote }}
+          value: {{ include "rerun-native-session.tos.endpoint" . | quote }}
         - name: TOS_REGION
           value: {{ .Values.tos.region | quote }}
         - name: TOS_RRD_ARTIFACTS_URL
@@ -35,8 +43,6 @@ spec:
           value: {{ .Values.rrdArtifactsPrefetch | quote }}
         - name: SESSION_GEOMETRY
           value: {{ .Values.geometry | quote }}
-        - name: SESSION_PASSWORD
-          value: {{ required "sessionPassword is required (the noVNC session password)" .Values.sessionPassword | quote }}
       ports:
         - containerPort: 8080
       readinessProbe:
@@ -51,21 +57,31 @@ spec:
         - name: tos-secrets
           mountPath: /run/secrets
           readOnly: true
-        # Software rendering needs a decent amount of shared memory (the
-        # equivalent of docker's shm_size: 1gb).
+        # Software rendering needs a decent amount of shared memory (the equivalent of docker's
+        # shm_size: 1gb).
         - name: dshm
           mountPath: /dev/shm
   volumes:
+    # dataverse's credentials plus this session's password, projected into the one /run/secrets
+    # directory the entrypoint reads. Nothing sensitive reaches the environment.
     - name: tos-secrets
-      secret:
-        secretName: {{ .Values.secrets.existingSecret }}
+      projected:
+        sources:
+          - secret:
+              name: {{ required "secrets.existingSecret is required: the name of dataverse's application-credentials Secret in this namespace." .Values.secrets.existingSecret }}
+          - secret:
+              name: {{ .Values.existingPasswordSecret }}
+              items:
+                - key: session_password
+                  path: session_password
+                  mode: 256 # 0400
     - name: dshm
       emptyDir:
         medium: Memory
         sizeLimit: 1Gi
 ---
-# The session's in-cluster service: the backend behind the APIG Ingress (the
-# `session` label is unique, so it selects this session alone).
+# The session's in-cluster service, and the backend behind its Ingress. The `session` label is
+# unique per release, so this selects one session and never someone else's.
 apiVersion: v1
 kind: Service
 metadata:
@@ -82,19 +98,23 @@ spec:
       targetPort: 8080
 {{- if .Values.ingress.enabled }}
 ---
-# This session's public entry point: hangs off the shared APIG gateway, and its
-# host gets an automatically assigned *.volceapi.com domain of its own
-# (noVNC's WebSocket runs over HTTP/1.1, which the gateway forwards fine).
+# This session's public entry point, on the gateway dataverse provides: its own host, so the
+# platform assigns it a *.volceapi.com domain of its own. noVNC's WebSocket runs over HTTP/1.1,
+# which the gateway forwards without any extra annotation.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "rerun-native-session.name" . }}
   labels:
     {{- include "rerun-native-session.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
+  ingressClassName: {{ required "ingress.className is required: the ingress class dataverse's APIG gateway declares. Set ingress.enabled=false to keep the session off the public internet." .Values.ingress.className }}
   rules:
-    - host: {{ include "rerun-native-session.host" . }}
+    - host: {{ include "rerun-native-session.host" . | quote }}
       http:
         paths:
           - path: /
