@@ -9,12 +9,12 @@
 #   dataverse             the always-on cloud deployment: ReRun (web viewer +
 #                         catalog server) and the curation console bundled in one
 #                         chart, plus the APIG gateway they share
-#   rerun-native-session  the on-demand native-viewer session (one release per user)
+#   rerun-native-session   the on-demand native-viewer session (one release per user)
 #
 # Everything deployment-specific comes from the environment, so this file holds no
 # registry coordinates and no credentials:
 #   HELM_REGISTRY_HOST       registry hostname, e.g. example.cr.volces.com
-#   HELM_REGISTRY_NAMESPACE  namespace the charts are pushed under
+#   HELM_REGISTRY_NAMESPACE   namespace the charts are pushed under
 #   HELM_REGISTRY_USERNAME   robot account      (not needed for DRY_RUN)
 #   HELM_REGISTRY_PASSWORD   its password       (not needed for DRY_RUN)
 #

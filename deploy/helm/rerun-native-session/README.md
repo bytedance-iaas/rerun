@@ -1,4 +1,4 @@
-# rerun-native-session chart
+# Rerun-native-session chart
 
 A self-service, on-demand native viewer session in the cloud: one pod per person, deleted when
 done. One release = one session (pod + Service + optional Ingress), which lines up with helm's own

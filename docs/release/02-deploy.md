@@ -81,7 +81,7 @@ kubectl create namespace $RERUN_NS
 把 AK/SK 和火山方舟API KEY读进当前终端的环境变量:
 
 ```
-export  TOS_ACCESS_KEY="##############"
+export TOS_ACCESS_KEY="##############"
 export TOS_SECRET_KEY=="##############"
 export ARK_API_KEY=="##############"
 ```

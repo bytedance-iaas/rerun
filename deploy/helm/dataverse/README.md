@@ -1,4 +1,4 @@
-# dataverse chart
+# Dataverse chart
 
 Helm packaging of the always-on Dataverse cloud deployment: **one chart, two components** plus the
 public entry point they share.
@@ -106,11 +106,11 @@ path. Everything shares one host, which is what puts the viewer, the console and
 single domain:
 
 ```text
-/                                        web viewer
-/curation                                curation console
-/api  /catalog  /version                 catalog, plain HTTP
-/rerun.cloud.v1alpha1.RerunCloudService  catalog, gRPC (a second Ingress: the backend-protocol
-                                         annotation applies to a whole Ingress)
+/                                         web viewer
+/curation                                 curation console
+/api  /catalog  /version                  catalog, plain HTTP
+/rerun.cloud.v1alpha1.RerunCloudService   catalog, gRPC (a second Ingress: the backend-protocol
+                                          annotation applies to a whole Ingress)
 ```
 
 Authentication deliberately does **not** happen at the gateway — a gateway-level JWT would make the

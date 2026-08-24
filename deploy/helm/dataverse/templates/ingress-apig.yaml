@@ -25,9 +25,9 @@ spec:
       http:
         paths:
           # The catalog's plain-HTTP endpoints, on the same domain (HTTP/1.1 through the gateway):
-          #   /api      same-origin calls from the browser (ensure-cors and friends)
-          #   /catalog  presign / sources, which is what direct reads during training use
-          #   /version  unauthenticated health check
+          #   /api       same-origin calls from the browser (ensure-cors and friends)
+          #   /catalog   presign / sources, which is what direct reads during training use
+          #   /version   unauthenticated health check
           - path: /api
             pathType: Prefix
             backend:

@@ -35,9 +35,9 @@ image:
 tos:
   # The ONLY field that has to be right. The two endpoints below and the presign endpoint are
   # derived from it, following Volcengine's own naming:
-  #   public    https://tos-s3-<region>.volces.com    (browsers, and clients outside the cloud)
-  #   internal  https://tos-s3-<region>.ivolces.com   (in-cloud components: faster, no public
-  #                                                    traffic billed)
+  #   public     https://tos-s3-<region>.volces.com    (browsers, and clients outside the cloud)
+  #   internal   https://tos-s3-<region>.ivolces.com   (in-cloud components: faster, no public
+  #                                                     traffic billed)
   region: cn-beijing
 
   # Both empty on purpose — leave them that way unless the derived address is wrong for your
@@ -140,8 +140,8 @@ catalog:
 
   # Which network the presigned URLs are signed for. These URLs are handed to clients that read
   # dataset files directly, so this is about where those clients sit — not about the server:
-  #   public    training clients outside the cloud (the default, and the safe one)
-  #   internal  every client runs inside this VPC; faster, and no public traffic billed
+  #   public     training clients outside the cloud (the default, and the safe one)
+  #   internal   every client runs inside this VPC; faster, and no public traffic billed
   # ⚠️ A URL signed for one network does not work on the other: the signature covers the host.
   presignNetwork: public
 
