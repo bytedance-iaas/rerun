@@ -59,13 +59,13 @@ fi
 lint_args_for() {
   case "$1" in
     dataverse)
-      echo "--set image.repository=ci-lint --set image.tag=ci-lint" \
-           "--set curator.image.repository=ci-lint --set curator.image.tag=ci-lint" \
+      echo "--set image.rerun=ci-lint/rerun:ci-lint" \
+           "--set image.curator=ci-lint/robot_curator:ci-lint" \
            "--set apig.existingId=ci-lint --set apig.ingressClassName=ci-lint" \
            "--set secrets.existingSecret=ci-lint --set secrets.existingTokenSecret=ci-lint"
       ;;
     rerun-native-session)
-      echo "--set image.repository=ci-lint --set image.tag=ci-lint --set existingPasswordSecret=ci-lint"
+      echo "--set image.rerun=ci-lint/rerun:ci-lint --set existingPasswordSecret=ci-lint"
       ;;
     *) echo "" ;;
   esac
