@@ -1,0 +1,193 @@
+name: Build Binaries & Wheels
+
+# 本 fork 专用的构建流水线,不依赖 rerun 官方的 GCS 桶和付费大 runner。
+# 每个平台在同一台机器上先构建 rerun-cli 二进制,再把它打进 Python wheel,
+# 产物以 workflow artifact 形式提供下载。
+#
+# 手动触发:GitHub 网页 → Actions → "Build Binaries & Wheels" → Run workflow。
+
+on:
+  workflow_dispatch:
+    inputs:
+      PLATFORM:
+        type: choice
+        description: "Platform(s) to build for"
+        required: true
+        default: "all"
+        options:
+          - all
+          - linux-x64
+          - linux-arm64
+          - macos-arm64
+          - windows-x64
+
+  # 按需构建的另一条路,不依赖 main:在任意包含本文件的 commit 上打
+  # build-* 开头的 tag 并推送,即触发全平台构建。例:
+  #   git tag build-20260825 && git push origin build-20260825
+  push:
+    tags:
+      - "build-*"
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+permissions:
+  contents: "read"
+  packages: "read"
+
+jobs:
+  set-matrix:
+    name: Set matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Select platforms
+        id: set
+        run: |
+          # 注:linux 上用 zig 充当链接器 (cargo zigbuild / maturin --zig),
+          # 把产物链到 glibc 2.28,老系统也能跑。上游是用私有的 manylinux
+          # 容器镜像达到同样效果,我们 fork 拉不了那个镜像。
+          all='[
+            {"platform": "linux-x64",   "runner": "ubuntu-latest",    "target": "x86_64-unknown-linux-gnu",  "compat": "manylinux_2_28", "bin_name": "rerun"},
+            {"platform": "linux-arm64", "runner": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "compat": "manylinux_2_28", "bin_name": "rerun"},
+            {"platform": "macos-arm64", "runner": "macos-latest",     "target": "aarch64-apple-darwin",      "compat": "", "bin_name": "rerun"},
+            {"platform": "windows-x64", "runner": "windows-latest",   "target": "x86_64-pc-windows-msvc",    "compat": "", "bin_name": "rerun.exe"}
+          ]'
+          # push 触发时没有 inputs,默认构建全部平台
+          platform="${{ inputs.PLATFORM }}"
+          platform="${platform:-all}"
+          if [ "$platform" = "all" ]; then
+            selected="$all"
+          else
+            selected=$(echo "$all" | jq -c --arg p "$platform" '[.[] | select(.platform == $p)]')
+          fi
+          echo "matrix=$(echo "$selected" | jq -c .)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: [set-matrix]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+
+    env:
+      # 免费 runner 上没有 sccache 的 GCS 后端,确保不会被容器里的预设干扰
+      RUSTC_WRAPPER: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
+        with:
+          pixi-version: v0.71.3
+
+      # Apple 自带的 clang 编译不了 wasm 目标,web viewer 构建需要 brew 版 LLVM
+      - name: Use clang 18 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew list llvm@18 &>/dev/null || brew install llvm@18
+          echo "$(brew --prefix llvm@18)/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Rust
+        run: |
+          rustup install
+          rustup target add ${{ matrix.target }} wasm32-unknown-unknown
+
+      # ---------------------------------------------------------------
+      # 第一步:构建 web viewer (wasm),会被下面的二进制和 wheel 一起内嵌
+
+      - name: Build web viewer (release)
+        run: pixi run rerun-build-web-release
+
+      # ---------------------------------------------------------------
+      # 第二步:构建 rerun-cli 二进制 (viewer + CLI,含 web viewer)
+
+      - name: Build rerun-cli
+        run: |
+          if [ -n "${{ matrix.compat }}" ]; then
+            # linux:zig 链接,产物只要求 glibc >= 2.28
+            # (同 pixi.toml 里 rerun-build-native-and-pending-web-release-zig 的做法)
+            pixi run cargo zigbuild \
+              --locked \
+              -p rerun-cli \
+              --no-default-features \
+              --features release_full \
+              --release \
+              --target ${{ matrix.target }}.2.28
+          else
+            pixi run cargo build \
+              --locked \
+              -p rerun-cli \
+              --no-default-features \
+              --features release_full \
+              --release \
+              --target ${{ matrix.target }}
+          fi
+
+      # macOS 上把二进制包成 Rerun.app,程序坞里才会显示 "Rerun" 而不是文件名
+      - name: Bundle Rerun.app (macOS)
+        if: matrix.platform == 'macos-arm64'
+        run: |
+          version=$(pixi run python scripts/ci/crates.py get-version)
+          mkdir -p bundle-out
+          pixi run python scripts/ci/bundle_macos_app.py \
+            --binary "./target/${{ matrix.target }}/release/${{ matrix.bin_name }}" \
+            --icon crates/viewer/re_viewer/data/app_icon_mac.png \
+            --info-plist scripts/ci/macos/Info.plist \
+            --version "$version" \
+            --output-dir bundle-out
+
+      # ---------------------------------------------------------------
+      # 第三步:把二进制放进 SDK 目录,然后打 wheel
+      # (rerun_py/pyproject.toml 的 include 规则会把它打包进 wheel)
+
+      - name: Stage rerun-cli into the SDK
+        run: |
+          if [ "${{ matrix.platform }}" = "macos-arm64" ]; then
+            cp -R bundle-out/Rerun.app rerun_py/rerun_sdk/rerun_cli/
+          else
+            cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" rerun_py/rerun_sdk/rerun_cli/
+          fi
+
+      - name: Build wheel
+        run: |
+          pixi run uv run maturin build \
+            --manifest-path rerun_py/Cargo.toml \
+            --release \
+            --target ${{ matrix.target }} \
+            --no-default-features \
+            --features perf_telemetry,pypi \
+            ${{ matrix.compat != '' && format('--zig --compatibility {0}', matrix.compat) || '' }} \
+            --out dist
+
+      # ---------------------------------------------------------------
+      # 上传产物 (Actions 页面该次运行的 Artifacts 区域下载)
+
+      - name: Package binary for upload
+        run: |
+          mkdir -p binary-out
+          if [ "${{ matrix.platform }}" = "macos-arm64" ]; then
+            tar -czf binary-out/rerun-cli-${{ matrix.platform }}.tar.gz -C bundle-out Rerun.app
+          else
+            cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" binary-out/
+          fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rerun-cli-${{ matrix.platform }}
+          path: binary-out/
+          if-no-files-found: error
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rerun-sdk-wheel-${{ matrix.platform }}
+          path: dist/*.whl
+          if-no-files-found: error
