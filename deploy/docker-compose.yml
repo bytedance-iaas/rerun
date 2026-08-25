@@ -5,9 +5,13 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       args:
-        # URL of the macOS SDK wheel on TOS — not hardcoded in the Dockerfile.
+        # Space-separated TOS URLs of the SDK wheels (all platforms; built by GitHub
+        # Actions, uploaded to TOS) — not hardcoded in the Dockerfile.
         # Set it in .env (or the shell env); required unless BUILD_SDK_WHEEL=0.
-        MAC_WHEEL_URL: ${MAC_WHEEL_URL:-}
+        SDK_WHEEL_URLS: ${SDK_WHEEL_URLS:-}
+        # Optional: override which platform tags must be present (empty = the
+        # Dockerfile default: linux x64 + mac arm64; "none" skips the check).
+        SDK_WHEEL_REQUIRED_TAGS: ${SDK_WHEEL_REQUIRED_TAGS:-}
     image: rerun-viewer-unified
     environment:
       MODE: web

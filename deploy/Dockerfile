@@ -189,70 +189,97 @@ ENV CARGO_PROFILE_RELEASE_LTO=${RELEASE_LTO} \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${RELEASE_CGU}
 RUN env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} cargo build --package rerun-cli --release --no-default-features --features native_viewer,map_view,nasm,oss_server
 
-# ---- Python SDK wheel, from the same sources as the server above. Shipped in the image
-# and served by nginx at /sdk/ (see nginx.conf), so the SDK a user installs from a
-# deployment always matches the catalog server it talks to — no separate publishing.
-# The viewer now ships *inside* this wheel: `pip install` it and the `rerun` command is
-# on PATH, so there is no separate desktop-viewer download to keep in sync.
-# Details:
-# - The `rerun` CLI built at line ~190 is copied into rerun_sdk/rerun_cli/ before the
-#   build, so the wheel bundles it (maturin's `include` list picks it up). Users run
-#   `rerun` after install — same as the official PyPI wheel.
-# - abi3-py310: one wheel covers every Python >= 3.10.
-# - --compatibility linux: skip the manylinux audit; the wheel needs a glibc at least as
-#   new as this build image's (bookworm, 2.36) — fine for in-cloud training images.
-# - Reuses /rerun/target from the cargo build above, so the extra cost is only the
-#   rerun_py bindings crate.
-# BUILD_SDK_WHEEL=0 skips all of it (faster dev images; /sdk/ will just be empty).
-ARG BUILD_SDK_WHEEL=1
-ARG PIP_INDEX_URL=""
-RUN if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
-    apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv python3-dev \
-    protobuf-compiler libprotobuf-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && python3 -m venv /opt/maturin \
-    && env ${PIP_INDEX_URL:+PIP_INDEX_URL=${PIP_INDEX_URL}} \
-    /opt/maturin/bin/pip install --no-cache-dir 'maturin>=1.8,<2'; \
-    fi
-# The repo's cargo config pins PYO3_CONFIG_FILE at rerun_py/pyo3-build.cfg — a generated,
-# gitignored file (pixi writes it on dev machines). Synthesize it here from the build
-# python, or every pyo3 build script fails with "failed to open PyO3 config file".
-RUN if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
-    printf 'implementation=CPython\nversion=3.%s\nshared=true\nabi3=true\nexecutable=%s\npointer_width=64\nbuild_flags=\nsuppress_build_script_link_lines=false\n' \
-    "$(/usr/bin/python3 -c 'import sys; print(sys.version_info[1])')" \
-    /usr/bin/python3 > rerun_py/pyo3-build.cfg \
-    && mkdir -p rerun_py/rerun_sdk/rerun_cli \
-    && rm -f rerun_py/rerun_sdk/rerun_cli/rerun \
-    && cp /rerun/target/release/rerun rerun_py/rerun_sdk/rerun_cli/rerun \
-    && env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} \
-    /opt/maturin/bin/maturin build --release --compatibility linux \
-    --manifest-path rerun_py/Cargo.toml -o /rerun/downloads/sdk; \
-    else mkdir -p /rerun/downloads/sdk; fi
+# ---------------- SDK wheels: downloaded from TOS, not built here ----------------
+# Every platform's wheel (Linux, macOS, Windows) is built by the GitHub Actions workflow
+# (.github/workflows/build_binary_and_wheels.yml — push a `build-*` tag to trigger),
+# uploaded to a TOS bucket, and only *downloaded* at image build time. nginx serves them
+# at /sdk/ (see nginx.conf). Building the Linux wheel here would actually be worse: the
+# Actions wheel is zig-linked against glibc 2.28 (manylinux_2_28), so it installs on far
+# older distros than anything this bookworm builder could produce (glibc 2.36).
+# NOTE: the wheels and this image now come from two separate builds. Build them from the
+# same commit (tag the commit, wait for Actions, upload to TOS, then build the image) or
+# the SDK users install can drift from the catalog server it talks to.
+# The bucket URLs are deliberately NOT hardcoded — pass a space-separated list:
+#   docker build --build-arg SDK_WHEEL_URLS="https://<bucket>…/<linux wheel> https://<bucket>…/<mac wheel>" …
+#   (docker compose reads it from the SDK_WHEEL_URLS env var / .env)
+# When building the SDK (BUILD_SDK_WHEEL=1, the default) SDK_WHEEL_URLS is REQUIRED and
+# every URL must be reachable: an empty list, a failed download, or an under-1 MB response
+# (error page / truncation) all fail the build rather than silently shipping a broken
+# /sdk/. Set BUILD_SDK_WHEEL=0 to skip the SDK entirely (dev images; /sdk/ will be empty).
+# This is a separate tiny stage so a wheel version bump only re-runs this download layer
+# and never invalidates the ~45-minute cargo layers of the builder stages.
+FROM ${BASE_REGISTRY}library/debian:trixie-slim AS sdk-wheels
 
-# macOS wheels cannot be built in a Linux container (Mach-O needs the macOS SDK). They are
-# built on a Mac and uploaded to a TOS bucket (see deploy/README.md), then fetched here at
-# build time so they ship in /downloads/sdk/ next to the Linux wheel and `pip install` on a
-# Mac picks the matching one. The bucket URL is deliberately NOT hardcoded — pass it in:
-#   docker build --build-arg MAC_WHEEL_URL=https://<bucket>.<tos-endpoint>/mac/<wheel> …
-#   (docker compose reads it from the MAC_WHEEL_URL env var / .env)
-# When building the SDK (BUILD_SDK_WHEEL=1) MAC_WHEEL_URL is REQUIRED and must be reachable:
-# an empty URL, a failed download, or an under-1 MB response (error page / truncation) all
-# fail the build rather than silently shipping without the macOS wheel. Set BUILD_SDK_WHEEL=0
-# to skip the SDK entirely (dev images).
-ARG MAC_WHEEL_URL=""
-RUN if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
-      if [ -z "$MAC_WHEEL_URL" ]; then \
-        printf '%s\n' "Error: MAC_WHEEL_URL is not set — pass --build-arg MAC_WHEEL_URL=<TOS wheel URL>, or set BUILD_SDK_WHEEL=0 to skip the SDK." >&2; \
+ARG APT_MIRROR=""
+RUN if [ -n "$APT_MIRROR" ]; then \
+    sed -i "s|http://deb.debian.org|$APT_MIRROR|g; s|https://deb.debian.org|$APT_MIRROR|g" \
+    /etc/apt/sources.list.d/debian.sources; \
+    fi
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=src /ca-bundle.pem /tmp/corp-ca.pem
+RUN cat /tmp/corp-ca.pem >> /etc/ssl/certs/ca-certificates.crt
+
+# The workspace version of the sources this image is built from — the downloaded wheels
+# must carry the SAME version, or the SDK users install drifts from the catalog server.
+COPY --from=src /rerun/Cargo.toml /tmp/workspace-Cargo.toml
+
+ARG BUILD_SDK_WHEEL=1
+ARG SDK_WHEEL_URLS=""
+# Platform tags that MUST be covered for /sdk/ to count as complete. Empty = the default
+# in the RUN below (linux x64 + mac arm64); pass "none" to skip the completeness check.
+ARG SDK_WHEEL_REQUIRED_TAGS=""
+# Every wheel is checked after download: real file (>= 1 MB, zip magic bytes — an HTML
+# error page fails here), one single version across all wheels, that version equal to
+# this source tree's workspace version, and all required platform tags present.
+# ${url%%\?*} strips any query string (pre-signed TOS URLs) before basename, so the
+# saved filename stays a valid wheel name pip can parse.
+RUN mkdir -p /downloads/sdk; \
+    if [ "$BUILD_SDK_WHEEL" = "1" ]; then \
+      if [ -z "$SDK_WHEEL_URLS" ]; then \
+        printf '%s\n' "Error: SDK_WHEEL_URLS is not set — pass --build-arg SDK_WHEEL_URLS=\"<TOS wheel URL> [<TOS wheel URL> …]\", or set BUILD_SDK_WHEEL=0 to skip the SDK." >&2; \
         exit 1; \
       fi; \
-      out="/rerun/downloads/sdk/$(basename "$MAC_WHEEL_URL")"; \
-      curl -fSL "$MAC_WHEEL_URL" -o "$out" || { \
-        printf '%s\n' "Error: failed to download the macOS wheel." "URL: $MAC_WHEEL_URL" >&2; exit 1; }; \
-      if [ "$(wc -c < "$out")" -lt 1000000 ]; then \
-        printf '%s\n' "Error: fetched macOS wheel is under 1 MB — not a real wheel." "URL: $MAC_WHEEL_URL" >&2; \
+      for url in $SDK_WHEEL_URLS; do \
+        out="/downloads/sdk/$(basename "${url%%\?*}")"; \
+        curl -fSL "$url" -o "$out" || { \
+          printf '%s\n' "Error: failed to download SDK wheel." "URL: $url" >&2; exit 1; }; \
+        if [ "$(wc -c < "$out")" -lt 1000000 ]; then \
+          printf '%s\n' "Error: fetched wheel is under 1 MB — not a real wheel." "URL: $url" >&2; \
+          exit 1; \
+        fi; \
+        if [ "$(head -c 2 "$out")" != "PK" ]; then \
+          printf '%s\n' "Error: fetched file is not a wheel (wrong magic bytes — an error page?)." "URL: $url" >&2; \
+          exit 1; \
+        fi; \
+      done; \
+      expected="$(sed -n '/^\[workspace.package\]/,/^\[/p' /tmp/workspace-Cargo.toml | sed -n 's/^version = "\(.*\)"$/\1/p')"; \
+      got="$(for f in /downloads/sdk/*.whl; do basename "$f" | cut -d- -f2; done | sort -u)"; \
+      if [ "$(printf '%s\n' "$got" | wc -l)" -ne 1 ]; then \
+        printf '%s\n' "Error: the downloaded wheels disagree on version: $(echo $got | tr '\n' ' ')" \
+          "Upload one matching set to TOS and update SDK_WHEEL_URLS." >&2; \
         exit 1; \
       fi; \
+      if [ "$got" != "$expected" ]; then \
+        printf '%s\n' "Error: wheel version $got does not match this source tree ($expected)." \
+          "Build the wheels from the same commit as this image (push a build-* tag on it), then update SDK_WHEEL_URLS." >&2; \
+        exit 1; \
+      fi; \
+      required="${SDK_WHEEL_REQUIRED_TAGS:-manylinux_2_28_x86_64 macosx_11_0_arm64}"; \
+      if [ "$required" != "none" ]; then \
+        for tag in $required; do \
+          ls /downloads/sdk/*"$tag"*.whl >/dev/null 2>&1 || { \
+            printf '%s\n' "Error: no wheel for required platform tag: $tag" \
+              "Present: $(ls /downloads/sdk/ | tr '\n' ' ')" \
+              "Add that platform to SDK_WHEEL_URLS, or override SDK_WHEEL_REQUIRED_TAGS (\"none\" skips this check)." >&2; \
+            exit 1; }; \
+        done; \
+      fi; \
+      printf '%s\n' "SDK wheels OK: version $got, $(ls /downloads/sdk/ | wc -l) wheel(s): $(ls /downloads/sdk/ | tr '\n' ' ')"; \
     fi
 
 # ---------------- runtime: nginx (web mode) + Xvnc/noVNC (native mode) ----------------
@@ -329,9 +356,10 @@ RUN rm -f /etc/nginx/sites-enabled/default && mkdir -p /rrd-cache && chown www-d
 # Native viewer binary.
 COPY --from=builder-native /rerun/target/release/rerun /usr/local/bin/rerun
 # Download area served by nginx at /downloads/ (see nginx.conf): the Python SDK wheels
-# (sdk/) — Linux built here, macOS carried in from artifacts/. The viewer ships inside
-# the wheel now, so there is no separate viewer/ download.
-COPY --from=builder-native /rerun/downloads/ /usr/share/nginx/downloads/
+# (sdk/), all platforms downloaded from TOS in the sdk-wheels stage (built by GitHub
+# Actions, see that stage's comment). The viewer ships inside the wheel, so there is no
+# separate viewer/ download.
+COPY --from=sdk-wheels /downloads/ /usr/share/nginx/downloads/
 
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

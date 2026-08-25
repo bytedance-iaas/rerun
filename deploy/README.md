@@ -35,47 +35,44 @@ Credentials live in `deploy/secrets/` (`tos_access_key`, `tos_secret_key`, `hf_t
 cd deploy
 ./gen-ca-bundle.sh             # once per machine, only behind a corporate proxy
 cp .env.example .env           # then edit; create secrets/ with your AK/SK
-# Building the SDK needs the macOS wheel URL: set MAC_WHEEL_URL in .env (see below),
+# Building the SDK needs the wheel URLs on TOS: set SDK_WHEEL_URLS in .env (see below),
 # or pass BUILD_SDK_WHEEL=0 to skip the SDK entirely for a quick dev image.
 docker compose up --build -d   # first build compiles both viewers: expect ~45-60 min
 open http://127.0.0.1:9091     # web viewer
 open "http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=remote"   # native session
 ```
 
-## macOS SDK wheel
+## SDK wheels (from GitHub Actions, via TOS)
 
-The image builds and serves the **Linux** SDK wheel itself (nginx `/downloads/sdk/`), viewer bundled inside — `pip install` it and `rerun` is on PATH.
-A **macOS** wheel cannot be built in the Linux build container (a Mach-O binary needs the macOS SDK). It also cannot travel in git — at ~120 MB it exceeds GitHub's 100 MB file limit, and git-lfs does not survive the CN build pipeline's shallow clone. So it is built **on a Mac**, uploaded to a **public-read TOS bucket**, and the Dockerfile fetches it at build time into `/downloads/sdk/` next to the Linux wheel; `pip install` on a Mac picks the matching one.
+The image serves the Python SDK wheels at nginx `/downloads/sdk/`, viewer bundled inside each wheel — `pip install` it and `rerun` is on PATH.
+The image does **not** build any wheel itself. All platforms (Linux x64/arm64, macOS arm64, Windows x64) are built by the GitHub Actions workflow `.github/workflows/build_binary_and_wheels.yml`, uploaded to a **public-read TOS bucket**, and the Dockerfile only downloads them at build time. Two reasons over building in-image: the Actions Linux wheel is zig-linked against glibc 2.28 (`manylinux_2_28`), so it installs on much older distros than a wheel built in the bookworm container (glibc 2.36) — and the image build gets simpler and faster.
 
-Build it on an Apple-Silicon Mac from the repo root, upload it, then build the image:
+Release flow (all from the same commit, to keep the wheels and the catalog server in sync):
 
 ```bash
-# 1. Build the native viewer binary that gets bundled into the wheel (Outputs target/release/rerun).
-pixi run rerun-build     # or: cargo build -p rerun-cli --release --features native_viewer,map_view
+# 1. Trigger the cloud build: push a build-* tag on the commit you want to ship.
+#    (Or, once the workflow file is on main: Actions → "Build Binaries & Wheels" → Run workflow.)
+git tag build-$(date +%Y%m%d) && git push origin build-$(date +%Y%m%d)
 
-# 2. Put that binary where maturin's `include` list expects it, and build the wheel into artifacts/.
-rm -f rerun_py/rerun_sdk/rerun_cli/rerun
-cp target/release/rerun rerun_py/rerun_sdk/rerun_cli/rerun
-PYO3_CONFIG_FILE="$PWD/rerun_py/pyo3-build.cfg" \
-  .venv/bin/maturin build --release --manifest-path rerun_py/Cargo.toml -o artifacts
-#   → artifacts/rerun_sdk-<ver>-cp310-abi3-macosx_11_0_arm64.whl
+# 2. Wait for the run (~2 h), download the rerun-sdk-wheel-* artifacts from the run's
+#    Artifacts section, and unzip them — each zip holds one .whl.
 
-# 3. Upload to the public-read TOS bucket (AWS CLI works against TOS; virtual-hosted addressing).
-#    Then set the object public-read (a one-time bucket policy already grants anonymous GetObject).
+# 3. Upload the wheels to the public-read TOS bucket (AWS CLI works against TOS;
+#    virtual-hosted addressing; a one-time bucket policy already grants anonymous GetObject).
 aws configure set default.s3.addressing_style virtual
-aws s3 cp artifacts/rerun_sdk-*.whl s3://<bucket>/mac/ \
+aws s3 cp rerun_sdk-<ver>-cp310-abi3-manylinux_2_28_x86_64.whl s3://<bucket>/sdk/ \
+  --endpoint-url https://tos-s3-cn-beijing.volces.com --region cn-beijing
+aws s3 cp rerun_sdk-<ver>-cp310-abi3-macosx_11_0_arm64.whl s3://<bucket>/sdk/ \
   --endpoint-url https://tos-s3-cn-beijing.volces.com --region cn-beijing
 
-# 4. Tell the build where the wheel is, and build the image (from deploy/).
-#    The bucket URL is NOT hardcoded — set MAC_WHEEL_URL in .env (compose passes it through
-#    as a build arg), or `docker build --build-arg MAC_WHEEL_URL=…` for a plain build.
-echo 'MAC_WHEEL_URL=https://<bucket>.tos-s3-cn-beijing.volces.com/mac/rerun_sdk-<ver>-cp310-abi3-macosx_11_0_arm64.whl' >> deploy/.env
+# 4. Tell the image build where the wheels are, and build (from deploy/).
+#    The bucket URLs are NOT hardcoded — set SDK_WHEEL_URLS (space-separated) in .env
+#    (compose passes it through as a build arg), or `docker build --build-arg SDK_WHEEL_URLS=…`.
+echo 'SDK_WHEEL_URLS=https://<bucket>.tos-s3-cn-beijing.volces.com/sdk/rerun_sdk-<ver>-cp310-abi3-manylinux_2_28_x86_64.whl https://<bucket>.tos-s3-cn-beijing.volces.com/sdk/rerun_sdk-<ver>-cp310-abi3-macosx_11_0_arm64.whl' >> deploy/.env
 cd deploy && docker compose build
 ```
 
-Call maturin directly (not `uv run maturin`) so it does not try to sync PyPI runtime deps — behind a TLS-intercepting proxy that download fails, and the wheel build does not need them.
-
-The wheel is **not in git** (`artifacts/` is gitignored) and its bucket URL is **not hardcoded** — pass it via `MAC_WHEEL_URL` (`.env` / `--build-arg`). When building the SDK (`BUILD_SDK_WHEEL=1`, the default) `MAC_WHEEL_URL` is **required**: an empty value, a failed download, or an under-1 MB response fails the build rather than silently shipping without the macOS wheel. Set `BUILD_SDK_WHEEL=0` to skip the SDK for a fast dev image. The bucket needs to be readable by the build host — either make the object public-read (an anonymous-`GetObject` bucket policy, so a plain `curl` works with no credentials) or use a pre-signed URL. On a version bump: rebuild on the Mac, `aws s3 cp` the new wheel up, and update `MAC_WHEEL_URL`. Only Apple-Silicon (arm64) is produced; add `--target x86_64-apple-darwin` / `universal2` if Intel Macs need covering.
+The wheels are **not in git** (~120 MB each, over GitHub's 100 MB file limit) and the bucket URLs are **not hardcoded** — pass them via `SDK_WHEEL_URLS` (`.env` / `--build-arg`). When building the SDK (`BUILD_SDK_WHEEL=1`, the default) `SDK_WHEEL_URLS` is **required**, and the build verifies the set before shipping it: every download must succeed and look like a real wheel (≥ 1 MB, zip magic bytes), all wheels must carry **one single version**, that version must **equal the source tree's workspace version** (root `Cargo.toml`) — catching the wheel-vs-server drift described above — and every platform tag in `SDK_WHEEL_REQUIRED_TAGS` must be covered (default `manylinux_2_28_x86_64 macosx_11_0_arm64`; set it to `none` to skip the platform check). Any violation fails the build rather than silently shipping a broken or stale `/sdk/`. Set `BUILD_SDK_WHEEL=0` to skip the SDK for a fast dev image. The bucket needs to be readable by the build host — public-read objects or pre-signed URLs both work (query strings are stripped from the saved filename). Serve whichever platforms your users need; linux-x64 + macos-arm64 is the usual minimum. Only Apple-Silicon is produced for macOS; Intel Macs are not covered (Apple has discontinued them, and upstream does not ship x64 mac wheels either).
 
 ## Local native viewer (no cloud, no docker)
 
