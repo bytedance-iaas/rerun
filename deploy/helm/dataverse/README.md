@@ -30,7 +30,7 @@ kubectl create namespace rerun
 kubectl -n rerun create secret generic dataverse-secrets \
     --from-literal=tos_access_key=<ak> \
     --from-literal=tos_secret_key=<sk> \
-    --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 '<password>')"
+    --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"   # prompts for the password
 
 rerun server generate-secret | kubectl -n rerun create secret generic \
     rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
@@ -40,11 +40,11 @@ Then install, naming those Secrets rather than their contents:
 
 ```bash
 helm install dataverse deploy/helm/dataverse -n rerun \
-  --set image.repository=<registry>/rerun --set image.tag=<tag> \
-  --set curator.image.repository=<registry>/robot_curator --set curator.image.tag=<tag> \
+  --set image.rerun=<registry>/rerun:<tag> \
+  --set image.curator=<registry>/robot_curator:<tag> \
   --set secrets.existingSecret=dataverse-secrets \
   --set secrets.existingTokenSecret=rerun-catalog-server-secrets \
-  --set apig.existingId=<gateway instance id> --set apig.ingressClassName=<its class>
+  --set apig.existingId=<gateway instance id>
 ```
 
 In practice those flags live in a gitignored values file installed with `-f`. The image references
@@ -85,7 +85,7 @@ for one network does not work on the other; the signature covers the host.
 
 | Value | Default | Notes |
 |---|---|---|
-| `image.tag` / `curator.image.tag` | **required** | The chart tracks no image version |
+| `image.rerun` / `image.curator` | **required** | Full tagged references; the chart tracks no image version |
 | `secrets.existingSecret` | **required** | The chart renders no Secret of its own |
 | `secrets.existingTokenSecret` | **required** | Unless `catalog.tokenAuth.enabled=false` |
 | `tos.region` | `cn-beijing` | Both TOS endpoints are derived from it |
@@ -94,7 +94,6 @@ for one network does not work on the other; the signature covers the host.
 | `catalog.presignNetwork` | `public` | Where the reading clients are |
 | `catalog.storage` | `100Gi`, `ebs-essd` | Catalog database + file cache, kept on uninstall |
 | `curator.enabled` | `true` | `false` also drops the `/curation` route |
-| `curator.rootPath` | `/curation` | Console path, and the viewer's Diagnose target |
 | `vllm.enabled` | `false` | Needs a GPU |
 | `apig.enabled` | `true` | The deployment's only public entry point |
 | `apig.create` | `false` | Adopt a gateway by default; `true` provisions one |
@@ -123,7 +122,7 @@ entry point with `web.basicAuth.enabled=false` or `catalog.tokenAuth.enabled=fal
 | `apig.create` | `true` | `false` | Picks which mode |
 | `apig.subnetIds` | **required** | — | Subnets in this cluster's VPC |
 | `apig.existingId` | **must stay empty** | **required** | Gateway instance id, from the APIG console |
-| `apig.ingressClassName` | optional | **required** | Must match the class that gateway declares, or it never claims the Ingresses |
+| `apig.ingressClassName` | optional | optional | Auto-resolved from the cluster by `existingId` at install time; set it only to render offline or to override |
 | `apig.host` | recommended | recommended | Internal placeholder host, unique per gateway. Defaults to `<release>-web.apig.internal` |
 
 Missing values fail at render time with a message naming the value, not later as an Ingress that
@@ -183,9 +182,12 @@ apig:
   enabled: true
   create: false
   existingId: gd9xxxxxxxxxxxxxxxxxx      # instance id from the APIG console
-  ingressClassName: apig                 # must match what that gateway declares
   host: dataverse-web.apig.internal      # must not collide with a host already on it
 ```
+
+The gateway's ingress class is looked up in the cluster by that id at install time (a wrong id
+fails the install and lists the gateways). Offline rendering (`helm template` without a cluster)
+cannot look anything up — pass `--dry-run=server`, or set `apig.ingressClassName` explicitly.
 
 One step, and `helm uninstall` leaves the gateway alone. Use this for anything whose URL people have
 bookmarked. The chart renders no `APIGInstance` in this mode — claiming a shared gateway into the
@@ -207,10 +209,12 @@ hand.
 backend's `model` field is taken from it, so it usually takes care of itself. If a single GPU cannot
 hold the model, raise `vllm.gpuCount` to 2 and add `--tensor-parallel-size 2` to `vllm.extraArgs`.
 
-Weights come from HuggingFace by default. `vllm.weightFetch.image.repository` switches on an
-initContainer that downloads them onto the node's local disk through `oniond` instead — faster, but
-Volcengine-internal, so it only works inside that network. The curator image already carries the
-tooling, which makes it the usual choice for that field.
+Weights are prefetched by default: an initContainer downloads them onto the node's local disk
+through `oniond` before vLLM starts, so `vllm.enabled=true` needs no further values. The download
+path is Volcengine-internal — on a cluster outside that network set `vllm.weightFetch.enabled=false`
+and write an HF repo id into `vllm.model`, and vLLM pulls from HuggingFace itself. The download
+container's image defaults to `image.curator` (which already carries the tooling);
+`vllm.weightFetch.image` overrides it.
 
 ## Upgrades and configuration changes
 

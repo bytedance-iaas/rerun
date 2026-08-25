@@ -50,10 +50,11 @@ spec:
                 port:
                   number: 51234
           {{- if .Values.curator.enabled }}
-          # One domain, split by path: curator.rootPath is the curation console, everything else is
-          # the web viewer. The gateway does not strip the prefix — the console registers all of its
-          # routes under that path itself (--root-path).
-          - path: {{ .Values.curator.rootPath }}
+          # One domain, split by path: /curation is the curation console, everything else is the
+          # web viewer. The gateway does not strip the prefix — the console registers all of its
+          # routes under that path itself (--root-path). The path is fixed because the viewer
+          # derives it as a same-origin sibling for its Diagnose buttons.
+          - path: /curation
             pathType: Prefix
             backend:
               service:

@@ -38,7 +38,7 @@ vLLM:     {{ include "dataverse.fullname" . }}-vllm (1 GPU x {{ .Values.vllm.gpu
    That one domain carries every entry point:
 
      /            web viewer{{ if .Values.web.basicAuth.enabled }} (Basic auth){{ end }}
-     {{ if .Values.curator.enabled }}{{ printf "%-12s" .Values.curator.rootPath }} curation console{{ if .Values.web.basicAuth.enabled }} (same account table as the viewer){{ end }}{{ else }}(no curation console — curator.enabled=false){{ end }}
+     {{ if .Values.curator.enabled }}{{ printf "%-12s" "/curation" }} curation console{{ if .Values.web.basicAuth.enabled }} (same account table as the viewer){{ end }}{{ else }}(no curation console — curator.enabled=false){{ end }}
      gRPC         catalog server, from Python:
                     CatalogClient("rerun+https://<domain>:443"{{ if .Values.catalog.tokenAuth.enabled }}, token=<token>{{ end }})
      /downloads/  SDK wheel downloads (Linux + macOS; the viewer ships inside the wheel)

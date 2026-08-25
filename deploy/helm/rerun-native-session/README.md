@@ -40,10 +40,10 @@ command the NOTES print after installing.
 
 | Value | Comes from | If dataverse's release is not named `dataverse` |
 |---|---|---|
-| `image.repository` / `image.tag` | the same fields in dataverse's values | — |
+| `image.rerun` | the same field in dataverse's values | — |
 | `tos.region`, `tos.rrdArtifactsUrl`, `catalog.hfEndpoint` | the same fields | — |
 | `secrets.existingSecret` | dataverse's credentials Secret | set it to the actual Secret name |
-| `ingress.className` | the class dataverse's gateway declares | set it to `<release>-apig`, or to dataverse's explicit `apig.ingressClassName` |
+| `ingress.className` | the class dataverse's gateway declares | dataverse's install notes print it (`class …`); with `apig.create=true` it is `<release>-apig` |
 
 Fields dataverse has and this chart does not use (`curator.*`, `apig.*`, `vllm.*`, `catalog.storage`
 and the rest) are simply ignored, which is what makes sharing one values file work.
