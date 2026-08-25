@@ -14,13 +14,13 @@ The image reference. The chart ships no default tag, so catch it here: an empty 
 render as "repo:" and surface much later as a confusing ImagePullBackOff.
 */}}
 {{- define "rerun-native-session.image" -}}
-{{- if not .Values.image.repository }}
-{{- fail "image.repository is required (the rerun image). Pointing -f at dataverse's values file supplies it." }}
+{{- if not .Values.image.rerun }}
+{{- fail "image.rerun is required: the full rerun image reference, e.g. <registry>/rerun:<tag>. Pointing -f at dataverse's values file supplies it." }}
 {{- end }}
-{{- if not .Values.image.tag }}
-{{- fail "image.tag is required (the rerun image tag). Pointing -f at dataverse's values file supplies it." }}
+{{- if not (splitList "/" .Values.image.rerun | last | contains ":") }}
+{{- fail (printf "image.rerun must include an explicit tag (got %q): an untagged reference means `latest`, which is never published." .Values.image.rerun) }}
 {{- end }}
-{{- printf "%s:%s" .Values.image.repository .Values.image.tag }}
+{{- .Values.image.rerun }}
 {{- end -}}
 
 {{/*

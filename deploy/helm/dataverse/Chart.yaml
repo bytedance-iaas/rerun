@@ -10,8 +10,9 @@ type: application
 # can change without the application changing, and vice versa.
 version: 0.1.0
 
-# The ReRun release this chart targets. Not the image tag — the chart pins no image (image.tag is
-# required at install time), so this tracks the repository version instead.
+# The ReRun release this chart targets. Not the image tag — the chart pins no image (image.rerun,
+# a full tagged reference, is required at install time), so this tracks the repository version
+# instead.
 appVersion: "0.36.0"
 
 keywords:

@@ -43,31 +43,32 @@ app.kubernetes.io/component: {{ .component }}
 {{/* ── Images ──────────────────────────────────────────────────────────────────────────────── */}}
 
 {{/*
-The ReRun image reference. The chart ships no default tag, so catch it here: an empty tag would
-otherwise render as "repo:" and surface much later as a confusing ImagePullBackOff.
+The ReRun image reference, as one full string. The chart ships no default, and the reference must
+carry an explicit tag (or digest) — an untagged one silently means `latest`, which no build ever
+pushes, and would surface much later as a confusing ImagePullBackOff.
 */}}
 {{- define "dataverse.image" -}}
-{{- if not .Values.image.repository }}
-{{- fail "image.repository is required: the registry path holding the rerun image." }}
+{{- if not .Values.image.rerun }}
+{{- fail "image.rerun is required: the full rerun image reference, e.g. <registry>/rerun:<tag>. The chart does not track the image version." }}
 {{- end }}
-{{- if not .Values.image.tag }}
-{{- fail "image.tag is required: the chart does not track the image version. Pass --set image.tag=<tag>." }}
+{{- if not (splitList "/" .Values.image.rerun | last | contains ":") }}
+{{- fail (printf "image.rerun must include an explicit tag (got %q): an untagged reference means `latest`, which is never published." .Values.image.rerun) }}
 {{- end }}
-{{- printf "%s:%s" .Values.image.repository .Values.image.tag }}
+{{- .Values.image.rerun }}
 {{- end -}}
 
 {{/*
-The curation console image. A separate project on its own release cadence, so its tag never
-follows image.tag.
+The curation console image, same rules. A separate project on its own release cadence, so its tag
+never follows the rerun one.
 */}}
 {{- define "dataverse.curator.image" -}}
-{{- if not .Values.curator.image.repository }}
-{{- fail "curator.image.repository is required when curator.enabled=true (the robot_curator image). Set curator.enabled=false to deploy without the curation console." }}
+{{- if not .Values.image.curator }}
+{{- fail "image.curator is required when curator.enabled=true: the full robot_curator image reference, e.g. <registry>/robot_curator:<tag>. Set curator.enabled=false to deploy without the curation console." }}
 {{- end }}
-{{- if not .Values.curator.image.tag }}
-{{- fail "curator.image.tag is required when curator.enabled=true. Pass --set curator.image.tag=<tag>." }}
+{{- if not (splitList "/" .Values.image.curator | last | contains ":") }}
+{{- fail (printf "image.curator must include an explicit tag (got %q): an untagged reference means `latest`, which is never published." .Values.image.curator) }}
 {{- end }}
-{{- printf "%s:%s" .Values.curator.image.repository .Values.curator.image.tag }}
+{{- .Values.image.curator }}
 {{- end -}}
 
 {{- define "dataverse.vllm.image" -}}
@@ -146,20 +147,6 @@ alone. Only consulted when token auth is on.
 {{- .Values.secrets.existingTokenSecret -}}
 {{- end -}}
 
-{{/* ── The curation console ────────────────────────────────────────────────────────────────── */}}
-
-{{/*
-Where the viewer's Diagnose buttons point: an explicit web.curatorUrl, else the same-origin console
-path. Empty when the console is not deployed at all.
-*/}}
-{{- define "dataverse.curatorUrl" -}}
-{{- if .Values.web.curatorUrl }}
-{{- .Values.web.curatorUrl }}
-{{- else if .Values.curator.enabled }}
-{{- .Values.curator.rootPath }}
-{{- end }}
-{{- end -}}
-
 {{/* ── APIG ────────────────────────────────────────────────────────────────────────────────── */}}
 
 {{/*
@@ -177,8 +164,11 @@ Name of the APIGInstance object the Ingresses bind to.
 {{- end -}}
 
 {{/*
-Ingress class. create=false has no safe default — it must match the class the adopted gateway
-declares, so an empty value is a hard error rather than a silently unclaimed Ingress.
+Ingress class. create=false: resolved from the cluster — the adopted gateway's APIGInstance
+reports the platform id in status.id (spec.id only when it was itself adopted), and declares its
+classes in spec.ingress.ingressClasses. lookup is live during install/upgrade (and template
+--dry-run=server), and returns nothing when rendering offline — hence the explicit-value escape
+hatch and the hard error, rather than a default that would leave the Ingress silently unclaimed.
 */}}
 {{- define "dataverse.apig.ingressClassName" -}}
 {{- if .Values.apig.ingressClassName }}
@@ -186,7 +176,17 @@ declares, so an empty value is a hard error rather than a silently unclaimed Ing
 {{- else if .Values.apig.create }}
 {{- printf "%s-apig" (include "dataverse.fullname" .) }}
 {{- else }}
-{{- fail "apig.ingressClassName is required when apig.create=false: it must match the ingress class the adopted gateway declares, and there is no default that could be correct." }}
+{{- $found := "" }}
+{{- range (lookup "loadbalancer.vke.volcengine.com/v1beta1" "APIGInstance" "" "").items }}
+{{- if or (eq (dig "status" "id" "" .) $.Values.apig.existingId) (eq (dig "spec" "id" "" .) $.Values.apig.existingId) }}
+{{- $found = dig "spec" "ingress" "ingressClasses" (list) . | first | default "" }}
+{{- end }}
+{{- end }}
+{{- if $found }}
+{{- $found }}
+{{- else }}
+{{- fail (printf "could not resolve the ingress class for apig.existingId=%q: no APIGInstance in the cluster reports this id (or it declares no ingress classes).\nDuring a real install/upgrade this means the id is wrong — list the gateways:\n  kubectl get apiginstance -A -o custom-columns=NAME:.metadata.name,ID:.status.id,CLASSES:.spec.ingress.ingressClasses\nWhen rendering offline (helm template/lint), the cluster is not reachable — render with --dry-run=server, or set apig.ingressClassName explicitly." .Values.apig.existingId) }}
+{{- end }}
 {{- end }}
 {{- end -}}
 

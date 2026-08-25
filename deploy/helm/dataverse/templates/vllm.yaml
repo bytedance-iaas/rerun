@@ -51,7 +51,7 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.vllm.weightFetch.image.repository }}
+      {{- if .Values.vllm.weightFetch.enabled }}
       initContainers:
         # Weight prefetch: downloads the model onto the GPU node's local disk
         # (emptyDir) — not into the image, not onto TOS.
@@ -59,13 +59,15 @@ spec:
         # instantly, so a pod rebuild does not re-download.
         # Volcengine-internal: it installs oniond from the ivolces mirrors and
         # downloads through it, so it only works inside that network.
+        # The image is the download tool's Debian environment, nothing more —
+        # by default the curator image, which is already around and qualifies.
         - name: fetch-weights
-          image: {{ printf "%s:%s" . ($.Values.vllm.weightFetch.image.tag | default "latest") | quote }}
+          image: {{ .Values.vllm.weightFetch.image | default .Values.image.curator | required "vllm.weightFetch.enabled=true needs a download-container image: image.curator (the default source) is empty and vllm.weightFetch.image is not set" | quote }}
           command: ["bash", "-c"]
           args:
             - |
               set -euo pipefail
-              M=/models/{{ required "vllm.weightFetch.modelName is required whenever vllm.weightFetch.image.repository is set" $.Values.vllm.weightFetch.modelName }}
+              M=/models/{{ required "vllm.weightFetch.modelName is required when vllm.weightFetch.enabled=true" $.Values.vllm.weightFetch.modelName }}
               if ls "$M"/*.safetensors >/dev/null 2>&1 && ! ls "$M"/*.aria2 >/dev/null 2>&1; then
                 echo "weights already complete, skipping download"; exit 0
               fi
@@ -81,7 +83,7 @@ spec:
               install /tmp/x/usr/bin/oniond /usr/local/bin/oniond
               ln -sf /usr/bin/aria2c /usr/local/bin/aria2c_byted
               echo "=== downloading {{ $.Values.vllm.weightFetch.modelName }} to the local disk ==="
-              export BUCKET={{ required "vllm.weightFetch.bucket is required whenever vllm.weightFetch.image.repository is set" $.Values.vllm.weightFetch.bucket }}
+              export BUCKET={{ required "vllm.weightFetch.bucket is required when vllm.weightFetch.enabled=true" $.Values.vllm.weightFetch.bucket }}
               oniond download model {{ $.Values.vllm.weightFetch.modelName }} --turbo --dir /models
               echo "download complete, file count:"; ls -1 "$M" | wc -l
           volumeMounts:
@@ -93,8 +95,13 @@ spec:
           image: {{ include "dataverse.vllm.image" . | quote }}
           imagePullPolicy: {{ .Values.vllm.image.pullPolicy }}
           args:
+            # vllm.model, defaulted to the prefetch landing path so the two can never disagree.
+            {{- $model := .Values.vllm.model }}
+            {{- if and (not $model) .Values.vllm.weightFetch.enabled }}
+            {{- $model = printf "/models/%s" .Values.vllm.weightFetch.modelName }}
+            {{- end }}
             - --model
-            - {{ required "vllm.enabled=true requires vllm.model (a path inside the container, or an HF repo id)" .Values.vllm.model | quote }}
+            - {{ required "vllm.model is required when vllm.weightFetch.enabled=false: an HF repo id for vLLM to pull itself, or a path inside the container" $model | quote }}
             {{- with .Values.vllm.servedModelName }}
             - --served-model-name
             - {{ . | quote }}

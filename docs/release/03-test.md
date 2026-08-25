@@ -80,7 +80,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://$GW_DOMAIN/healthz   # 预期 2
 curl -s https://$GW_DOMAIN/version                                     # 预期返回版本串(catalog,经网关)
 ```
 
-**2.3 web viewer 登录**:浏览器打开 `https://<网关域名>`,弹出登录框;错密码被拒,alice/pwd123 登录后看到 viewer 界面。
+**2.3 web viewer 登录**:浏览器打开 `https://<网关域名>`,弹出登录框;错密码被拒,02-deploy 2.2 建的账号登录后看到 viewer 界面。
 
 **2.4 质检台通行**:同一浏览器打开 `https://<网关域名>/curation`,**不再弹登录框**,直接看到质检台页面。
 
@@ -124,7 +124,7 @@ print([d.name for d in client.datasets()])   # 预期:正常返回(首次为空�
 
 ### 3.3 认证与账号
 
-- 无痕窗口直接开 `https://<域名>/` 与 `/curation` → **都弹登录框**;alice、bob **都能登录两处**(共用一份账号表)。
+- 无痕窗口直接开 `https://<域名>/` 与 `/curation` → **都弹登录框**;2.2 的账号**能登录两处**(共用一份账号表)。
 - 错误密码 → **401 再次弹框**;`/healthz` 无凭证 → **200**(探针豁免)。
 - catalog 三连,用 2.7 的脚本改造:
   - 不带 token → **`PermissionError`(missing credentials)**;
@@ -163,7 +163,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 - PyTorch dataloader(`RerunIterableDataset`)一路的直读分步验证见 [`docs/testing/dataloader-direct-read-test.md`](../testing/dataloader-direct-read-test.md)。
 - 办公网提醒:预签名 URL 指向 TOS 公网 endpoint,办公网读大文件会被限速到 ~100KB/s,能读通但慢;吞吐测试放云内跑。
 
-### 3.6 Daft 质检联动
+### 3.6 Daft 质检联动 <!-- NOLINT: Daft is a proper noun -->
 
 - viewer 里打开 1.1 上传的 TOS 数据集,点 **Diagnose** → **跳到
   `/curation?dataset=tos://…&region=…`,免登录,「数据集 TOS 路径」和

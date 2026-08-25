@@ -17,9 +17,9 @@
 
 # The ReRun image — the same one dataverse runs, at the same field path so `-f` picks it up. Here it
 # runs in MODE=native: the native viewer on a virtual display, served to the browser over noVNC.
+# A full reference including the tag, e.g. <registry>/rerun:<tag>.
 image:
-  repository: ""
-  tag: ""
+  rerun: ""
   pullPolicy: IfNotPresent
 
 # The VNC session password: noVNC asks for it when connecting, so authentication happens at the VNC

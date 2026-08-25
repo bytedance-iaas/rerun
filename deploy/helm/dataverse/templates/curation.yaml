@@ -39,7 +39,7 @@ spec:
         - name: curation
           # The image's entrypoint is `curation` itself.
           image: {{ include "dataverse.curator.image" . | quote }}
-          imagePullPolicy: {{ .Values.curator.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           # --delivery and --data-root point at the local workspace. Batch input and output on the
           # task board are tos:// URLs, so these two directories only carry task state and the
           # placeholder delivery the image drops in to make an empty delivery root start cleanly.
@@ -49,8 +49,10 @@ spec:
             - /data/deliveries
             - --data-root
             - /data/datasets
+            # /curation is fixed: it is also the Ingress route and the path the viewer's Diagnose
+            # buttons derive as a same-origin sibling — one value, nowhere to drift.
             - --root-path
-            - {{ .Values.curator.rootPath | quote }}
+            - /curation
           ports:
             - containerPort: 7860
           env:

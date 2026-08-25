@@ -17,17 +17,18 @@
 # StatefulSet, pod (rerun-cloud-0), Services and PVC (server-data-rerun-cloud-0) are always named
 # `rerun-cloud`, because that component keeps its own identity inside the bundle.
 
-# The ReRun image. One image serves both containers — MODE=web is the nginx + wasm viewer,
-# MODE=server is the catalog server — so there is a single reference for both.
+# The images, as full references including the tag (e.g. <registry>/rerun:<tag>).
+# REQUIRED, and deliberately empty: the chart does not track the images. Builds are tagged per
+# commit and there is no `latest`, so hardcoding a reference here would mean republishing the
+# chart for every build — the chart version and the image versions are not the same thing.
+# ⚠️ Verify a tag exists before deploying: a tag that was never built gives ImagePullBackOff.
 image:
-  # Point this at whichever registry holds your build: your own registry, or a mirror of it.
-  repository: ""
-  # REQUIRED, and deliberately empty: the chart does not track the image. Builds are tagged per
-  # commit and there is no `latest`, so hardcoding one here would mean republishing the chart for
-  # every build — the chart version and the image version are not the same thing.
-  # Pass it at deploy time: `--set image.tag=<tag>`.
-  # ⚠️ Verify the tag exists before deploying: a tag that was never built gives ImagePullBackOff.
-  tag: ""
+  # The ReRun image. One image serves both containers — MODE=web is the nginx + wasm viewer,
+  # MODE=server is the catalog server — so there is a single reference for both.
+  rerun: ""
+  # The robot_curator image, required when curator.enabled=true. A separate project from ReRun,
+  # on its own release cadence, so its tag never follows the rerun one.
+  curator: ""
   pullPolicy: IfNotPresent
 
 # Where the data lives. Everything the viewer, the catalog and the console read or write is a
@@ -65,7 +66,7 @@ secrets:
   #   kubectl -n <namespace> create secret generic dataverse-secrets \
   #       --from-literal=tos_access_key=<ak> \
   #       --from-literal=tos_secret_key=<sk> \
-  #       --from-literal=web_htpasswd="alice:$(openssl passwd -apr1 '<password>')"
+  #       --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"
   #
   # Keys, and what reads them:
   #   tos_access_key / tos_secret_key   REQUIRED — the viewer, the catalog and the console
@@ -106,12 +107,6 @@ web:
   # How many ready-made rrd artifacts the browser downloads in parallel when opening a dataset.
   # 0 = automatic (3 in the browser).
   rrdArtifactsPrefetch: "0"
-
-  # Where the viewer's Diagnose buttons point.
-  # Empty = the same-origin curator.rootPath, which is this chart's own topology (one domain, the
-  # console under /curation) and almost always what you want. Set it only when the console runs
-  # somewhere else entirely, e.g. https://curator.example.com.
-  curatorUrl: ""
 
   # Serving static assets, so it stays small. The heavy lifting happens in the browser.
   resources:
@@ -168,19 +163,11 @@ curator:
   # false drops the console, its site-configuration ConfigMap and its Ingress path together.
   enabled: true
 
-  image:
-    # The robot_curator image. A separate project from ReRun, on its own release cadence, so its
-    # tag never follows image.tag — both fields are required when the console is enabled.
-    repository: ""
-    tag: ""
-    pullPolicy: IfNotPresent
+  # The console's image is image.curator (top-level, next to the rerun one).
 
-  # The URL path the console is served under, on the same domain as the viewer. One value, two
-  # uses: it is the console's own --root-path (it registers every route under it, and the gateway
-  # does not strip the prefix), and it is the Ingress path that routes to it.
-  # ⚠️ /curation is also the viewer's built-in fallback for the Diagnose buttons. Changing this
-  #    means setting web.curatorUrl to match, or those buttons land on a 404.
-  rootPath: /curation
+  # The console's URL path is fixed at /curation (its --root-path, the Ingress route, and the
+  # viewer's built-in Diagnose-button target are all this one value — the viewer derives it as a
+  # same-origin sibling path, so there is nothing to configure and nothing to keep in sync).
 
   # The Terminal tab: an embedded web terminal on a real shell, behind the same Basic auth as the
   # rest of the console. Useful for triage. false does not render the tab and does not register the
@@ -232,11 +219,12 @@ vllm:
     tag: latest
     pullPolicy: IfNotPresent
 
-  # The model: either a path inside the container (weights fetched into an emptyDir by weightFetch
-  # below, landing at /models/<modelName>), or an HF repo id for vLLM to pull itself — for that,
-  # leave weightFetch.image.repository empty and pair it with the Secret's hf_token key plus
-  # catalog.hfEndpoint.
-  model: /models/Cosmos-Reason2-32B
+  # What vLLM loads. Empty = derived: with weightFetch on (the default) this becomes the prefetch
+  # landing path /models/<weightFetch.modelName>, so changing the model only means changing
+  # modelName. With weightFetch off it is REQUIRED — write the HF repo id for vLLM to pull itself
+  # (pair it with the Secret's hf_token key plus catalog.hfEndpoint). An explicit value always
+  # wins, e.g. a path to weights the image already carries.
+  model: ""
 
   # The model name the OpenAI-compatible API advertises, and the name the console sends requests
   # under — the two have to match, which is why the registered backend's `model` field is taken
@@ -272,18 +260,20 @@ vllm:
   # generous with even on a single GPU.
   dshmSize: 16Gi
 
-  # Optional weight prefetch: an initContainer that downloads the model onto the GPU node's local
-  # disk (an emptyDir) before vLLM starts — not into the image, not onto TOS. It is idempotent, so
-  # a pod rebuild skips the download.
-  # ⚠️ Empty repository = no init container, and vLLM then pulls the model from HuggingFace itself.
-  #    That is the portable default; the download path below is Volcengine-internal (oniond plus
-  #    the ivolces mirrors) and only works inside that network.
+  # Weight prefetch: an initContainer that downloads the model onto the GPU node's local disk (an
+  # emptyDir) before vLLM starts — not into the image, not onto TOS. It is idempotent, so a pod
+  # rebuild skips the download. ON by default, so vllm.enabled=true works with no further values:
+  # the defaults (this, modelName, model, servedModelName) all line up.
+  # ⚠️ The download path is Volcengine-internal (oniond plus the ivolces mirrors). On a cluster
+  #    outside that network, set enabled=false — vLLM then pulls the model from HuggingFace itself
+  #    (write an HF repo id into vllm.model, and see the Secret's hf_token key plus
+  #    catalog.hfEndpoint).
   weightFetch:
-    # Any image that can install oniond and run aria2 — the curator image already can, so pointing
-    # this at curator.image.repository/tag is the usual choice.
-    image:
-      repository: ""
-      tag: ""
+    enabled: true
+    # The DOWNLOAD container's image (not the one vLLM runs on): any Debian image that can install
+    # oniond and run aria2. Empty = reuse image.curator, which already can — the usual choice.
+    # Fill in a full reference only to use something else.
+    image: ""
     # The bucket oniond downloads from.
     bucket: ai-infra
     # The model oniond downloads (`oniond download model <modelName> --dir /models`). The weights
@@ -298,7 +288,7 @@ vllm:
 
 # The public HTTPS entry point, through Volcengine APIG. The gateway terminates TLS on an
 # auto-assigned *.volceapi.com domain and routes by host and path: `/` to the viewer,
-# curator.rootPath to the console, the catalog's HTTP and gRPC paths to the catalog server.
+# /curation to the console, the catalog's HTTP and gRPC paths to the catalog server.
 #
 # Authentication deliberately does not happen at the gateway — a gateway-level JWT would make the
 # pages unopenable in a browser. The backends authenticate instead, which is why the chart refuses
@@ -360,10 +350,14 @@ apig:
   publicNetworkBandwidth: ""      # Mbps, e.g. 200
 
   # One gateway per ingress class: pointing two releases at the same class routes them to one
-  # gateway. Default is <release>-apig, which is unique as long as release names are.
-  # ⚠️ create=false: this must be the class the ADOPTED gateway declares, not the default.
+  # gateway. Normally leave this EMPTY — create=true names the class itself (<release>-apig), and
+  # create=false resolves it from the cluster during install/upgrade: the adopted gateway's
+  # APIGInstance declares its classes, and this chart takes the one whose id matches existingId
+  # (a wrong id fails the install with the list of gateways). Set it explicitly only to render
+  # offline (helm template without a cluster), or to override the resolution.
   # The rerun-native-session chart hangs its own Ingress off this same class, so whatever this
-  # resolves to is what that chart's ingress.className has to be set to.
+  # resolves to is what that chart's ingress.className has to be set to — the resolved value is
+  # printed in this chart's install notes.
   ingressClassName: ""
 
   # Internal placeholder host, never public DNS — it is only the key APIG routes on, and each

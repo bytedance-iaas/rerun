@@ -1,12 +1,23 @@
 #!/bin/sh
 # One image, three modes:
-#   MODE=web (default) — nginx serving the wasm web viewer + /tos-config.json  (port 80)
-#   MODE=native        — the native viewer on a virtual display, via noVNC     (port 8080)
-#   MODE=server        — the rerun catalog server with tos:// registration and
-#                        a persistent catalog                                  (port 51234)
+#   MODE=web    — nginx serving the wasm web viewer + /tos-config.json  (port 80)
+#   MODE=native — the native viewer on a virtual display, via noVNC     (port 8080)
+#   MODE=server — the rerun catalog server with tos:// registration and
+#                 a persistent catalog                                  (port 51234)
 set -eu
 
-MODE="${MODE:-web}"
+# require_env VAR — fail loudly if VAR is unset or empty. The deployment (the Helm chart) is the
+# single source of truth for these values; the entrypoint deliberately carries no fallback default,
+# so a chart that forgets to set one surfaces here instead of silently running with a stand-in.
+require_env() {
+    eval "_value=\${$1:-}"
+    if [ -z "$_value" ]; then
+        echo "Missing required environment variable: $1" >&2
+        exit 1
+    fi
+}
+
+require_env MODE
 
 # Read secrets mounted by docker/k8s; env vars as fallback.
 read_secret() {
@@ -40,18 +51,25 @@ AUTH
         echo "web: no web_htpasswd secret — serving without authentication"
     fi
 
-    # Server-side defaults for the browser dialogs. The default credentials are used
-    # unless the user opts into "Use non-default AK/SK" in the dialog.
+    # Endpoint/region/bucket come from the deployment — fail loudly rather than baking in a stand-in
+    # that would quietly point the browser at the wrong TOS.
+    require_env TOS_ENDPOINT
+    require_env TOS_REGION
+    require_env TOS_RRD_ARTIFACTS_URL
+    require_env RRD_ARTIFACTS_PREFETCH
+
+    # tos_access_key/tos_secret_key/hf_token are the server-side defaults for the browser dialogs
+    # (used unless the user opts into "Use non-default AK/SK"). No daft_url: the viewer derives the
+    # curation console as the same-origin /curation sibling path on its own.
     cat > /run/tos-config.json <<EOF
 {
-  "tos_endpoint": "${TOS_ENDPOINT:-https://tos-s3-cn-beijing.volces.com}",
-  "tos_region": "${TOS_REGION:-cn-beijing}",
+  "tos_endpoint": "${TOS_ENDPOINT}",
+  "tos_region": "${TOS_REGION}",
   "tos_access_key": "${TOS_AK}",
   "tos_secret_key": "${TOS_SK}",
   "hf_token": "${HF_TOKEN_VALUE}",
-  "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL:-tos://physical-ai-rerun-test/rrd-data/}",
-  "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH:-0},
-  "daft_url": "${DAFT_URL:-}"
+  "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL}",
+  "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH}
 }
 EOF
     chmod 644 /run/tos-config.json
@@ -66,7 +84,8 @@ native)
     export TOS_SECRET_KEY="$TOS_SK"
     export HF_TOKEN="$HF_TOKEN_VALUE"
 
-    GEOMETRY="${SESSION_GEOMETRY:-1280x800}"
+    require_env SESSION_GEOMETRY
+    GEOMETRY="$SESSION_GEOMETRY"
 
     # Optional session password: with a `session_password` secret (or SESSION_PASSWORD
     # env), the VNC handshake requires it — noVNC prompts for it in the browser before

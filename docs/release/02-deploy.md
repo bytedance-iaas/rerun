@@ -63,7 +63,7 @@ git checkout <分支名> # like: release_v1
 前者只在本产品内部用(签发/验证 catalog token),后者是云厂商的账户凭证,两者互填部署都起不来且报错不直观。
 
 所有密钥都用 kubectl 直接建成集群里的 Secret,helm 只引用名字,密钥不出现在 values 文件和 helm 发布记录里。
-本机磁盘上只留一份 gitignore 挡住的 AK/SK 文件(方便多条命令引用);token 签名密钥全程不落盘,只存在于集群中,签发 token 也在集群内完成(第 5 节)。
+凭证只进当前终端的环境变量和集群 Secret,不落盘;token 签名密钥同样全程不落盘,只存在于集群中,签发 token 也在集群内完成(第 5 节)。
 
 先构建 rerun 二进制,生成签名密钥要用它(已有 `./target/release/rerun` 就跳过这步):
 
@@ -74,16 +74,20 @@ cargo build --release --package rerun-cli --no-default-features --features relea
 定下部署用的 namespace 并创建(后文所有命令都引用这个变量,新开终端要重新 export):
 
 ```sh
-export RERUN_NS=rerun   # 换成你要的名字;同一集群装第二套时换个名字即可互不干扰
-kubectl create namespace $RERUN_NS
+export DATAVERSE_NS=dataverse   # 换成你要的名字;同一集群装第二套时换个名字即可互不干扰
+kubectl create namespace $DATAVERSE_NS
 ```
 
-把 AK/SK 和火山方舟API KEY读进当前终端的环境变量:
+把 AK/SK、火山方舟 API KEY 和 web 登录账号读进当前终端的环境变量(后文命令都引用这些变量,新开终端要重新 export):
 
-```
+```sh
 export TOS_ACCESS_KEY="##############"
-export TOS_SECRET_KEY=="##############"
-export ARK_API_KEY=="##############"
+export TOS_SECRET_KEY="##############"
+export ARK_API_KEY="##############"
+
+# web viewer / 质检台的登录账号:
+export WEB_USER="##############"
+export WEB_PASS="##############"
 ```
 
 创建两个 Secret(名字与下一节 values 里的引用一一对应):
@@ -92,24 +96,21 @@ export ARK_API_KEY=="##############"
 # 1) 应用凭证:AK/SK + 登录账号表。
 #    AK/SK 是各组件访问 TOS 的凭证:web viewer 靠它让浏览器直读数据集并回写
 #    rrd 缓存,catalog server 靠它读桶和给训练侧签预签名 URL,native 会话同样复用。
-#    账号表的 key 名叫 web_htpasswd,指的是它的【格式】(Apache 密码表:每行
+#    账号表的 key 名叫 web_htpasswd,指的是它的【格式】(Apache 密码表:
 #    「用户名:密码哈希」,nginx 和质检台都认这个格式验证),不需要 htpasswd 工具,
-#    哈希由 openssl 现场生成,账号表只存在于这个 Secret 里。
-#    示例建两个账号 —— alice 密码 pwd123,bob 密码 pwd456(换成你要的;
-#    访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>)。
+#    哈希由 openssl 现场生成,账号表只存在于这个 Secret 里
+#    (访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>)。
 #    ark_api_key 是质检台走火山方舟 VLM 后端用的 key(配套 base url 是普通配置,
 #    在 2.3 的 curator.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行:
-kubectl -n $RERUN_NS create secret generic dataverse-secrets \
+kubectl -n $DATAVERSE_NS create secret generic dataverse-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
     --from-literal=ark_api_key="$ARK_API_KEY" \
-    --from-literal=web_htpasswd="$(printf '%s\n%s\n' \
-        "alice:$(openssl passwd -apr1 'pwd123')" \
-        "bob:$(openssl passwd -apr1 'pwd456')")"
+    --from-literal=web_htpasswd="$WEB_USER:$(openssl passwd -apr1 "$WEB_PASS")"
 
 # 2) token 签名密钥:管道直建,不落盘、不进 shell 历史。只生成这一次;
 #    它在集群里只会以 0400 权限的文件挂进 catalog 容器,web / native 会话都看不到。
-./target/release/rerun server generate-secret | kubectl -n $RERUN_NS \
+./target/release/rerun server generate-secret | kubectl -n $DATAVERSE_NS \
     create secret generic rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
 ```
 
@@ -118,24 +119,20 @@ kubectl -n $RERUN_NS create secret generic dataverse-secrets \
 创建 `deploy/secrets/values-prod.yaml`(目录不存在先 `mkdir -p deploy/secrets`;该目录已被 gitignore 挡住),按注释替换尖括号里的值:
 
 ```yaml
-# 镜像仓库地址与 tag 分开填:chart 不跟踪镜像版本,tag 每次构建都不同,必须显式给。
+# 完整镜像地址(必须带 tag):chart 不跟踪镜像版本,tag 每次构建都不同,必须显式给。
 image:
-  repository: <rerun 镜像仓库地址>
-  tag: <rerun 镜像 tag>
-
-curator:
-  image:
-    repository: <robot_curator 镜像仓库地址>
-    tag: <robot_curator 镜像 tag>
+  rerun: <仓库地址>/rerun:<tag>
+  curator: <仓库地址>/robot_curator:<tag>
 
 apig:
   # 复用集群里已有的 APIG 网关(推荐):create 保持 false,填平台实例 id —— APIG 控制台
   # https://console.volcengine.com/veapig → 实例列表里那一串。
-  # 复用时不需要 subnetIds(网关和它的前置 CLB 都已存在),但必须填该网关声明的
-  # ingressClass,否则它不会接管本 release 的 Ingress。
+  # 复用时不需要 subnetIds(网关和它的前置 CLB 都已存在);网关声明的 ingressClass
+  # 会在安装时自动从集群反查出来,不用填(id 填错会直接安装报错,并附上列出
+  # 集群里所有网关的命令)。只有离线渲染(helm template 不连集群)才需要显式
+  # 加一行 ingressClassName: <该网关声明的 class>。
   create: false
   existingId: <apig 实例 id>
-  ingressClassName: <该网关声明的 ingressClass>
 
   # —— 或者:新建独立网关(见 2.4)。改用这种方式时,把 create 改成 true、
   #    删掉 existingId(留着会写死 CRD 的不可变字段 spec.id,后续所有 upgrade 都会被拒),
@@ -180,13 +177,75 @@ chart 不接受明文密钥输入,也不会自己渲染 Secret:helm 的 release 
 - ⚠️ 这样建出来的网关会被 `helm uninstall` 一起删掉,自动分配的 `*.volceapi.com` 域名随之失效;
   想保住它,**在卸载之前**先 `apig.retainOnDelete=true` 跑一次 upgrade。
 
+### 2.5 启用自带的 vLLM 后端(可选)
+
+质检台的模型检查需要一个 VLM 后端,默认走火山方舟(2.2 的 `ark_api_key`,已配好)。
+chart 还内置了一套 **vLLM 部署**,默认关闭(`vllm.enabled: false`,因为要 GPU);
+打开后它会自动以 `self-hosted` 为名注册进质检台的后端列表,界面里直接可选,不用手抄任何地址。
+
+前提:集群里有 NVIDIA GPU 节点(`nvidia.com/gpu` 资源可分配)。
+默认参数已按"32B 模型 + 单张 96GB GPU"调好(显存利用率、上下文长度等,见 values 里 `vllm.extraArgs` 的注释)。
+
+vLLM 本体用的是**公开镜像**(`vllm/vllm-openai`,chart 默认已配好走 daocloud 代理,不用填);
+模型权重默认由一个下载容器在 vLLM 启动前**经火山内网预取**到 GPU 节点本地盘(下载容器镜像自动复用 `image.curator`,同样不用填)。
+所以 values 文件里只需要:
+
+```yaml
+vllm:
+  enabled: true
+
+  # 以下都可不配。默认跑 Cosmos-Reason2-32B,需要单张 96GB 显存的卡。
+
+  # 可选:换模型 —— 两行一起改(下面以 8B 为例,单张 24GB 卡就能跑):
+  # weightFetch:
+  #   modelName: Cosmos-Reason2-8B             # 下载哪个模型(加载路径自动跟着它)
+  # servedModelName: nvidia/Cosmos-Reason2-8B  # API 对外报的模型名
+
+  # 可选:钉到指定 GPU 节点。不填则调度器自己挑 —— 注意它只认 GPU【数量】不认显存,
+  # 集群里混着不同显存的卡时,建议钉到显存够的节点上:
+  # nodeHostname: <节点的 kubernetes.io/hostname>
+```
+
+要点:
+
+- 权重落在 GPU 节点本地盘(emptyDir),不进镜像也不占 TOS;pod 重建时下载是幂等的,已完整就秒过。
+  节点本地盘要留出模型体量的空间(32B fp16 约 64GB)。
+- 大模型加载慢是正常的,就绪探针给了约 10 分钟窗口;`kubectl -n $DATAVERSE_NS get pods` 看到 vllm pod Ready 即可用。
+- 显存不够(OOM)或嫌上下文太小:`gpuCount: 2`,并在 `extraArgs` 里加 `--tensor-parallel-size` 和 `"2"` 两行。
+  GPU 节点有污点或要挑卡型,用 `vllm.tolerations` / `vllm.nodeSelector`。
+- 部署完成后再开也一样:改 values 后 `helm upgrade`(第 7 节),质检台自动滚动,后端列表里出现 `self-hosted`。
+- 内网预取(oniond + ivolces 镜像源)只在火山云内可用。集群不在火山云时改从 HuggingFace 直拉
+  (走默认的 hf-mirror 镜像;私有模型再往 2.2 的 dataverse-secrets 里补一个 hf_token key):
+
+  ```yaml
+  vllm:
+    enabled: true
+    weightFetch:
+      enabled: false                        # 关掉内网预取,vLLM 自己拉
+    model: nvidia/Cosmos-Reason2-32B        # 改写 HF repo id(默认是本地路径)
+    servedModelName: nvidia/Cosmos-Reason2-32B
+  ```
+
+另外,如果你**已有现成的** vLLM(或任何 OpenAI 兼容)推理服务,不想让 chart 再拉一套,
+就不开 `vllm.enabled`,把服务地址登记进 `curator.vlmBackends`(质检台没有自动发现,不登记就选不到):
+
+```yaml
+curator:
+  vlmBackends:
+    my-vllm:                                  # 界面里显示的后端名,自己起
+      endpoint: http://<服务地址>:8000/v1      # OpenAI 兼容地址,以 /v1 结尾,须从质检台 pod 可达
+      model: <模型名>                          # 与该服务的 --served-model-name 一致
+```
+
+两者可并存;`vlmBackends` 里出现同名 `self-hosted` 条目时,以你写的为准。
+
 ## 3. 安装
 
 namespace 和密钥都已在 2.2 就位,安装就一条命令:
 
 ```sh
 helm install dataverse deploy/helm/dataverse \
-    -n $RERUN_NS \
+    -n $DATAVERSE_NS \
     -f deploy/secrets/values-prod.yaml
 ```
 
@@ -196,10 +255,10 @@ helm install dataverse deploy/helm/dataverse \
 ### 4.1 等资源就绪
 
 ```sh
-kubectl -n $RERUN_NS get pods
+kubectl -n $DATAVERSE_NS get pods
 # 预期:rerun-cloud-0 2/2 Running,dataverse-curation-0 1/1 Running
 
-kubectl get apiginstance -n $RERUN_NS
+kubectl get apiginstance -n $DATAVERSE_NS
 # 等 PHASE=Running(偶发返回空列表,重试确认,不要据此断言实例不存在)
 ```
 
@@ -229,9 +288,8 @@ export GW_DOMAIN=<控制台查到的域名>   # 例 xxxx.apigateway-cn-beijing.v
 **手动后备**(关闭了自动配置、或 AK/SK 无桶管理权限时):
 
 ```sh
-# AK/SK 环境变量沿用 2.2 的 tos-keys.env(新开终端重新 source 即可),
+# AK/SK 环境变量沿用 2.2 的 export(新开终端要重新 export),
 # 对每个需要浏览器直读的桶执行,参数格式 = <桶名>.<TOS S3 公网域名>
-set -a; source deploy/secrets/tos-keys.env; set +a
 deploy/enable-cors.sh curation.tos-s3-cn-beijing.volces.com physical-ai-rerun-test.tos-s3-cn-beijing.volces.com <其他桶…>
 ```
 
@@ -254,11 +312,11 @@ token 的签发见第 5 节。
 签发在 **catalog 容器内**执行 — 签名密钥只存在于集群里(0400 文件),不出集群;因此**能签发 token 的人 = 有该 namespace `kubectl exec` 权限的人**,由集群 RBAC 管控:
 
 ```sh
-kubectl -n $RERUN_NS exec rerun-cloud-0 -c catalog -- sh -c \
+kubectl -n $DATAVERSE_NS exec rerun-cloud-0 -c catalog -- sh -c \
     "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
         --user zhang --permission read --expiration 90d \
         --server-host $GW_DOMAIN \
-        --server-host rerun-cloud-headless.$RERUN_NS.svc.cluster.local"
+        --server-host rerun-cloud-headless.$DATAVERSE_NS.svc.cluster.local"
 ```
 
 - `--permission` 取 `read` 或 `read-write`(注册数据集需要后者);
@@ -275,13 +333,13 @@ kubectl -n $RERUN_NS exec rerun-cloud-0 -c catalog -- sh -c \
 ```sh
 # 会话密码只能来自 Secret,chart 不接受明文输入(理由同 2.2:values 会原样进 release 记录)。
 # 先建这个会话专属的 Secret,key 必须是 session_password:
-kubectl -n $RERUN_NS create secret generic <unique_name>-vnc \
+kubectl -n $DATAVERSE_NS create secret generic <unique_name>-vnc \
     --from-literal=session_password=<会话密码>
 
 # 开一个会话,release 名 = 用户名(小写字母/数字/中划线)。
 # 直接复用 2.3 的 values 文件(镜像、缓存桶、凭证 Secret 全部沿用),
 # 只需另给会话密码 Secret 的名字:
-helm install <unique_name> deploy/helm/rerun-native-session -n $RERUN_NS \
+helm install <unique_name> deploy/helm/rerun-native-session -n $DATAVERSE_NS \
     -f deploy/secrets/values-prod.yaml \
     --set existingPasswordSecret=<unique_name>-vnc
 
@@ -290,14 +348,14 @@ helm install <unique_name> deploy/helm/rerun-native-session -n $RERUN_NS \
 # 输入会话密码,即进入云上原生 viewer 的远程桌面。
 
 # 用完删掉(占着节点资源),密码 Secret 一并清掉:
-helm uninstall <unique_name> -n $RERUN_NS
-kubectl -n $RERUN_NS delete secret <unique_name>-vnc
+helm uninstall <unique_name> -n $DATAVERSE_NS
+kubectl -n $DATAVERSE_NS delete secret <unique_name>-vnc
 ```
 
 不想走公网:加 `--set ingress.enabled=false`,然后
 
 ```sh
-kubectl -n $RERUN_NS port-forward pod/rerun-native-qian 9092:8080
+kubectl -n $DATAVERSE_NS port-forward pod/rerun-native-qian 9092:8080
 # 浏览器打开 http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=scale
 ```
 
@@ -306,35 +364,32 @@ kubectl -n $RERUN_NS port-forward pod/rerun-native-qian 9092:8080
 升级(改了 values 之后执行):
 
 ```sh
-helm upgrade dataverse deploy/helm/dataverse -n $RERUN_NS \
+helm upgrade dataverse deploy/helm/dataverse -n $DATAVERSE_NS \
     -f deploy/secrets/values-prod.yaml
 ```
 
 改密钥(密钥在集群 Secret 里,不归 helm 管;chart 看不到内容,改完必须手动重启生效)。
-以增删登录账号为例:重跑 2.2 的建 Secret 命令,带上**完整的目标账号列表**(该命令就是账号表的唯一权威来源),末尾加 `--dry-run=client -o yaml | kubectl apply -f -` 变成覆盖写,然后重启。
+以改登录账号/密码为例:重新 export `WEB_USER`/`WEB_PASS`,重跑 2.2 的建 Secret 命令,末尾加 `--dry-run=client -o yaml | kubectl apply -f -` 变成覆盖写,然后重启。
 注意这是**整份覆盖**:命令里没列的 key 会被一并抹掉,所以 2.2 建过的可选 key(`ark_api_key`、`hf_token` 等)这次也要照带,漏了就等于删掉。
 
 ```sh
-# 先确保 AK/SK 环境变量已就位:set -a; source deploy/secrets/tos-keys.env; set +a
-kubectl -n $RERUN_NS create secret generic dataverse-secrets \
+# 先确保 2.2 的环境变量都已 export(新开终端要重新 export):
+kubectl -n $DATAVERSE_NS create secret generic dataverse-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
-    --from-literal=ark_api_key="<火山方舟 API key>" \
-    --from-literal=web_htpasswd="$(printf '%s\n%s\n%s\n' \
-        "alice:$(openssl passwd -apr1 'pwd123')" \
-        "bob:$(openssl passwd -apr1 'pwd456')" \
-        "carol:$(openssl passwd -apr1 'pwd789')")" \
+    --from-literal=ark_api_key="$ARK_API_KEY" \
+    --from-literal=web_htpasswd="$WEB_USER:$(openssl passwd -apr1 "$WEB_PASS")" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl -n $RERUN_NS rollout restart statefulset rerun-cloud dataverse-curation
+kubectl -n $DATAVERSE_NS rollout restart statefulset rerun-cloud dataverse-curation
 ```
 
 卸载:
 
 ```sh
-helm uninstall dataverse -n $RERUN_NS
+helm uninstall dataverse -n $DATAVERSE_NS
 # kubectl 直建的 Secret 不归 helm 管,如需彻底清理:
-# kubectl -n $RERUN_NS delete secret dataverse-secrets rerun-catalog-server-secrets
+# kubectl -n $DATAVERSE_NS delete secret dataverse-secrets rerun-catalog-server-secrets
 ```
 
 注意:
