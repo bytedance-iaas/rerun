@@ -2,7 +2,7 @@
 //!
 //! Web viewer only. The console lives behind the same gateway domain as the web viewer
 //! (`/` = viewer, `/curation` = console), so the web viewer can always derive the target;
-//! a deployment can override it via `daft_url` in `tos-config.json`.
+//! a deployment can override it via `daft_url` in `config.json`.
 //!
 //! The native viewer deliberately has no part in this: the console's public domain is
 //! assigned platform-side and is not discoverable from anywhere the native viewer runs

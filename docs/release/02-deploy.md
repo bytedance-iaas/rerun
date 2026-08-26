@@ -285,15 +285,11 @@ export GW_DOMAIN=<控制台查到的域名>   # 例 xxxx.apigateway-cn-beijing.v
 - 不希望服务自动改桶配置时,values 里 `catalog.autoCors.enabled=false` 关闭;
 - 重装换域名后浏览器若报跨域/Failed to fetch,先换无痕窗口试:无痕能开 = 桶没问题,是浏览器缓存了旧域名时代的响应(清缓存硬刷新即可,见 [03-test.md](03-test.md) 排查一节)。
 
-**手动后备**(关闭了自动配置、或 AK/SK 无桶管理权限时):
+**手动后备**(关闭了自动配置、或 AK/SK 无桶管理权限时):在 TOS 控制台给桶手动加一条 CORS 规则,内容照抄自动配置写的那条:
 
-```sh
-# AK/SK 环境变量沿用 2.2 的 export(新开终端要重新 export),
-# 对每个需要浏览器直读的桶执行,参数格式 = <桶名>.<TOS S3 公网域名>
-deploy/enable-cors.sh curation.tos-s3-cn-beijing.volces.com physical-ai-rerun-test.tos-s3-cn-beijing.volces.com <其他桶…>
-```
-
-也可在 TOS 控制台手动配置,方法(GET/HEAD/PUT)和 ExposeHeader 照抄脚本里的 XML,origin 务必用通配符。
+- 允许来源(AllowedOrigin):`https://*.apigateway-<region>.volceapi.com`(务必用通配符;本地 docker 调试再加 `http://127.0.0.1:9091`);
+- 允许方法:GET、HEAD、PUT、DELETE;允许 Header:`*`;
+- 暴露 Header(ExposeHeader)必须逐个列全:`ETag`、`Content-Range`、`Content-Length`、`x-amz-meta-rerun-fingerprint`、`x-amz-meta-rerun-source-url` —— 少了指纹那个,rrd 缓存查询会全部静默失效,表现为明明有缓存却每次重新转换。
 
 ### 4.4 catalog 的入口与安全
 

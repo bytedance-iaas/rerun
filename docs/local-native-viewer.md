@@ -37,30 +37,43 @@ To stream a remote LeRobot dataset, open the viewer and use the menu:
 The "Open from …" dialogs always let you type in the endpoint, dataset URL, and credentials by hand, so no configuration is required.
 
 For convenience you can pre-fill the non-secret defaults (and, if you want, the credentials) so you do not retype them every run.
-On the web these defaults come from a `tos-config.json` served next to the viewer.
+On the web these defaults come from a `config.json` served next to the viewer.
 The local native viewer reads the same file from your machine, in this order:
 
-1. The path in the `RERUN_TOS_CONFIG` environment variable, if set.
-2. Otherwise `~/.rerun/tos-config.json`.
+1. The path in the `RERUN_CONFIG` environment variable, if set.
+2. Otherwise `config.json` in the `.rerun` directory under your home directory — the exact path depends on your OS:
+
+| OS | Path |
+|---|---|
+| Linux / macOS | `~/.rerun/config.json` |
+| Windows | `%USERPROFILE%\.rerun\config.json` (typically `C:\Users\<you>\.rerun\config.json`) |
 
 Environment variables — `TOS_ENDPOINT`, `TOS_REGION`, `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, `HF_TOKEN` — override the corresponding file fields when they are set.
 
-Example `~/.rerun/tos-config.json`:
+Example `config.json`:
 
 ```json
 {
   "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
-  "tos_region": "cn-beijing",
   "tos_access_key": "AK…",
   "tos_secret_key": "SK…",
   "hf_token": "hf_…",
-  "tos_rrd_artifacts_url": "tos://physical-ai-rerun-test/rrd-data/",
+  "hf_endpoint": "",
+  "tos_rrd_artifacts_url": "tos://<your-rrd-cache-path>/",
   "rrd_artifacts_prefetch": 0
 }
 ```
 
+There is no region key: the region is derived from the endpoint hostname.
+`tos_endpoint` pairs with `tos_rrd_artifacts_url` — set it to the endpoint of the region the rrd cache bucket lives in; the cache bucket is accessed through it.
+Datasets can live in any region: the "Open from …" dialog's Region dropdown picks their region per dataset.
+
+`hf_endpoint` overrides the Hugging Face hub base URL — set it to a mirror such as `https://hf-mirror.com` where huggingface.co is unreachable.
+Absent/empty = the official `https://huggingface.co`; the `HF_ENDPOINT` environment variable wins over the file.
+
 `tos_rrd_artifacts_url` is where converted rrd artifacts are stored (read + write-back), shared by all viewers.
-When the key is absent the default bucket above is used; set it to `"off"` (or use `TOS_RRD_ARTIFACTS_URL=off`) to disable the artifacts store.
+There is no default bucket: an absent key (or `""`/`"off"`, also via `TOS_RRD_ARTIFACTS_URL`) disables the artifacts store.
+Point it at the same bucket your deployment uses so locally-opened datasets hit the shared cache.
 
 `rrd_artifacts_prefetch` is how many ready-made rrd artifacts to download at once when opening a dataset (also `RRD_ARTIFACTS_PREFETCH`).
 `0` (or absent) picks the automatic default — 3 in the browser (its ~6-connections-per-host budget), 4 in the native viewer; explicit values are capped at 16.
@@ -70,7 +83,9 @@ Omit `tos_access_key`/`tos_secret_key` and the dialog will ask for credentials w
 The credential fields are never shown in the dialog unless you opt into overriding them, and they are never written back to disk by the viewer.
 
 > Note: this file can hold secrets (`tos_secret_key`, `hf_token`).
-> Keep it readable only by your user (`chmod 600 ~/.rerun/tos-config.json`) and do not commit it.
+> Keep it readable only by your user and do not commit it.
+> On Linux/macOS: `chmod 600 ~/.rerun/config.json`.
+> On Windows the file sits under your user profile, which other standard users cannot read — no extra step needed.
 
 ## Corporate networks: `RERUN_HTTP_KEEP_ALIVE=0`
 

@@ -54,7 +54,7 @@ server 给查询命中的每个 chunk 预签名并回传 `(url, offset, length)`
    ```
 
 4. **本机有 TOS 凭证**(仅 `direct=True` 需要;`direct="presigned"` 完全不需要 —— server 帮你签名)。
-   直连读 TOS 的凭证从**环境变量**来,不是从 viewer 的 `~/.rerun/tos-config.json`:
+   直连读 TOS 的凭证从**环境变量**来,不是从 viewer 的 `~/.rerun/config.json`:
 
    ```sh
    export TOS_ENDPOINT=https://tos-s3-cn-beijing.volces.com   # 办公网用公网 endpoint

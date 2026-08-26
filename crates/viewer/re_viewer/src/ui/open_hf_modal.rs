@@ -7,7 +7,7 @@ use re_ui::UiExt as _;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 
-/// Server-side Hugging Face defaults, served by the deployment at `/tos-config.json`.
+/// Server-side Hugging Face defaults, served by the deployment at `/config.json`.
 ///
 /// The deployment can hold a default token (injected as a docker secret); it is used unless the
 /// user opts into providing their own. The token is never shown in the dialog.
@@ -16,15 +16,16 @@ use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 struct ServerHfConfig {
     hf_token: String,
 
+    /// Hub base-URL override (e.g. a mirror); empty = the official huggingface.co.
+    hf_endpoint: String,
+
     // The rrd artifacts store lives in a TOS bucket regardless of the dataset's source, so the HF dialog
     // needs the TOS connection settings too (same keys, same config file).
     tos_endpoint: String,
     tos_access_key: String,
     tos_secret_key: String,
 
-    /// Where converted rrds are stored; an absent key means the default bucket,
-    /// `""`/`"off"` disables the artifacts store.
-    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     tos_rrd_artifacts_url: String,
 
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
@@ -35,11 +36,11 @@ impl Default for ServerHfConfig {
     fn default() -> Self {
         Self {
             hf_token: String::new(),
+            hf_endpoint: String::new(),
             tos_endpoint: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
-            // The artifacts store is on by default, even with no config file at all.
-            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            tos_rrd_artifacts_url: String::new(),
             rrd_artifacts_prefetch: 0,
         }
     }
@@ -84,7 +85,7 @@ pub struct OpenHfModal {
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
 
-    /// Filled asynchronously from the server's `/tos-config.json` (web only).
+    /// Filled asynchronously from the server's `/config.json` (web only).
     /// `Err` holds why the fetch failed — shown in the dialog: without this config the
     /// rrd artifacts store has no credentials and silently degrades to mp4 conversion.
     server_config: Arc<Mutex<Option<Result<ServerHfConfig, String>>>>,
@@ -112,7 +113,7 @@ impl OpenHfModal {
         }
         self.server_config_requested = true;
 
-        // On the web the viewer is served next to `/tos-config.json`; natively there is no
+        // On the web the viewer is served next to `/config.json`; natively there is no
         // server, so read the same file from the user's config dir and let env vars override.
         #[cfg(target_arch = "wasm32")]
         {
@@ -120,12 +121,15 @@ impl OpenHfModal {
             // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
             // default (`Omit`) tells the browser to strip the authenticated session,
             // turning every fetch into a 401.
-            let request = ehttp::Request::get("tos-config.json")
+            let request = ehttp::Request::get("config.json")
                 .with_credentials(ehttp::Credentials::SameOrigin);
             ehttp::fetch(request, move |result| {
                 let outcome = match result {
                     Ok(response) if response.status == 200 => {
                         serde_json::from_slice::<ServerHfConfig>(&response.bytes)
+                            .inspect(|parsed| {
+                                re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
+                            })
                             .map_err(|err| format!("invalid JSON: {err}"))
                     }
                     Ok(response) => {
@@ -135,7 +139,7 @@ impl OpenHfModal {
                 };
                 if let Err(err) = &outcome {
                     re_log::warn!(
-                        "Failed to load server TOS defaults: {err}\nFile: tos-config.json"
+                        "Failed to load server TOS defaults: {err}\nFile: config.json"
                     );
                 }
                 *config.lock() = Some(outcome);
@@ -156,10 +160,12 @@ impl OpenHfModal {
                 }
             }
             env_override(&mut parsed.hf_token, "HF_TOKEN");
+            env_override(&mut parsed.hf_endpoint, "HF_ENDPOINT");
             env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+            re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
             if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
                 && let Ok(n) = value.trim().parse()
             {
@@ -219,7 +225,7 @@ impl OpenHfModal {
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
                         "Failed to load the server-side defaults (HF token, artifact-store \
-                         credentials): {err}\nFile: tos-config.json — episodes will be \
+                         credentials): {err}\nFile: config.json — episodes will be \
                          converted locally instead of loading from the artifacts store.",
                     ));
                 }

@@ -1,6 +1,6 @@
 # One image, three modes — the complete rerun data service:
 #
-#   MODE=web (default)  nginx serving the wasm web viewer + /tos-config.json   (port 80)
+#   MODE=web (default)  nginx serving the wasm web viewer + /config.json   (port 80)
 #   MODE=native         the Linux-native viewer on a virtual display, streamed
 #                       to the browser via noVNC                               (port 8080)
 #   MODE=server         the rerun catalog server (gRPC), with tos:// dataset

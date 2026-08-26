@@ -97,18 +97,43 @@ struct TreeEntry {
 }
 
 /// [`DatasetStore`] over a Hugging Face dataset repo.
-/// Base URL of the Hugging Face hub, overridable via the `HF_ENDPOINT` environment
-/// variable — the same convention the official `huggingface_hub` tooling uses.
+/// The `hf_endpoint` from the viewer config (`config.json`), set at config-load time via
+/// [`set_configured_endpoint`]. Empty = not configured.
+static CONFIGURED_ENDPOINT: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Record the config-file Hugging Face hub override (`hf_endpoint` in `config.json`).
 ///
-/// Needed wherever huggingface.co itself is unreachable (e.g. pods in mainland-China
-/// clouds): point it at a mirror such as `https://hf-mirror.com`. Native only — in the
-/// browser there is no process environment, and the browser's own network is in charge.
+/// Called wherever the viewer config gets loaded (web `/config.json` fetch, native local
+/// config, headless tools). An empty value clears the override.
+pub fn set_configured_endpoint(endpoint: &str) {
+    let endpoint = endpoint.trim().trim_end_matches('/');
+    #[expect(clippy::unwrap_used)] // no poisoning: assignment cannot panic
+    let mut configured = CONFIGURED_ENDPOINT.lock().unwrap();
+    if *configured != endpoint {
+        *configured = endpoint.to_owned();
+    }
+}
+
+/// Base URL of the Hugging Face hub.
+///
+/// Precedence: the `HF_ENDPOINT` environment variable (native only — the same convention
+/// the official `huggingface_hub` tooling uses), then `hf_endpoint` from the viewer config
+/// (works in the browser too, via the served `/config.json`), then the official hub.
+/// Point it at a mirror such as `https://hf-mirror.com` wherever huggingface.co itself is
+/// unreachable (e.g. mainland-China networks).
 fn hf_endpoint() -> String {
     #[cfg(not(target_arch = "wasm32"))]
     if let Ok(endpoint) = std::env::var("HF_ENDPOINT") {
         let endpoint = endpoint.trim().trim_end_matches('/');
         if !endpoint.is_empty() {
             return endpoint.to_owned();
+        }
+    }
+    {
+        #[expect(clippy::unwrap_used)] // no poisoning: assignment cannot panic
+        let configured = CONFIGURED_ENDPOINT.lock().unwrap();
+        if !configured.is_empty() {
+            return configured.clone();
         }
     }
     "https://huggingface.co".to_owned()

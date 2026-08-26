@@ -33,7 +33,7 @@ spec:
       #    `kubectl rollout restart` is what picks up rotated credentials.
       automountServiceAccountToken: false
       containers:
-        # ---- Container 1: the web viewer (nginx + wasm + /tos-config.json) ----
+        # ---- Container 1: the web viewer (nginx + wasm + /config.json) ----
         - name: web
           image: {{ include "dataverse.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -41,11 +41,16 @@ spec:
             - name: MODE
               value: web
             # This endpoint is handed to the user's browser, which sits on the public internet — it
-            # has to be the public one.
+            # has to be the public one. (No TOS_REGION: the viewer derives the region from the
+            # endpoint hostname.)
             - name: TOS_ENDPOINT
               value: {{ include "dataverse.tos.endpointPublic" . | quote }}
-            - name: TOS_REGION
-              value: {{ include "dataverse.tos.region" . | quote }}
+            {{- with .Values.catalog.hfEndpoint }}
+            # Handed to the browser via /config.json, so browser-side Hugging Face reads use the
+            # same mirror as the in-cloud components. Empty = the official huggingface.co.
+            - name: HF_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
             - name: TOS_RRD_ARTIFACTS_URL
               value: {{ .Values.tos.rrdArtifactsUrl | quote }}
             - name: RRD_ARTIFACTS_PREFETCH
