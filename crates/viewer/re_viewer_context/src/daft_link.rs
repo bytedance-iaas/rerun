@@ -62,6 +62,22 @@ pub fn downloads_url() -> Option<String> {
     None
 }
 
+/// A page of the deployment-served user guide: the same-domain `/docs/` sibling path
+/// (rendered to HTML and served by nginx, see the Dockerfile's docs stage). Served by
+/// the deployment itself because mainland-China networks cannot reach GitHub.
+/// `None` natively — same reasoning as the other deployment links.
+pub fn user_guide_url(page: &str) -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        Some(format!("/docs/{page}"))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = page;
+        None
+    }
+}
+
 /// The dataset's directory name — the last path segment of a `tos://bucket/prefix/name/` URL.
 ///
 /// Used as the validity gate for [`diagnose_url`]: only URLs with an actual dataset

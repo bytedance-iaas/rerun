@@ -42,24 +42,24 @@ pub enum IntroItem {
         url: String,
         body: &'static str,
     },
-    /// Our user-guide links (GitHub-hosted markdown) — absolute URLs, so this card shows
-    /// on the web and natively alike.
+    /// Our user-guide links — served by the deployment at `/docs/` (GitHub is not
+    /// reachable from mainland China), so web only, like the other deployment cards.
     GuideItem {
         title: &'static str,
-        links: &'static [(&'static str, &'static str)],
+        links: Vec<(&'static str, String)>,
     },
     CloudLoginItem,
 }
 
-/// The user guides for this fork's features, one link per guide.
-const GUIDE_LINKS: &[(&str, &str)] = &[
+/// The user guides for this fork's features: label and `/docs/` page name.
+const GUIDE_PAGES: &[(&str, &str)] = &[
     (
         "Viewer — open, visualize & explore datasets",
-        "https://github.com/bytedance-iaas/rerun/blob/release_v1/docs/release/user-guide/01-viewer.md",
+        "01-viewer.html",
     ),
     (
         "Catalog server — query & train on TOS datasets",
-        "https://github.com/bytedance-iaas/rerun/blob/release_v1/docs/release/user-guide/02-catalog.md",
+        "02-catalog.html",
     ),
 ];
 
@@ -82,10 +82,18 @@ impl IntroItem {
                 body: "Volcengine-enhanced Python SDK — wheels for every platform with the viewer built in. Install with pip.",
             });
         }
-        items.push(Self::GuideItem {
-            title: "User guide",
-            links: GUIDE_LINKS,
-        });
+        let guide_links: Vec<(&'static str, String)> = GUIDE_PAGES
+            .iter()
+            .filter_map(|(label, page)| {
+                re_viewer_context::daft_link::user_guide_url(page).map(|url| (*label, url))
+            })
+            .collect();
+        if !guide_links.is_empty() {
+            items.push(Self::GuideItem {
+                title: "User guide",
+                links: guide_links,
+            });
+        }
         items.extend([
             Self::DocItem {
                 title: "Send data in",
@@ -193,13 +201,13 @@ impl IntroItem {
             Self::GuideItem { title, links } => {
                 ui.heading(RichText::new(*title).strong());
                 ui.add_space(2.0);
-                for (label, url) in *links {
+                for (label, url) in links {
                     ui.style_mut()
                         .text_styles
                         .get_mut(&TextStyle::Body)
                         .expect("Should always have body text style")
                         .size = label_size;
-                    let _response = ui.re_hyperlink(*label, *url, true);
+                    let _response = ui.re_hyperlink(*label, url.as_str(), true);
                     #[cfg(feature = "analytics")]
                     if _response.clicked() || _response.clicked_with_open_in_background() {
                         re_analytics::record(|| re_analytics::event::WelcomeScreenNavigation {
