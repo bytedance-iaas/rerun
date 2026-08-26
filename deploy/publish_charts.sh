@@ -62,7 +62,7 @@ lint_args_for() {
       echo "--set image.rerun=ci-lint/rerun:ci-lint" \
            "--set image.curator=ci-lint/robot_curator:ci-lint" \
            "--set apig.existingId=ci-lint --set apig.ingressClassName=ci-lint" \
-           "--set secrets.existingSecret=ci-lint --set secrets.existingTokenSecret=ci-lint"
+           "--set secrets.existingSecret=ci-lint"
       ;;
     rerun-native-session)
       echo "--set image.rerun=ci-lint/rerun:ci-lint --set existingPasswordSecret=ci-lint"
