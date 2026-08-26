@@ -47,11 +47,17 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 
 ![viewer 欢迎页](images/viewer-welcome-annotated.png)
 
-欢迎页上需要关注两处:
+欢迎页上需要关注三处:
 
 - 左上角的 **`+`** 按钮:打开数据集的入口(见第 3 节)。
 - 右侧 **Recently opened**:最近打开过的数据集列表,点一下就能重新打开。
   远程数据集不会常驻,重启服务后列表会清空,但随时可以按第 3 节的方式再打开。
+- **Volcengine enhancements** 一排卡片:本服务的快捷入口,点卡片右上角的链接直达 ——
+  - **Curate data**:跳转质检台(见第 6 节;这里进去是空白表单,想带着当前数据集跳转用数据集行上的 Diagnose 按钮);
+  - **Get the SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
+  - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇)。
+
+  下方 **About the original Rerun** 一排是开源 rerun 的通用文档和官方服务入口,与本服务无关,一般用不到。
 
 ### 2.2 本地 native viewer:下载安装到本机
 
@@ -103,6 +109,8 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 这个文件里有密钥,别提交到代码仓库;Linux/macOS 上建议 `chmod 600` 只留自己可读。
 不配这个文件也能用 —— 打开数据集的窗口里可以手动填凭证,配置文件只是帮你预填默认值。
 数据经公网从 TOS 读取,适合本机资源充足的场景。
+
+本地 native viewer 的欢迎页与 web 版基本相同,差别只有一点:Volcengine enhancements 一排只显示 **User guide** 卡片 —— 另外两张(质检台、SDK 下载)是部署域名下的页面,本地程序打不开,需要时直接用浏览器访问。
 
 ### 2.3 云上 native viewer 会话:请管理员按需创建
 
