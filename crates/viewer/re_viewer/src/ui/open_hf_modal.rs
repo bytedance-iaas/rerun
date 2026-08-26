@@ -121,8 +121,8 @@ impl OpenHfModal {
             // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
             // default (`Omit`) tells the browser to strip the authenticated session,
             // turning every fetch into a 401.
-            let request = ehttp::Request::get("config.json")
-                .with_credentials(ehttp::Credentials::SameOrigin);
+            let request =
+                ehttp::Request::get("config.json").with_credentials(ehttp::Credentials::SameOrigin);
             ehttp::fetch(request, move |result| {
                 let outcome = match result {
                     Ok(response) if response.status == 200 => {
@@ -138,9 +138,7 @@ impl OpenHfModal {
                     Err(err) => Err(err),
                 };
                 if let Err(err) = &outcome {
-                    re_log::warn!(
-                        "Failed to load server TOS defaults: {err}\nFile: config.json"
-                    );
+                    re_log::warn!("Failed to load server TOS defaults: {err}\nFile: config.json");
                 }
                 *config.lock() = Some(outcome);
             });

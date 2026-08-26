@@ -1942,8 +1942,8 @@ async fn load_one_item<S: DatasetStore>(
     let artifact_ctx = rrd_artifacts.and_then(|artifacts| {
         let fingerprint = episode_artifact_fingerprint(remote, episode)?;
         // Keys mirror the source URL, not the (normalized) application id.
-        let dataset_url = dataset_url_of(application_id.as_str())
-            .unwrap_or_else(|| application_id.to_string());
+        let dataset_url =
+            dataset_url_of(application_id.as_str()).unwrap_or_else(|| application_id.to_string());
         let key = crate::rrd_artifacts::object_key(
             &artifacts.location.prefix,
             &dataset_url,

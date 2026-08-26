@@ -97,9 +97,7 @@ pub fn request() {
             let parsed = match &result {
                 Ok(response) if response.status == 200 => {
                     serde_json::from_slice::<ViewerConfig>(&response.bytes).unwrap_or_else(|err| {
-                        re_log::warn!(
-                            "Failed to parse viewer defaults: {err}\nFile: config.json"
-                        );
+                        re_log::warn!("Failed to parse viewer defaults: {err}\nFile: config.json");
                         ViewerConfig::default()
                     })
                 }

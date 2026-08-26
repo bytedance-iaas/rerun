@@ -758,10 +758,8 @@ impl AppState {
                                         // resolution and validation stay in one place.
                                         match recent.kind {
                                             crate::recent_datasets::RecentKind::Tos => {
-                                                self.open_tos_modal.open_prefilled(
-                                                    &recent.url,
-                                                    &recent.region,
-                                                );
+                                                self.open_tos_modal
+                                                    .open_prefilled(&recent.url, &recent.region);
                                             }
                                             crate::recent_datasets::RecentKind::Hf => {
                                                 self.open_hf_modal.open_prefilled(&recent.url);

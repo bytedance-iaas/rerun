@@ -53,7 +53,7 @@ impl IntroItem {
                 title: "Curate data",
                 link_label: "Open",
                 url,
-                body: "Run quality checks on your datasets in the Daft curation console.",
+                body: "Run quality checks on your Volcengine TOS datasets in the curation console.",
             });
         }
         if let Some(url) = re_viewer_context::daft_link::downloads_url() {
@@ -61,7 +61,7 @@ impl IntroItem {
                 title: "Get the SDK",
                 link_label: "Download",
                 url,
-                body: "Python SDK wheels for every platform, native viewer included — install with pip.",
+                body: "Volcengine-enhanced Python SDK — wheels for every platform with the viewer built in. Install with pip.",
             });
         }
         items.extend([
