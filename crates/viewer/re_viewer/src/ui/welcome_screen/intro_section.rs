@@ -34,12 +34,37 @@ pub enum IntroItem {
         url: &'static str,
         body: &'static str,
     },
+    /// A link into this deployment (curation console, SDK downloads) — same-domain
+    /// paths, so web only: `daft_link` returns `None` natively and the card is not built.
+    DeploymentItem {
+        title: &'static str,
+        link_label: &'static str,
+        url: String,
+        body: &'static str,
+    },
     CloudLoginItem,
 }
 
 impl IntroItem {
     fn items(login_enabled: bool) -> Vec<Self> {
-        let mut items = vec![
+        let mut items = Vec::new();
+        if let Some(url) = re_viewer_context::daft_link::base_url() {
+            items.push(Self::DeploymentItem {
+                title: "Curate data",
+                link_label: "Open",
+                url,
+                body: "Run quality checks on your datasets in the Daft curation console.",
+            });
+        }
+        if let Some(url) = re_viewer_context::daft_link::downloads_url() {
+            items.push(Self::DeploymentItem {
+                title: "Get the SDK",
+                link_label: "Download",
+                url,
+                body: "Python SDK wheels for every platform, native viewer included — install with pip.",
+            });
+        }
+        items.extend([
             Self::DocItem {
                 title: "Send data in",
                 url: "https://rerun.io/docs/getting-started/data-in",
@@ -55,7 +80,7 @@ impl IntroItem {
                 url: "https://rerun.io/docs/getting-started/data-out",
                 body: "Query raw, intermediate, and derived data with dataframes or SQL, and stream to training.",
             },
-        ];
+        ]);
         if login_enabled {
             items.push(Self::CloudLoginItem);
         }
@@ -74,14 +99,14 @@ impl IntroItem {
             .corner_radius(8)
             .stroke(tokens.native_frame_stroke);
         match self {
-            Self::DocItem { .. } => frame,
+            Self::DocItem { .. } | Self::DeploymentItem { .. } => frame,
             Self::CloudLoginItem => frame.fill(opposite_tokens.panel_bg_color),
         }
     }
 
     fn card_item(&self, ui: &Ui) -> CardLayoutItem {
         let min_width = match &self {
-            Self::DocItem { .. } => 200.0,
+            Self::DocItem { .. } | Self::DeploymentItem { .. } => 200.0,
             Self::CloudLoginItem => 400.0,
         };
         CardLayoutItem {
@@ -111,6 +136,36 @@ impl IntroItem {
                         });
                     }
                 });
+                ui.label(RichText::new(*body).size(label_size));
+            }
+            Self::DeploymentItem {
+                title,
+                link_label,
+                url,
+                body,
+            } => {
+                egui::Sides::new().shrink_left().show(
+                    ui,
+                    |ui| {
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                        ui.heading(RichText::new(*title).strong());
+                    },
+                    |ui| {
+                        let _response = ui.re_hyperlink(*link_label, url.as_str(), true);
+                        #[cfg(feature = "analytics")]
+                        if _response.clicked() || _response.clicked_with_open_in_background() {
+                            re_analytics::record(|| {
+                                re_analytics::event::WelcomeScreenNavigation {
+                                    card_type: "deployment".to_owned(),
+                                    destination: url.clone(),
+                                    cta_cloud: false,
+                                    is_logged_in: cloud_state.is_logged_in(),
+                                    has_server: cloud_state.has_server(),
+                                }
+                            });
+                        }
+                    },
+                );
                 ui.label(RichText::new(*body).size(label_size));
             }
             Self::CloudLoginItem => {

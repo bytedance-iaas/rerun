@@ -49,6 +49,19 @@ pub fn base_url() -> Option<String> {
     None
 }
 
+/// The deployment's SDK download page: the same-domain `/downloads/sdk/` sibling path
+/// (nginx serves the wheels there, see deploy/nginx.conf). `None` natively — a locally
+/// installed viewer has no serving deployment to link into, and it came from that page
+/// to begin with.
+pub fn downloads_url() -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        Some("/downloads/sdk/".to_owned())
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    None
+}
+
 /// The dataset's directory name — the last path segment of a `tos://bucket/prefix/name/` URL.
 ///
 /// Used as the validity gate for [`diagnose_url`]: only URLs with an actual dataset
