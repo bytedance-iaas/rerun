@@ -88,30 +88,32 @@ export ARK_API_KEY="##############"
 # web viewer / 质检台的登录账号:
 export WEB_USER="##############"
 export WEB_PASS="##############"
+
+# catalog 的 token 签名密钥:generate-secret 打印一串明文,和其他密钥同等保存。
+# 只生成这一次并妥善保管;谁拿到它谁就能签任意权限的 token。
+export SERVER_TOKEN_SECRET="$(./target/release/rerun server generate-secret)"
 ```
 
-创建两个 Secret(名字与下一节 values 里的引用一一对应):
+创建一个 Secret(整套部署的全部密钥都在这一个里,名字与下一节 values 里的引用对应):
 
 ```sh
-# 1) 应用凭证:AK/SK + 登录账号表。
-#    AK/SK 是各组件访问 TOS 的凭证:web viewer 靠它让浏览器直读数据集并回写
-#    rrd 缓存,catalog server 靠它读桶和给训练侧签预签名 URL,native 会话同样复用。
-#    账号表的 key 名叫 web_htpasswd,指的是它的【格式】(Apache 密码表:
-#    「用户名:密码哈希」,nginx 和质检台都认这个格式验证),不需要 htpasswd 工具,
-#    哈希由 openssl 现场生成,账号表只存在于这个 Secret 里
-#    (访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>)。
-#    ark_api_key 是质检台走火山方舟 VLM 后端用的 key(配套 base url 是普通配置,
-#    在 2.3 的 curator.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行:
+# 各 key 的含义:
+# - tos_access_key / tos_secret_key:各组件访问 TOS 的凭证。web viewer 靠它让浏览器
+#   直读数据集并回写 rrd 缓存,catalog server 靠它读桶和给训练侧签预签名 URL,
+#   native 会话同样复用。
+# - server_token_secret:catalog 的 token 签名密钥(上面 generate-secret 生成的明文)。
+# - web_htpasswd:登录账号表。key 名指的是它的【格式】(Apache 密码表:
+#   「用户名:密码哈希」,nginx 和质检台都认这个格式验证),不需要 htpasswd 工具,
+#   哈希由 openssl 现场生成,账号表只存在于这个 Secret 里。
+# - ark_api_key:质检台走火山方舟 VLM 后端用的 key(配套 base url 是普通配置,
+#   在 2.3 的 curator.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行。
+# - 访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>。
 kubectl -n $DATAVERSE_NS create secret generic dataverse-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
+    --from-literal=server_token_secret="$SERVER_TOKEN_SECRET" \
     --from-literal=ark_api_key="$ARK_API_KEY" \
     --from-literal=web_htpasswd="$WEB_USER:$(openssl passwd -apr1 "$WEB_PASS")"
-
-# 2) token 签名密钥:管道直建,不落盘、不进 shell 历史。只生成这一次;
-#    它在集群里只会以 0400 权限的文件挂进 catalog 容器,web / native 会话都看不到。
-./target/release/rerun server generate-secret | kubectl -n $DATAVERSE_NS \
-    create secret generic rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
 ```
 
 ### 2.3 写 values 文件
@@ -149,8 +151,7 @@ tos:
   rrdArtifactsUrl: tos://<rrd 缓存路径>
 
 secrets:
-  existingSecret: dataverse-secrets       # = 2.2 建的两个 Secret 之一
-  existingTokenSecret: rerun-catalog-server-secrets
+  existingSecret: dataverse-secrets       # = 2.2 建的那个 Secret
 ```
 
 密钥已在 2.2 建进集群,这里只引用 Secret 名字 — **values 文件里没有任何密钥**。
@@ -285,15 +286,11 @@ export GW_DOMAIN=<控制台查到的域名>   # 例 xxxx.apigateway-cn-beijing.v
 - 不希望服务自动改桶配置时,values 里 `catalog.autoCors.enabled=false` 关闭;
 - 重装换域名后浏览器若报跨域/Failed to fetch,先换无痕窗口试:无痕能开 = 桶没问题,是浏览器缓存了旧域名时代的响应(清缓存硬刷新即可,见 [03-test.md](03-test.md) 排查一节)。
 
-**手动后备**(关闭了自动配置、或 AK/SK 无桶管理权限时):
+**手动后备**(关闭了自动配置、或 AK/SK 无桶管理权限时):在 TOS 控制台给桶手动加一条 CORS 规则,内容照抄自动配置写的那条:
 
-```sh
-# AK/SK 环境变量沿用 2.2 的 export(新开终端要重新 export),
-# 对每个需要浏览器直读的桶执行,参数格式 = <桶名>.<TOS S3 公网域名>
-deploy/enable-cors.sh curation.tos-s3-cn-beijing.volces.com physical-ai-rerun-test.tos-s3-cn-beijing.volces.com <其他桶…>
-```
-
-也可在 TOS 控制台手动配置,方法(GET/HEAD/PUT)和 ExposeHeader 照抄脚本里的 XML,origin 务必用通配符。
+- 允许来源(AllowedOrigin):`https://*.apigateway-<region>.volceapi.com`(务必用通配符;本地 docker 调试再加 `http://127.0.0.1:9091`);
+- 允许方法:GET、HEAD、PUT、DELETE;允许 Header:`*`;
+- 暴露 Header(ExposeHeader)必须逐个列全:`ETag`、`Content-Range`、`Content-Length`、`x-amz-meta-rerun-fingerprint`、`x-amz-meta-rerun-source-url` —— 少了指纹那个,rrd 缓存查询会全部静默失效,表现为明明有缓存却每次重新转换。
 
 ### 4.4 catalog 的入口与安全
 
@@ -369,27 +366,26 @@ helm upgrade dataverse deploy/helm/dataverse -n $DATAVERSE_NS \
 ```
 
 改密钥(密钥在集群 Secret 里,不归 helm 管;chart 看不到内容,改完必须手动重启生效)。
-以改登录账号/密码为例:重新 export `WEB_USER`/`WEB_PASS`,重跑 2.2 的建 Secret 命令,末尾加 `--dry-run=client -o yaml | kubectl apply -f -` 变成覆盖写,然后重启。
-注意这是**整份覆盖**:命令里没列的 key 会被一并抹掉,所以 2.2 建过的可选 key(`ark_api_key`、`hf_token` 等)这次也要照带,漏了就等于删掉。
+用 `kubectl patch` 只改要改的 key,**其他 key 原样保留** —— 千万不要重跑 2.2 的 create 命令覆盖写:整个部署的密钥都在这一个 Secret 里,覆盖写会把没列出的 key(尤其 `server_token_secret`)一并抹掉,catalog 认证会当场失效、所有已发 token 作废。
+以改登录账号/密码为例:
 
 ```sh
-# 先确保 2.2 的环境变量都已 export(新开终端要重新 export):
-kubectl -n $DATAVERSE_NS create secret generic dataverse-secrets \
-    --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
-    --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
-    --from-literal=ark_api_key="$ARK_API_KEY" \
-    --from-literal=web_htpasswd="$WEB_USER:$(openssl passwd -apr1 "$WEB_PASS")" \
-    --dry-run=client -o yaml | kubectl apply -f -
+export WEB_USER="##############"
+export WEB_PASS="##############"
+kubectl -n $DATAVERSE_NS patch secret dataverse-secrets --type merge \
+    -p "{\"stringData\":{\"web_htpasswd\":\"$WEB_USER:$(openssl passwd -apr1 "$WEB_PASS")\"}}"
 
 kubectl -n $DATAVERSE_NS rollout restart statefulset rerun-cloud dataverse-curation
 ```
+
+改其他 key 同理,换掉 `stringData` 里的 key/值即可(比如补 `hf_token`、换 AK/SK)。
 
 卸载:
 
 ```sh
 helm uninstall dataverse -n $DATAVERSE_NS
 # kubectl 直建的 Secret 不归 helm 管,如需彻底清理:
-# kubectl -n $DATAVERSE_NS delete secret dataverse-secrets rerun-catalog-server-secrets
+# kubectl -n $DATAVERSE_NS delete secret dataverse-secrets
 ```
 
 注意:

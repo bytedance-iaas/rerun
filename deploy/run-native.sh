@@ -1,6 +1,6 @@
 #!/bin/sh
 # Launch the natively-built viewer with the same TOS/HF defaults the web deployment uses.
-# The native dialogs read these environment variables instead of /tos-config.json.
+# The native dialogs read these environment variables instead of /config.json.
 set -eu
 cd "$(dirname "$0")/.."
 

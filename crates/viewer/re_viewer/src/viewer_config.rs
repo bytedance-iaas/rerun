@@ -1,8 +1,8 @@
 //! Silent resolution of the default TOS/HF connection settings, for session restore.
 //!
 //! Same sources as the "Open from …" dialogs: on the web the deployment serves
-//! `/tos-config.json` next to the viewer; natively `~/.rerun/tos-config.json`
-//! (or `$RERUN_TOS_CONFIG`) with environment-variable overrides.
+//! `/config.json` next to the viewer; natively `~/.rerun/config.json`
+//! (or `$RERUN_CONFIG`) with environment-variable overrides.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -17,9 +17,10 @@ pub struct ViewerConfig {
     pub tos_secret_key: String,
     pub hf_token: String,
 
-    /// Where converted rrds are stored; an absent key means the default bucket,
-    /// `""`/`"off"` disables the artifacts store.
-    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    /// Hub base-URL override (e.g. a mirror); empty = the official huggingface.co.
+    pub hf_endpoint: String,
+
+    /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     pub tos_rrd_artifacts_url: String,
 
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
@@ -37,7 +38,8 @@ impl Default for ViewerConfig {
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             hf_token: String::new(),
-            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            hf_endpoint: String::new(),
+            tos_rrd_artifacts_url: String::new(),
             rrd_artifacts_prefetch: 0,
             daft_url: String::new(),
         }
@@ -87,7 +89,7 @@ pub fn request() {
         // default (`Omit`) tells the browser to strip the authenticated session,
         // turning every fetch into a 401.
         let request =
-            ehttp::Request::get("tos-config.json").with_credentials(ehttp::Credentials::SameOrigin);
+            ehttp::Request::get("config.json").with_credentials(ehttp::Credentials::SameOrigin);
         ehttp::fetch(request, move |result| {
             // A missing/broken config file resolves to empty settings (not an error):
             // the viewer works without defaults, credentials are just not pre-resolved.
@@ -95,26 +97,25 @@ pub fn request() {
             let parsed = match &result {
                 Ok(response) if response.status == 200 => {
                     serde_json::from_slice::<ViewerConfig>(&response.bytes).unwrap_or_else(|err| {
-                        re_log::warn!(
-                            "Failed to parse viewer defaults: {err}\nFile: tos-config.json"
-                        );
+                        re_log::warn!("Failed to parse viewer defaults: {err}\nFile: config.json");
                         ViewerConfig::default()
                     })
                 }
                 Ok(response) => {
                     re_log::warn!(
-                        "Failed to load viewer defaults: HTTP {} {}\nFile: tos-config.json",
+                        "Failed to load viewer defaults: HTTP {} {}\nFile: config.json",
                         response.status,
                         response.status_text
                     );
                     ViewerConfig::default()
                 }
                 Err(err) => {
-                    re_log::warn!("Failed to load viewer defaults: {err}\nFile: tos-config.json");
+                    re_log::warn!("Failed to load viewer defaults: {err}\nFile: config.json");
                     ViewerConfig::default()
                 }
             };
             re_viewer_context::daft_link::set_base_url(&parsed.daft_url);
+            re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
             *CONFIG.lock() = Some(parsed);
         });
     }
@@ -136,6 +137,7 @@ pub fn request() {
         env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
         env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
         env_override(&mut parsed.hf_token, "HF_TOKEN");
+        env_override(&mut parsed.hf_endpoint, "HF_ENDPOINT");
         env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
         if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
             && let Ok(n) = value.trim().parse()
@@ -143,6 +145,7 @@ pub fn request() {
             parsed.rrd_artifacts_prefetch = n;
         }
 
+        re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
         *CONFIG.lock() = Some(parsed);
     }
 }
@@ -169,20 +172,21 @@ mod tests {
     }
 
     #[test]
-    fn artifacts_store_defaults_on_but_needs_credentials() {
-        // An absent key resolves to the default bucket…
+    fn artifacts_store_needs_explicit_url_and_credentials() {
+        // An absent key means no artifacts store: there is no default bucket.
         let mut config: ViewerConfig = serde_json::from_slice(b"{}").unwrap();
-        assert_eq!(
-            config.tos_rrd_artifacts_url,
-            re_data_source::rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL
-        );
-        // …but without TOS credentials there is no artifacts target.
+        assert!(config.tos_rrd_artifacts_url.is_empty());
         assert!(config.rrd_artifacts(true).is_none());
 
+        // A configured URL alone is not enough either — TOS credentials are required…
+        config.tos_rrd_artifacts_url = "tos://example-bucket/rrd-data/".to_owned();
+        assert!(config.rrd_artifacts(true).is_none());
+
+        // …and with both, the store resolves.
         config.tos_access_key = "ak".to_owned();
         config.tos_secret_key = "sk".to_owned();
         let artifacts = config.rrd_artifacts(true).unwrap();
-        assert_eq!(artifacts.location.bucket, "physical-ai-rerun-test");
+        assert_eq!(artifacts.location.bucket, "example-bucket");
         assert!(artifacts.write_back);
     }
 

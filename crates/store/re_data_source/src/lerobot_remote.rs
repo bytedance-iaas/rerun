@@ -1454,7 +1454,7 @@ async fn stream_items<S: DatasetStore>(
     *guard.state.artifacts_config.lock() = rrd_artifacts.clone();
     if let Some(artifacts) = &rrd_artifacts {
         // Settle "may these credentials delete?" up front, so the artifact-management
-        // menus can grey their delete entries out instead of failing on click.
+        // menus can gray their delete entries out instead of failing on click.
         crate::rrd_artifacts::probe_delete_permission(artifacts);
     }
 
@@ -1942,8 +1942,8 @@ async fn load_one_item<S: DatasetStore>(
     let artifact_ctx = rrd_artifacts.and_then(|artifacts| {
         let fingerprint = episode_artifact_fingerprint(remote, episode)?;
         // Keys mirror the source URL, not the (normalized) application id.
-        let dataset_url = dataset_url_of(application_id.as_str())
-            .unwrap_or_else(|| application_id.to_string());
+        let dataset_url =
+            dataset_url_of(application_id.as_str()).unwrap_or_else(|| application_id.to_string());
         let key = crate::rrd_artifacts::object_key(
             &artifacts.location.prefix,
             &dataset_url,

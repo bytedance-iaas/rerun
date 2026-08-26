@@ -72,7 +72,7 @@ spec:
             {{- end }}
             # Credentials for direct TOS access: the bucket comes from the user, the credentials
             # from the deployment — the same AK/SK pair, out of the same Secret, that the viewer's
-            # tos-config.json uses. The variable names match the engine's TosConfig.from_env.
+            # config.json uses. The variable names match the engine's TosConfig.from_env.
             # The endpoint is given in its internal form (the pod sits in the VPC — faster, no public
             # traffic billed); the code reads only two facts out of it, the region and
             # internal-vs-public, and swaps in the matching public endpoint when the user picks

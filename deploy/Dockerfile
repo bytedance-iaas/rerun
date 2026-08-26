@@ -1,6 +1,6 @@
 # One image, three modes — the complete rerun data service:
 #
-#   MODE=web (default)  nginx serving the wasm web viewer + /tos-config.json   (port 80)
+#   MODE=web (default)  nginx serving the wasm web viewer + /config.json   (port 80)
 #   MODE=native         the Linux-native viewer on a virtual display, streamed
 #                       to the browser via noVNC                               (port 8080)
 #   MODE=server         the rerun catalog server (gRPC), with tos:// dataset
@@ -199,8 +199,11 @@ RUN env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} cargo build --package reru
 # NOTE: the wheels and this image now come from two separate builds. Build them from the
 # same commit (tag the commit, wait for Actions, upload to TOS, then build the image) or
 # the SDK users install can drift from the catalog server it talks to.
-# The bucket URLs are deliberately NOT hardcoded — pass a space-separated list:
-#   docker build --build-arg SDK_WHEEL_URLS="https://<bucket>…/<linux wheel> https://<bucket>…/<mac wheel>" …
+# The bucket URLs are deliberately NOT hardcoded — pass a comma- or space-separated
+# list. Prefer commas: they survive shells without quoting AND CI systems that split
+# arguments on whitespace regardless of quotes (where a quoted space-separated list
+# arrives as nothing at all):
+#   docker build --build-arg SDK_WHEEL_URLS=https://<bucket>…/<linux wheel>,https://<bucket>…/<mac wheel> …
 #   (docker compose reads it from the SDK_WHEEL_URLS env var / .env)
 # When building the SDK (BUILD_SDK_WHEEL=1, the default) SDK_WHEEL_URLS is REQUIRED and
 # every URL must be reachable: an empty list, a failed download, or an under-1 MB response
@@ -208,6 +211,41 @@ RUN env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} cargo build --package reru
 # /sdk/. Set BUILD_SDK_WHEEL=0 to skip the SDK entirely (dev images; /sdk/ will be empty).
 # This is a separate tiny stage so a wheel version bump only re-runs this download layer
 # and never invalidates the ~45-minute cargo layers of the builder stages.
+# ---------------- user guide: markdown -> static HTML ----------------
+# The viewer's "User guide" card links to same-origin /docs/ (nginx serves it, behind the
+# same Basic auth as everything else). The deployment carries its own copy because
+# mainland-China networks cannot reach GitHub. cmark-gfm comes from apt (mirrorable via
+# APT_MIRROR), so this adds no new network dependency.
+FROM ${BASE_REGISTRY}library/debian:trixie-slim AS docs
+
+ARG APT_MIRROR=""
+RUN if [ -n "$APT_MIRROR" ]; then \
+    sed -i "s|http://deb.debian.org|$APT_MIRROR|g; s|https://deb.debian.org|$APT_MIRROR|g" \
+    /etc/apt/sources.list.d/debian.sources; \
+    fi
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmark-gfm \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=src /rerun/docs/release/user-guide /guide
+# Wrap each page in a minimal self-contained HTML shell (UTF-8, readable width, styled
+# tables) and rewrite the cross-links from .md to .html. Images ship as-is.
+RUN mkdir -p /out && cp -R /guide/images /out/images && \
+    for name in 01-viewer 02-catalog; do \
+      { \
+        printf '%s\n' \
+          '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' \
+          '<meta name="viewport" content="width=device-width, initial-scale=1">' \
+          "<title>User guide - ${name}</title>" \
+          '<style>body{max-width:60em;margin:2em auto;padding:0 1em;font:16px/1.8 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#1a1a1a}img{max-width:100%}table{border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}code{background:#f4f4f4;padding:1px 4px;border-radius:3px}pre{background:#f4f4f4;padding:12px;overflow-x:auto}pre code{background:none}blockquote{border-left:4px solid #ddd;margin-left:0;padding-left:1em;color:#555}</style>' \
+          '</head><body>'; \
+        cmark-gfm --extension table --extension strikethrough --extension autolink --unsafe "/guide/${name}.md" \
+          | sed 's|href="\([0-9a-z-]*\)\.md"|href="\1.html"|g'; \
+        printf '%s\n' '</body></html>'; \
+      } > "/out/${name}.html"; \
+    done
+
 FROM ${BASE_REGISTRY}library/debian:trixie-slim AS sdk-wheels
 
 ARG APT_MIRROR=""
@@ -244,7 +282,7 @@ RUN mkdir -p /downloads/sdk; \
         printf '%s\n' "Error: SDK_WHEEL_URLS is not set — pass --build-arg SDK_WHEEL_URLS=\"<TOS wheel URL> [<TOS wheel URL> …]\", or set BUILD_SDK_WHEEL=0 to skip the SDK." >&2; \
         exit 1; \
       fi; \
-      for url in $SDK_WHEEL_URLS; do \
+      for url in $(printf '%s' "$SDK_WHEEL_URLS" | tr ',' ' '); do \
         out="/downloads/sdk/$(basename "${url%%\?*}")"; \
         curl -fSL "$url" -o "$out" || { \
           printf '%s\n' "Error: failed to download SDK wheel." "URL: $url" >&2; exit 1; }; \
@@ -360,6 +398,8 @@ COPY --from=builder-native /rerun/target/release/rerun /usr/local/bin/rerun
 # Actions, see that stage's comment). The viewer ships inside the wheel, so there is no
 # separate viewer/ download.
 COPY --from=sdk-wheels /downloads/ /usr/share/nginx/downloads/
+# The user guide, served at /docs/ (the viewer's "User guide" card links here).
+COPY --from=docs /out /usr/share/nginx/html/docs
 
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

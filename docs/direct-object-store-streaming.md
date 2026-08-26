@@ -8,7 +8,7 @@ No cloud server sits between the data and the screen.
 ┌─────────────────────────────┐        ┌────────────────────────────────────────┐
 │ web deployment (nginx)      │        │                                        │
 │  · serves the wasm viewer   │        │   Volcengine TOS   ◄──── signed GETs ──┼── browser viewer
-│  · serves tos-config.json   │        │   (S3-compatible)                      │   (wasm)
+│  · serves config.json   │        │   (S3-compatible)                      │   (wasm)
 │    (default credentials)    │        │                                        │
 └─────────────────────────────┘        │   huggingface.co   ◄──── ranged GETs ──┼── native viewer
    nothing else — no proxy_pass,       │                                        │   (desktop / cloud pod)
@@ -23,7 +23,7 @@ A relay server ("viewer → our server → TOS") would have to move every byte t
 - **It doubles the bill, then keeps growing.** Egress would be paid twice (object store → server, server → user), and the server itself must be provisioned for the *aggregate* peak bandwidth of all users. With direct reads there is exactly one egress per byte, billed to the bucket like any other S3 read, and zero relay infrastructure to size, scale, or babysit.
 - **It adds a failure domain.** A relay that is down takes every dataset with it. Direct reads fail only if the store itself does.
 
-The only servers in the picture are control-plane conveniences: on the web, nginx serves the static wasm bundle and a `tos-config.json` with default credentials (`deploy/nginx.conf` — note: no `proxy_pass` anywhere), and locally there is no server at all — the native viewer reads `~/.rerun/tos-config.json` instead (`crates/viewer/re_viewer/src/ui/native_config.rs`).
+The only servers in the picture are control-plane conveniences: on the web, nginx serves the static wasm bundle and a `config.json` with default credentials (`deploy/nginx.conf` — note: no `proxy_pass` anywhere), and locally there is no server at all — the native viewer reads `~/.rerun/config.json` instead (`crates/viewer/re_viewer/src/ui/native_config.rs`).
 
 ## How the direct connection works
 
@@ -49,7 +49,8 @@ Browser, local desktop, and the cloud-hosted native session are one codebase wit
 
 ## Prerequisites for the browser path
 
-Browsers enforce CORS, so a bucket must opt in to being read cross-origin: a one-time bucket configuration allowing GET/HEAD from the viewer's origin (`deploy/enable-cors.sh`).
+Browsers enforce CORS, so a bucket must opt in to being read cross-origin.
+This is self-service: the web viewer asks the same-origin `/api/ensure-cors` endpoint (the catalog server) to install the rule on first contact with a bucket (`crates/store/re_data_source/src/tos/cors.rs`).
 Native viewers need no CORS.
 
 ## Key code index
@@ -64,4 +65,4 @@ Native viewers need no CORS.
 | Client-side LeRobot → Rerun conversion (in-memory VFS) | `crates/store/re_importer/src/lerobot/vfs.rs` |
 | Viewer entry points (dialogs) | `crates/viewer/re_viewer/src/ui/open_tos_modal.rs`, `open_hf_modal.rs` |
 | Web deployment serves static only (no `proxy_pass`) | `deploy/nginx.conf`, `deploy/entrypoint.sh` |
-| Bucket CORS for browser direct read | `deploy/enable-cors.sh` |
+| Bucket CORS for browser direct read (self-service) | `crates/store/re_data_source/src/tos/cors.rs` |

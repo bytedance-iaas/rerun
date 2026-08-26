@@ -774,9 +774,7 @@ pub fn entity_db_button_ui(
             let resp = ui
                 .small_icon_button(&icons::CLOSE_SMALL, "Close recording")
                 .on_hover_text(match store_id.kind() {
-                    re_log_types::StoreKind::Recording => {
-                        "Close this recording (unsaved data will be lost)"
-                    }
+                    re_log_types::StoreKind::Recording => "Close this recording",
                     re_log_types::StoreKind::Blueprint => {
                         "Close this blueprint (unsaved data will be lost)"
                     }
@@ -792,7 +790,7 @@ pub fn entity_db_button_ui(
                 // While the whole dataset is paused, the stream is parked and cannot react
                 // to per-episode requests — a re-download would drop the old data and then
                 // sit in the queue until resume, looking like the episode was deleted.
-                // Keep the state simple: grey the per-episode download controls out.
+                // Keep the state simple: gray the per-episode download controls out.
                 ui.add_enabled_ui(!dataset_paused, |ui| {
                     if episode_loading {
                     if ui
@@ -810,6 +808,7 @@ pub fn entity_db_button_ui(
                 } else if episode_parked {
                     if ui
                         .small_icon_button(&icons::PLAY, "Resume downloading this episode")
+                        .on_hover_text("Resume downloading this episode")
                         .clicked()
                     {
                         re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);
@@ -817,9 +816,7 @@ pub fn entity_db_button_ui(
                 } else if (has_data || episode_failed)
                     && ui
                         .small_icon_button(&icons::RESET, "Re-download this episode")
-                        .on_hover_text(
-                            "Discard this episode's data and download it again from the source.",
-                        )
+                        .on_hover_text("Re-download this episode")
                         .clicked()
                 {
                     // Arm the re-download marker, then close the recording to drop the old

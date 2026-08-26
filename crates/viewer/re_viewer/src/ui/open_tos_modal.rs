@@ -7,10 +7,11 @@ use re_ui::UiExt as _;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 
-/// The deployment's TOS connection settings, served at `/tos-config.json`.
+/// The deployment's TOS connection settings, served at `/config.json`.
 ///
-/// Endpoint and credentials (injected as docker secrets) come exclusively from here —
-/// the dialog itself only asks for the dataset URL.
+/// Endpoint and credentials (injected as docker secrets) come from here by default;
+/// the user can opt into entering their own AK/SK in the dialog instead (e.g. for a
+/// bucket the deployment's credentials can't read).
 #[derive(Clone, serde::Deserialize)]
 #[serde(default)]
 struct ServerTosConfig {
@@ -18,9 +19,7 @@ struct ServerTosConfig {
     tos_access_key: String,
     tos_secret_key: String,
 
-    /// Where converted rrds are stored; an absent key means the default bucket,
-    /// `""`/`"off"` disables the artifacts store.
-    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     tos_rrd_artifacts_url: String,
 
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
@@ -33,8 +32,7 @@ impl Default for ServerTosConfig {
             tos_endpoint: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
-            // The artifacts store is on by default, even with no config file at all.
-            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            tos_rrd_artifacts_url: String::new(),
             rrd_artifacts_prefetch: 0,
         }
     }
@@ -71,10 +69,16 @@ pub struct OpenTosModal {
     /// connection field the user ever touches.
     region: String,
 
+    /// Show the AK/SK inputs and use them instead of the deployment's credentials —
+    /// the TOS counterpart of the HF dialog's "Use non-default token".
+    use_custom_credentials: bool,
+    access_key: String,
+    secret_key: String,
+
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
 
-    /// Filled asynchronously from the server's `/tos-config.json` (web only).
+    /// Filled asynchronously from the server's `/config.json` (web only).
     /// `Err` holds why the fetch failed — shown in the dialog, because a silently missing
     /// config looks exactly like "this deployment has no credentials" and is undebuggable.
     server_config: Arc<Mutex<Option<Result<ServerTosConfig, String>>>>,
@@ -105,7 +109,7 @@ impl OpenTosModal {
         }
         self.server_config_requested = true;
 
-        // On the web the viewer is served next to `/tos-config.json`; natively there is no
+        // On the web the viewer is served next to `/config.json`; natively there is no
         // server, so read the same file from the user's config dir and let env vars override.
         #[cfg(target_arch = "wasm32")]
         {
@@ -113,8 +117,8 @@ impl OpenTosModal {
             // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
             // default (`Omit`) tells the browser to strip the authenticated session,
             // turning every fetch into a 401.
-            let request = ehttp::Request::get("tos-config.json")
-                .with_credentials(ehttp::Credentials::SameOrigin);
+            let request =
+                ehttp::Request::get("config.json").with_credentials(ehttp::Credentials::SameOrigin);
             ehttp::fetch(request, move |result| {
                 let outcome = match result {
                     Ok(response) if response.status == 200 => {
@@ -127,9 +131,7 @@ impl OpenTosModal {
                     Err(err) => Err(err),
                 };
                 if let Err(err) = &outcome {
-                    re_log::warn!(
-                        "Failed to load server TOS defaults: {err}\nFile: tos-config.json"
-                    );
+                    re_log::warn!("Failed to load server TOS defaults: {err}\nFile: config.json");
                 }
                 *config.lock() = Some(outcome);
             });
@@ -172,10 +174,8 @@ impl OpenTosModal {
         if self.region.is_empty() && config_resolved {
             self.region = re_data_source::tos::region_from_endpoint(&server_config.tos_endpoint);
         }
-        let resolved_endpoint = re_data_source::tos::endpoint_for_region(
-            &self.region,
-            &server_config.tos_endpoint,
-        );
+        let resolved_endpoint =
+            re_data_source::tos::endpoint_for_region(&self.region, &server_config.tos_endpoint);
 
         self.modal.ui(
             ui.ctx(),
@@ -222,6 +222,32 @@ impl OpenTosModal {
                         ui.end_row();
                     });
 
+                // Credentials: the deployment's (docker secrets on the web, config.json
+                // natively) are used unless the user opts into entering their own.
+                ui.add_space(2.0);
+                ui.re_checkbox(&mut self.use_custom_credentials, "Use non-default credentials");
+
+                if self.use_custom_credentials {
+                    egui::Grid::new("tos_credentials_fields")
+                        .num_columns(2)
+                        .spacing([8.0, 6.0])
+                        .show(ui, |ui| {
+                            ui.label("Access key:");
+                            egui::TextEdit::singleline(&mut self.access_key)
+                                .hint_text("AK…")
+                                .desired_width(f32::INFINITY)
+                                .show(ui);
+                            ui.end_row();
+
+                            ui.label("Secret key:");
+                            egui::TextEdit::singleline(&mut self.secret_key)
+                                .password(true)
+                                .desired_width(f32::INFINITY)
+                                .show(ui);
+                            ui.end_row();
+                        });
+                }
+
                 // In the browser the requests go out from the user's machine, so internal
                 // endpoints (only routable inside the Volcengine network) won't work.
                 #[cfg(target_arch = "wasm32")]
@@ -236,7 +262,7 @@ impl OpenTosModal {
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
                         "Failed to load the deployment's TOS settings (endpoint, credentials): \
-                         {err}\nFile: tos-config.json — opening datasets needs this fixed.",
+                         {err}\nFile: config.json — opening datasets needs this fixed.",
                     ));
                 }
 
@@ -251,12 +277,14 @@ impl OpenTosModal {
                     self.artifact_upload_disabled = !upload;
                 }
 
-                // Credentials come exclusively from the deployment config (docker secrets
-                // on the web, tos-config.json natively); the endpoint is derived from the
-                // chosen region. The signing region in turn is derived from the endpoint
-                // (see `TosCredentials::region`).
-                let connection_ok =
-                    !self.region.trim().is_empty() && server_config.has_credentials();
+                // The endpoint is derived from the chosen region; the signing region in
+                // turn is derived from the endpoint (see `TosCredentials::region`).
+                let have_credentials = if self.use_custom_credentials {
+                    !self.access_key.trim().is_empty() && !self.secret_key.trim().is_empty()
+                } else {
+                    server_config.has_credentials()
+                };
+                let connection_ok = !self.region.trim().is_empty() && have_credentials;
 
                 let location = TosLocation::parse(&self.url);
                 let can_open = location.is_some() && connection_ok;
@@ -268,8 +296,11 @@ impl OpenTosModal {
                         "Loading the deployment's TOS settings…"
                     } else if self.region.trim().is_empty() {
                         "Region is required."
+                    } else if self.use_custom_credentials {
+                        "Enter the access key and secret key."
                     } else {
-                        "This deployment has no TOS credentials configured (tos-config.json)."
+                        "This deployment has no TOS credentials configured (config.json) — \
+                         check \"Use non-default credentials\" to enter your own."
                     });
                 } else {
                     ui.label(
@@ -289,19 +320,38 @@ impl OpenTosModal {
                         || can_open && ui.input(|i| i.key_pressed(egui::Key::Enter))
                     {
                         if let Some(location) = location {
-                            let credentials = TosCredentials {
-                                endpoint: resolved_endpoint.clone(),
-                                access_key: server_config.tos_access_key.clone(),
-                                secret_key: server_config.tos_secret_key.clone(),
+                            let credentials = if self.use_custom_credentials {
+                                TosCredentials {
+                                    endpoint: resolved_endpoint.clone(),
+                                    access_key: self.access_key.trim().to_owned(),
+                                    secret_key: self.secret_key.trim().to_owned(),
+                                }
+                            } else {
+                                TosCredentials {
+                                    endpoint: resolved_endpoint.clone(),
+                                    access_key: server_config.tos_access_key.clone(),
+                                    secret_key: server_config.tos_secret_key.clone(),
+                                }
                             };
-                            // The artifacts bucket uses the same credentials as the source.
+                            // The artifacts bucket belongs to the deployment, so prefer its
+                            // credentials even when the dataset is opened with custom ones
+                            // (which likely can't access the artifacts bucket at all).
+                            let artifact_credentials = if server_config.has_credentials() {
+                                TosCredentials {
+                                    endpoint: resolved_endpoint.clone(),
+                                    access_key: server_config.tos_access_key.clone(),
+                                    secret_key: server_config.tos_secret_key.clone(),
+                                }
+                            } else {
+                                credentials.clone()
+                            };
                             let rrd_artifacts = re_data_source::rrd_artifacts::parse_artifacts_url(
                                 &server_config.tos_rrd_artifacts_url,
                             )
                             .map(|artifacts_location| {
                                 re_data_source::rrd_artifacts::RrdArtifactsConfig {
                                     location: artifacts_location,
-                                    credentials: credentials.clone(),
+                                    credentials: artifact_credentials,
                                     write_back: !self.artifact_upload_disabled,
                                     prefetch_items: server_config.rrd_artifacts_prefetch,
                                 }

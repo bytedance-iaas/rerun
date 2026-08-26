@@ -26,6 +26,7 @@ fn credentials() -> TosCredentials {
 }
 
 const TEST_DATASET: &str = "tos://physical-ai-rerun-test/dataset-1/so101-pick-place/";
+const TEST_ARTIFACTS_URL: &str = "tos://physical-ai-rerun-test/rrd-data/";
 
 /// End-to-end round-trip of the rrd-artifacts primitives against the real bucket:
 /// PUT with fingerprint metadata → HEAD returns it → GET returns the bytes.
@@ -36,7 +37,7 @@ fn tos_rrd_artifacts_roundtrip() {
     rt.block_on(async {
         use re_data_source::rrd_artifacts;
 
-        let location = TosLocation::parse(rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL).unwrap();
+        let location = TosLocation::parse(TEST_ARTIFACTS_URL).unwrap();
         let client = TosClient::new(credentials(), location.bucket.clone());
 
         let key = format!("{}_selftest/roundtrip.rrd", location.prefix);
@@ -136,8 +137,7 @@ fn tos_lerobot_stream_smoke() {
         location: TosLocation::parse(TEST_DATASET).unwrap(),
         credentials: credentials(),
         rrd_artifacts: Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
-            location: TosLocation::parse(re_data_source::rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL)
-                .unwrap(),
+            location: TosLocation::parse(TEST_ARTIFACTS_URL).unwrap(),
             credentials: credentials(),
             write_back: true,
             prefetch_items: 0,

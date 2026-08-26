@@ -30,20 +30,17 @@ kubectl create namespace rerun
 kubectl -n rerun create secret generic dataverse-secrets \
     --from-literal=tos_access_key=<ak> \
     --from-literal=tos_secret_key=<sk> \
+    --from-literal=server_token_secret="$(rerun server generate-secret)" \
     --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"   # prompts for the password
-
-rerun server generate-secret | kubectl -n rerun create secret generic \
-    rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
 ```
 
-Then install, naming those Secrets rather than their contents:
+Then install, naming that Secret rather than its contents:
 
 ```bash
 helm install dataverse deploy/helm/dataverse -n rerun \
   --set image.rerun=<registry>/rerun:<tag> \
   --set image.curator=<registry>/robot_curator:<tag> \
   --set secrets.existingSecret=dataverse-secrets \
-  --set secrets.existingTokenSecret=rerun-catalog-server-secrets \
   --set apig.existingId=<gateway instance id>
 ```
 
@@ -86,8 +83,7 @@ for one network does not work on the other; the signature covers the host.
 | Value | Default | Notes |
 |---|---|---|
 | `image.rerun` / `image.curator` | **required** | Full tagged references; the chart tracks no image version |
-| `secrets.existingSecret` | **required** | The chart renders no Secret of its own |
-| `secrets.existingTokenSecret` | **required** | Unless `catalog.tokenAuth.enabled=false` |
+| `secrets.existingSecret` | **required** | One Secret for every credential; the chart renders no Secret of its own |
 | `tos.region` | `cn-beijing` | Both TOS endpoints are derived from it |
 | `web.basicAuth.enabled` | `true` | htpasswd table shared with the console |
 | `catalog.tokenAuth.enabled` | `true` | Signed catalog tokens |
@@ -246,7 +242,8 @@ cache and the task history — never a delivery, which is uploaded to the user's
 visible only at <https://console.volcengine.com/veapig> → instance → service list. `kubectl` cannot
 read it. Never put an assigned `*.volceapi.com` name into `apig.host`, and never change `apig.host`
 on a live deployment: the Ingress keeps its old ADDRESS, and a new host means a new public domain
-that bookmarks and bucket CORS rules have to follow.
+that bookmarks have to follow (bucket CORS keeps working — the auto-installed rule uses the
+region-wide gateway wildcard).
 
 **Do not verify APIG by curling the CLB IP with a Host header.** It answers 401 with error code
 010002 for every host, working ones included. Test the assigned domain instead.

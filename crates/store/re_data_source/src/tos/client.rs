@@ -60,7 +60,11 @@ pub fn endpoint_for_region(region: &str, deployment_endpoint: &str) -> String {
         }
     }
 
-    let region = if region.is_empty() { "cn-beijing" } else { region };
+    let region = if region.is_empty() {
+        "cn-beijing"
+    } else {
+        region
+    };
     format!("https://tos-s3-{region}.volces.com")
 }
 
@@ -73,10 +77,11 @@ pub fn region_from_endpoint(endpoint: &str) -> String {
     let labels: Vec<&str> = host.split('.').collect();
 
     // tos-s3-<region>.volces.com / tos-s3-<region>.ivolces.com
-    if let Some(region) = labels
-        .first()
-        .and_then(|first| first.strip_prefix("tos-s3-").or_else(|| first.strip_prefix("tos-")))
-        && !region.is_empty()
+    if let Some(region) = labels.first().and_then(|first| {
+        first
+            .strip_prefix("tos-s3-")
+            .or_else(|| first.strip_prefix("tos-"))
+    }) && !region.is_empty()
     {
         return region.to_owned();
     }
@@ -716,7 +721,10 @@ mod tests {
             endpoint_for_region("ap-southeast-1", ""),
             "https://tos-s3-ap-southeast-1.volces.com"
         );
-        assert_eq!(endpoint_for_region("", ""), "https://tos-s3-cn-beijing.volces.com");
+        assert_eq!(
+            endpoint_for_region("", ""),
+            "https://tos-s3-cn-beijing.volces.com"
+        );
     }
 
     #[test]
@@ -724,7 +732,10 @@ mod tests {
         for (endpoint, expected) in [
             ("https://tos-s3-cn-beijing.volces.com", "cn-beijing"),
             ("https://tos-s3-cn-beijing2.volces.com", "cn-beijing2"),
-            ("https://tos-s3-ap-southeast-1.ivolces.com", "ap-southeast-1"),
+            (
+                "https://tos-s3-ap-southeast-1.ivolces.com",
+                "ap-southeast-1",
+            ),
             ("http://tos-s3-cn-shanghai.volces.com/", "cn-shanghai"),
             ("https://tos-cn-guangzhou.volces.com", "cn-guangzhou"),
             ("https://s3.us-west-2.amazonaws.com", "us-west-2"),
@@ -732,7 +743,11 @@ mod tests {
             ("http://minio.local:9000", "cn-beijing"),
             ("https://storage.example.com", "cn-beijing"),
         ] {
-            assert_eq!(region_from_endpoint(endpoint), expected, "endpoint: {endpoint}");
+            assert_eq!(
+                region_from_endpoint(endpoint),
+                expected,
+                "endpoint: {endpoint}"
+            );
         }
     }
 

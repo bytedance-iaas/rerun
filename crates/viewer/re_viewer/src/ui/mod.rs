@@ -8,6 +8,7 @@ mod open_url_modal;
 mod rerun_menu;
 mod share_modal;
 mod top_panel;
+pub(crate) mod user_guide;
 mod welcome_screen;
 
 pub(crate) mod dev_panel;
@@ -23,6 +24,7 @@ pub(crate) use open_tos_modal::OpenTosModal;
 pub(crate) use open_url_modal::OpenUrlModal;
 pub(crate) use settings_screen::settings_screen_ui;
 pub(crate) use share_modal::ShareModal;
+pub(crate) use user_guide::UserGuideModal;
 
 pub(crate) use self::mobile_warning_ui::mobile_warning_ui;
 pub(crate) use self::top_panel::top_panel;

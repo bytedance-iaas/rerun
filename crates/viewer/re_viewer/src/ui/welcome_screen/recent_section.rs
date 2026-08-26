@@ -32,14 +32,6 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
             .line_height(Some(32.0))
             .text_style(DesignTokens::welcome_screen_example_title()),
     ));
-    ui.add(egui::Label::new(
-        egui::RichText::new(
-            "Remote datasets stream in on demand and are not kept after a restart — \
-             click one to open it again.",
-        )
-        .color(ui.visuals().weak_text_color())
-        .text_style(DesignTokens::welcome_screen_body()),
-    ));
     ui.add_space(8.0);
 
     for (index, recent) in recents.iter().enumerate() {
