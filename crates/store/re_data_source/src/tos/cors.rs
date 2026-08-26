@@ -62,7 +62,9 @@ fn rerun_cors_rule_xml(origins: &[String]) -> String {
 }
 
 fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Make sure the bucket's CORS config contains our rule; returns whether it was added.
@@ -92,7 +94,9 @@ fn config_after_ensure(
 ) -> anyhow::Result<Option<String>> {
     if let Some(current) = current
         && current.contains(FINGERPRINT_HEADER)
-        && origins.iter().all(|origin| current.contains(origin.as_str()))
+        && origins
+            .iter()
+            .all(|origin| current.contains(origin.as_str()))
     {
         return Ok(None);
     }
@@ -143,11 +147,8 @@ pub async fn ensure_cors_via_server_once(bucket: &str) {
         super::client::uri_encode(bucket, true)
     );
     let request = ehttp::Request::post(&url, Vec::new());
-    match crate::http_client::fetch_async_with_timeout(
-        request,
-        std::time::Duration::from_secs(10),
-    )
-    .await
+    match crate::http_client::fetch_async_with_timeout(request, std::time::Duration::from_secs(10))
+        .await
     {
         Ok(response) if response.ok => {
             re_log::debug!("auto-CORS ensured for bucket {bucket}");
@@ -190,8 +191,13 @@ mod tests {
     #[test]
     fn foreign_rules_are_kept_and_ours_appended() {
         let foreign = "<CORSConfiguration><CORSRule><AllowedOrigin>https://other.team</AllowedOrigin><AllowedMethod>GET</AllowedMethod></CORSRule></CORSConfiguration>";
-        let config = config_after_ensure(Some(foreign), &origins()).unwrap().unwrap();
-        assert!(config.contains("https://other.team"), "must not clobber foreign rules");
+        let config = config_after_ensure(Some(foreign), &origins())
+            .unwrap()
+            .unwrap();
+        assert!(
+            config.contains("https://other.team"),
+            "must not clobber foreign rules"
+        );
         assert!(config.contains(FINGERPRINT_HEADER));
         assert_eq!(config.matches("</CORSConfiguration>").count(), 1);
     }
@@ -199,7 +205,10 @@ mod tests {
     #[test]
     fn installed_rule_is_a_noop() {
         let installed = config_after_ensure(None, &origins()).unwrap().unwrap();
-        assert_eq!(config_after_ensure(Some(&installed), &origins()).unwrap(), None);
+        assert_eq!(
+            config_after_ensure(Some(&installed), &origins()).unwrap(),
+            None
+        );
     }
 
     #[test]

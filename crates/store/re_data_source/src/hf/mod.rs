@@ -99,7 +99,7 @@ struct TreeEntry {
 /// [`DatasetStore`] over a Hugging Face dataset repo.
 /// The `hf_endpoint` from the viewer config (`config.json`), set at config-load time via
 /// [`set_configured_endpoint`]. Empty = not configured.
-static CONFIGURED_ENDPOINT: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+static CONFIGURED_ENDPOINT: parking_lot::Mutex<String> = parking_lot::Mutex::new(String::new());
 
 /// Record the config-file Hugging Face hub override (`hf_endpoint` in `config.json`).
 ///
@@ -107,8 +107,7 @@ static CONFIGURED_ENDPOINT: std::sync::Mutex<String> = std::sync::Mutex::new(Str
 /// config, headless tools). An empty value clears the override.
 pub fn set_configured_endpoint(endpoint: &str) {
     let endpoint = endpoint.trim().trim_end_matches('/');
-    #[expect(clippy::unwrap_used)] // no poisoning: assignment cannot panic
-    let mut configured = CONFIGURED_ENDPOINT.lock().unwrap();
+    let mut configured = CONFIGURED_ENDPOINT.lock();
     if *configured != endpoint {
         *configured = endpoint.to_owned();
     }
@@ -130,8 +129,7 @@ fn hf_endpoint() -> String {
         }
     }
     {
-        #[expect(clippy::unwrap_used)] // no poisoning: assignment cannot panic
-        let configured = CONFIGURED_ENDPOINT.lock().unwrap();
+        let configured = CONFIGURED_ENDPOINT.lock();
         if !configured.is_empty() {
             return configured.clone();
         }
