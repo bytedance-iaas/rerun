@@ -42,25 +42,18 @@ pub enum IntroItem {
         url: String,
         body: &'static str,
     },
-    /// Our user-guide links (GitHub-hosted markdown) — absolute URLs, so this card shows
-    /// on the web and natively alike.
+    /// Our user-guide links — the guide is embedded and rendered in-app
+    /// (`crate::ui::user_guide`), so this card shows on every viewer alike.
     GuideItem {
         title: &'static str,
-        links: &'static [(&'static str, &'static str)],
     },
     CloudLoginItem,
 }
 
-/// The user guides for this fork's features, one link per guide.
-const GUIDE_LINKS: &[(&str, &str)] = &[
-    (
-        "Viewer — open, visualize & explore datasets",
-        "https://github.com/bytedance-iaas/rerun/blob/release_v1/docs/release/user-guide/01-viewer.md",
-    ),
-    (
-        "Catalog server — query & train on TOS datasets",
-        "https://github.com/bytedance-iaas/rerun/blob/release_v1/docs/release/user-guide/02-catalog.md",
-    ),
+/// The user guides for this fork's features: label and in-app guide page index.
+const GUIDE_PAGES: &[(&str, usize)] = &[
+    ("Viewer — open, visualize & explore datasets", 0),
+    ("Catalog server — query & train on TOS datasets", 1),
 ];
 
 impl IntroItem {
@@ -84,7 +77,6 @@ impl IntroItem {
         }
         items.push(Self::GuideItem {
             title: "User guide",
-            links: GUIDE_LINKS,
         });
         items.extend([
             Self::DocItem {
@@ -190,21 +182,21 @@ impl IntroItem {
                 );
                 ui.label(RichText::new(*body).size(label_size));
             }
-            Self::GuideItem { title, links } => {
+            Self::GuideItem { title } => {
                 ui.heading(RichText::new(*title).strong());
                 ui.add_space(2.0);
-                for (label, url) in *links {
+                for (label, page) in GUIDE_PAGES {
                     ui.style_mut()
                         .text_styles
                         .get_mut(&TextStyle::Body)
                         .expect("Should always have body text style")
                         .size = label_size;
-                    let _response = ui.re_hyperlink(*label, *url, true);
-                    #[cfg(feature = "analytics")]
-                    if _response.clicked() || _response.clicked_with_open_in_background() {
+                    if ui.link(*label).clicked() {
+                        crate::ui::user_guide::request_open(ui.ctx(), *page);
+                        #[cfg(feature = "analytics")]
                         re_analytics::record(|| re_analytics::event::WelcomeScreenNavigation {
                             card_type: "guide".to_owned(),
-                            destination: (*url).to_owned(),
+                            destination: format!("user-guide:{page}"),
                             cta_cloud: false,
                             is_logged_in: cloud_state.is_logged_in(),
                             has_server: cloud_state.has_server(),
@@ -334,12 +326,18 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
         }
         ui.strong(RichText::new(header).size(15.0));
         ui.add_space(8.0);
-        CardLayout::new(
-            row.iter().map(|item| item.card_item(ui)).collect(),
-            Frame::NONE,
-        )
-        .show(ui, |ui, index, _card_hovered| {
-            row[index].show(ui, ctx, cloud_state);
+        // Cards stretch to fill the row, which looks silly when there are only one or
+        // two (natively only the User guide card shows) — cap the row width per card.
+        let max_row_width = row.len() as f32 * 450.0;
+        ui.scope(|ui| {
+            ui.set_max_width(ui.available_width().min(max_row_width));
+            CardLayout::new(
+                row.iter().map(|item| item.card_item(ui)).collect(),
+                Frame::NONE,
+            )
+            .show(ui, |ui, index, _card_hovered| {
+                row[index].show(ui, ctx, cloud_state);
+            });
         });
         ui.add_space(24.0);
     }

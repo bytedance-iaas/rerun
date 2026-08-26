@@ -211,6 +211,41 @@ RUN env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} cargo build --package reru
 # /sdk/. Set BUILD_SDK_WHEEL=0 to skip the SDK entirely (dev images; /sdk/ will be empty).
 # This is a separate tiny stage so a wheel version bump only re-runs this download layer
 # and never invalidates the ~45-minute cargo layers of the builder stages.
+# ---------------- user guide: markdown -> static HTML ----------------
+# The viewer's "User guide" card links to same-origin /docs/ (nginx serves it, behind the
+# same Basic auth as everything else). The deployment carries its own copy because
+# mainland-China networks cannot reach GitHub. cmark-gfm comes from apt (mirrorable via
+# APT_MIRROR), so this adds no new network dependency.
+FROM ${BASE_REGISTRY}library/debian:trixie-slim AS docs
+
+ARG APT_MIRROR=""
+RUN if [ -n "$APT_MIRROR" ]; then \
+    sed -i "s|http://deb.debian.org|$APT_MIRROR|g; s|https://deb.debian.org|$APT_MIRROR|g" \
+    /etc/apt/sources.list.d/debian.sources; \
+    fi
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmark-gfm \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=src /rerun/docs/release/user-guide /guide
+# Wrap each page in a minimal self-contained HTML shell (UTF-8, readable width, styled
+# tables) and rewrite the cross-links from .md to .html. Images ship as-is.
+RUN mkdir -p /out && cp -R /guide/images /out/images && \
+    for name in 01-viewer 02-catalog; do \
+      { \
+        printf '%s\n' \
+          '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' \
+          '<meta name="viewport" content="width=device-width, initial-scale=1">' \
+          "<title>User guide - ${name}</title>" \
+          '<style>body{max-width:60em;margin:2em auto;padding:0 1em;font:16px/1.8 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#1a1a1a}img{max-width:100%}table{border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}code{background:#f4f4f4;padding:1px 4px;border-radius:3px}pre{background:#f4f4f4;padding:12px;overflow-x:auto}pre code{background:none}blockquote{border-left:4px solid #ddd;margin-left:0;padding-left:1em;color:#555}</style>' \
+          '</head><body>'; \
+        cmark-gfm --extension table --extension strikethrough --extension autolink --unsafe "/guide/${name}.md" \
+          | sed 's|href="\([0-9a-z-]*\)\.md"|href="\1.html"|g'; \
+        printf '%s\n' '</body></html>'; \
+      } > "/out/${name}.html"; \
+    done
+
 FROM ${BASE_REGISTRY}library/debian:trixie-slim AS sdk-wheels
 
 ARG APT_MIRROR=""
@@ -363,6 +398,8 @@ COPY --from=builder-native /rerun/target/release/rerun /usr/local/bin/rerun
 # Actions, see that stage's comment). The viewer ships inside the wheel, so there is no
 # separate viewer/ download.
 COPY --from=sdk-wheels /downloads/ /usr/share/nginx/downloads/
+# The user guide, served at /docs/ (the viewer's "User guide" card links here).
+COPY --from=docs /out /usr/share/nginx/html/docs
 
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

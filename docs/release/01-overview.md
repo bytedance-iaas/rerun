@@ -4,11 +4,11 @@
 
 本产品构建在开源机器人/具身智能领域的多模态数据可视化工具项目 [rerun](https://rerun.io)(GitHub: [rerun-io/rerun](https://github.com/rerun-io/rerun),MIT / Apache-2.0 双许可)之上。
 
-本产品中中可视化体验 — 时间轴回放、3D 视图、曲线图、视图布局 — 基本来自开源 rerun 本体。
+本产品中可视化体验 — 时间轴回放、3D 视图、曲线图、视图布局 — 基本来自开源 rerun 本体。
 
 ## 2. 本产品的工作
 
-在开源 rerun 之上,本产品实现了针对火山引擎的增强和优化,并与 Daft 质检台联动:
+在开源 rerun 之上,本产品实现了针对火山引擎的增强和优化,并内置质检台联动:
 
 | 增强 | 内容 |
 |---|---|
@@ -21,7 +21,7 @@
 | 训练直读 | 训练侧凭 catalog server 签发的预签名 URL 从 TOS 直读数据,不经服务器中转,也无需持有 TOS 密钥 |
 | 云上部署形态 | 面向火山引擎 VKE 的完整部署,含 HTTPS 网关入口和按需启动的云上 native viewer 会话 |
 | 国内网络适配 | HuggingFace 访问走镜像站,云内组件访问 TOS 走内网 endpoint |
-| Daft 质检联动 | web viewer 中一键 Diagnose 跳转 Daft 质检台,数据集 tos:// 路径与地区自动填好 |
+| 质检联动 | web viewer 中一键 Diagnose 跳转质检台,数据集 tos:// 路径与地区自动填好 |
 
 这些增强不改变 rerun 的使用方式,已熟悉开源 rerun 的用户没有额外学习成本。
 
@@ -49,9 +49,9 @@
 - 训练直读:dataloader(`RerunIterableDataset` 等)取数时,server 只处理查询并对命中的数据块签发预签名 URL,训练机凭 URL 直接从 TOS 读取字节。
 - 持久化:注册记录和缓存存放在云盘上;采用 StatefulSet 部署,保证同一时刻只有一个实例挂载该盘。
 
-### 3.3 Daft 质检台(常驻,独立工作负载)
+### 3.3 质检台(常驻,独立工作负载)
 
-机器人数据质量检查控制台(robot-curation UI),基于 Daft 数据处理引擎,其功能由 Daft 侧提供,本产品负责部署与联动。
+机器人数据质量检查控制台(robot-curation UI),质检能力由独立的质检引擎提供,本产品负责部署与联动。
 
 - 访问方式:web viewer 同一域名下的 `/curation` 路径,与 viewer 共用同一份登录账号表,登录一次两边通行。
 - 数据面:TOS SDK 直连(与 viewer 共用同一对 AK/SK)。数据集来源与交付去向
@@ -81,7 +81,7 @@ flowchart LR
         apig["APIG 网关<br/>HTTPS · *.volceapi.com 域名<br/>按路径分流"]
         web["web viewer<br/>(nginx + wasm)"]
         catalog["catalog server<br/>(gRPC)"]
-        daft["Daft 质检台<br/>(/curation)"]
+        curation["质检台<br/>(/curation)"]
         native["native viewer 会话<br/>(按需,一人一个)"]
     end
 
@@ -89,14 +89,14 @@ flowchart LR
 
     browser -- "HTTPS + Basic auth" --> apig
     apig -- "/" --> web
-    apig -- "/curation" --> daft
+    apig -- "/curation" --> curation
     apig -- "会话域名" --> native
     apig -- "gRPC 路径" --> catalog
     train -- "gRPC + token(TLS)" --> apig
     train -- "预签名 URL 直读" --> tos
     browser -- "wasm 直读 / 回写 rrd 缓存" --> tos
     catalog --> tos
-    daft -- "TOS SDK 直连(AK/SK)" --> tos
+    curation -- "TOS SDK 直连(AK/SK)" --> tos
     native --> tos
 ```
 

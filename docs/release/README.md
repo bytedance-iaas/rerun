@@ -10,7 +10,7 @@
 - **catalog server 持久化**:注册记录和缓存落在云盘上,服务器重启后数据不丢、无须重新注册。
 - **训练直读**:训练侧凭 catalog server 签发的预签名 URL 从 TOS 直读数据,不经服务器中转,也无需持有 TOS 密钥。
 - **云上部署形态**:面向火山引擎 VKE 的完整部署,含 HTTPS 网关入口和按需启动的云上 native viewer 会话。
-- **Daft 质检联动**:web viewer 中一键 Diagnose 跳转 Daft 质检台,数据集 tos:// 路径与桶地区自动填好,直接开跑质检。
+- **质检联动**:web viewer 中一键 Diagnose 跳转质检台,数据集 tos:// 路径与桶地区自动填好,直接开跑质检。
 
 产品构成与架构见 [01-overview.md](01-overview.md),部署步骤见 [02-deploy.md](02-deploy.md),部署后验证见 [03-test.md](03-test.md)。
 

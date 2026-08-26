@@ -163,7 +163,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 - PyTorch dataloader(`RerunIterableDataset`)一路的直读分步验证见 [`docs/testing/dataloader-direct-read-test.md`](../testing/dataloader-direct-read-test.md)。
 - 办公网提醒:预签名 URL 指向 TOS 公网 endpoint,办公网读大文件会被限速到 ~100KB/s,能读通但慢;吞吐测试放云内跑。
 
-### 3.6 Daft 质检联动 <!-- NOLINT: Daft is a proper noun -->
+### 3.6 质检联动
 
 - viewer 里打开 1.1 上传的 TOS 数据集,点 **Diagnose** → **跳到
   `/curation?dataset=tos://…&region=…`,免登录,「数据集 TOS 路径」和
@@ -173,7 +173,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
   `[tos] 下载 …`、质检各阶段进度、`[tos] 交付已上传`。
 - TOS 控制台查看 输出路径/<交付名>/<时间戳>/ → **交付物/报告在,且
   `passed.json` 在其余对象之后出现**(完整性标志最后传的协议;质检功能本身
-  属 Daft 侧,这里只验证联动与直连数据面通畅)。
+  属质检台侧,这里只验证联动与直连数据面通畅)。
 
 ### 3.7 native viewer
 

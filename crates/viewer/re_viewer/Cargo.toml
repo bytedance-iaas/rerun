@@ -136,6 +136,7 @@ eframe = { workspace = true, default-features = false, features = [
   "persistence",
   "wgpu",
 ] }
+egui_commonmark.workspace = true
 egui_plot.workspace = true
 egui-wgpu.workspace = true
 egui.workspace = true
