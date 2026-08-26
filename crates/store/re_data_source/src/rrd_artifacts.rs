@@ -99,9 +99,9 @@ pub fn delete_permission(config: &RrdArtifactsConfig) -> Option<bool> {
 }
 
 /// Find out — once per credentials+bucket — whether deletion is permitted, so the UI
-/// can grey delete entries out up front.
+/// can gray delete entries out up front.
 ///
-/// The probe DELETEs a key that does not exist: that mutates nothing (S3 deletion of an
+/// The probe sends a DELETE for a key that does not exist: that mutates nothing (S3 deletion of an
 /// absent key is a no-op success), yet still requires — and thus reveals — the delete
 /// permission. Network trouble leaves the answer unknown and the probe re-armed.
 pub fn probe_delete_permission(config: &RrdArtifactsConfig) {
@@ -140,7 +140,7 @@ pub fn probe_delete_permission(config: &RrdArtifactsConfig) {
 
 /// Whether a deletion is currently running that covers this target.
 ///
-/// The UI greys the matching menu entries out. A dataset-wide deletion
+/// The UI grays the matching menu entries out. A dataset-wide deletion
 /// (`episode == None` in flight) covers every episode of that dataset; asking with
 /// `episode == None` matches any deletion of the dataset.
 pub fn deletion_in_flight(dataset_url: &str, episode: Option<usize>) -> bool {

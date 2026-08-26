@@ -790,7 +790,7 @@ pub fn entity_db_button_ui(
                 // While the whole dataset is paused, the stream is parked and cannot react
                 // to per-episode requests — a re-download would drop the old data and then
                 // sit in the queue until resume, looking like the episode was deleted.
-                // Keep the state simple: grey the per-episode download controls out.
+                // Keep the state simple: gray the per-episode download controls out.
                 ui.add_enabled_ui(!dataset_paused, |ui| {
                     if episode_loading {
                     if ui

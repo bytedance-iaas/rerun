@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn unparseable_config_errors_instead_of_clobbering() {
+    fn unparsable_config_errors_instead_of_clobbering() {
         assert!(config_after_ensure(Some("not xml at all"), &origins()).is_err());
     }
 }
