@@ -65,7 +65,7 @@ web viewer 以 wasm 形式运行在浏览器中,受 wasm 运行环境限制:32 �
 native viewer 是原生进程,没有这些限制,可用内存只取决于所在机器。
 本产品提供两款 native viewer,与 web viewer 共用同一套实现,TOS / HuggingFace 直读和 rrd 缓存能力完全一致:
 
-- **本地 native viewer**:在用户本机运行,TOS 凭证读取本机 `~/.rerun/tos-config.json`。适合本机资源充足的场景,数据经公网从 TOS 读取。
+- **本地 native viewer**:在用户本机运行,支持 Linux / macOS / Windows,TOS 凭证读取本机的 `config.json`(路径因系统而异,见用户指南)。适合本机资源充足的场景,数据经公网从 TOS 读取。
 - **云上 native viewer 会话**:一人一个 pod,自助启动,用完删除,通过浏览器远程操作;每个会话有独立的访问域名和会话密码。运行在云上节点,经内网访问 TOS,速度快且不产生公网流量。不随常驻服务部署,按需拉起(步骤见部署文档)。
 
 ## 4. 架构总览

@@ -48,7 +48,7 @@ curl -s -o /dev/null -w '%{http_code}\n' $WEB/
 curl -s -o /dev/null -w '%{http_code}\n' -u 'alice:passwd_1' $WEB/
 # 预期:200(换成 web_htpasswd 里真实的账号密码)
 
-curl -s -u 'alice:passwd_1' $WEB/tos-config.json | head -c 200; echo
+curl -s -u 'alice:passwd_1' $WEB/config.json | head -c 200; echo
 # 预期:JSON,含 tos_endpoint 与凭证字段(这是 TOS 弹窗的配置来源,404 的话弹窗会要求手填)
 ```
 

@@ -251,7 +251,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
 }
 
 /// The local connection config for headless tools (`rerun rrd-convert`): same file as the
-/// native viewer (`$RERUN_TOS_CONFIG` or `~/.rerun/tos-config.json`), same env overrides.
+/// native viewer (`$RERUN_CONFIG` or `~/.rerun/config.json`), same env overrides.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Default, serde::Deserialize)]
 #[serde(default)]
@@ -267,14 +267,14 @@ pub struct LocalConfig {
 /// Load [`LocalConfig`] from disk + environment. Missing/broken file = empty settings.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_local_config() -> LocalConfig {
-    let path = std::env::var_os("RERUN_TOS_CONFIG")
+    let path = std::env::var_os("RERUN_CONFIG")
         .map(std::path::PathBuf::from)
         .or_else(|| {
             let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
             Some(
                 std::path::PathBuf::from(home)
                     .join(".rerun")
-                    .join("tos-config.json"),
+                    .join("config.json"),
             )
         });
 

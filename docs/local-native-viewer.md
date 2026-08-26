@@ -37,15 +37,20 @@ To stream a remote LeRobot dataset, open the viewer and use the menu:
 The "Open from …" dialogs always let you type in the endpoint, dataset URL, and credentials by hand, so no configuration is required.
 
 For convenience you can pre-fill the non-secret defaults (and, if you want, the credentials) so you do not retype them every run.
-On the web these defaults come from a `tos-config.json` served next to the viewer.
+On the web these defaults come from a `config.json` served next to the viewer.
 The local native viewer reads the same file from your machine, in this order:
 
-1. The path in the `RERUN_TOS_CONFIG` environment variable, if set.
-2. Otherwise `~/.rerun/tos-config.json`.
+1. The path in the `RERUN_CONFIG` environment variable, if set.
+2. Otherwise `config.json` in the `.rerun` directory under your home directory — the exact path depends on your OS:
+
+| OS | Path |
+|---|---|
+| Linux / macOS | `~/.rerun/config.json` |
+| Windows | `%USERPROFILE%\.rerun\config.json` (typically `C:\Users\<you>\.rerun\config.json`) |
 
 Environment variables — `TOS_ENDPOINT`, `TOS_REGION`, `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, `HF_TOKEN` — override the corresponding file fields when they are set.
 
-Example `~/.rerun/tos-config.json`:
+Example `config.json`:
 
 ```json
 {
@@ -70,7 +75,9 @@ Omit `tos_access_key`/`tos_secret_key` and the dialog will ask for credentials w
 The credential fields are never shown in the dialog unless you opt into overriding them, and they are never written back to disk by the viewer.
 
 > Note: this file can hold secrets (`tos_secret_key`, `hf_token`).
-> Keep it readable only by your user (`chmod 600 ~/.rerun/tos-config.json`) and do not commit it.
+> Keep it readable only by your user and do not commit it.
+> On Linux/macOS: `chmod 600 ~/.rerun/config.json`.
+> On Windows the file sits under your user profile, which other standard users cannot read — no extra step needed.
 
 ## Corporate networks: `RERUN_HTTP_KEEP_ALIVE=0`
 

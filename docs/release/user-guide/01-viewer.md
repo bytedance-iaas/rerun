@@ -58,7 +58,7 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 本地 native viewer 随 Python SDK 一起分发,装好 SDK 后 `rerun` 命令即可用,无需另外下载。
 
 SDK 就放在 web viewer 那个域名下的 `/downloads/sdk/`,即 `https://<你的网关域名>/downloads/sdk/`(用登录账号访问)。
-浏览器打开这个页面能看到可下载的 wheel 文件,目前提供 Linux x86_64 和 macOS(Apple Silicon)两种。
+浏览器打开这个页面能看到可下载的 wheel 文件,目前提供四种:Linux x86_64、Linux arm64、macOS(Apple Silicon)、Windows x86_64。
 按你的机器**选对应的那个 wheel**,在 Python(3.10 及以上)环境里安装(URL 末尾换成你选的 wheel 文件名):
 
 ```sh
@@ -71,7 +71,29 @@ pip install "https://<用户名>:<密码>@<网关域名>/downloads/sdk/<wheel �
 rerun            # 直接打开 viewer 窗口
 ```
 
-TOS 凭证读你本机的 `~/.rerun/tos-config.json`,配好后在窗口里打开同一个 `tos://` 地址即可。
+TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口里打开同一个 `tos://` 地址即可。
+配置文件放在用户主目录的 `.rerun` 文件夹下,不同系统的路径写法不同:
+
+| 系统 | 配置文件路径 |
+|---|---|
+| Linux / macOS | `~/.rerun/config.json` |
+| Windows | `%USERPROFILE%\.rerun\config.json`(一般就是 `C:\Users\<用户名>\.rerun\config.json`) |
+
+文件内容(JSON,凭证问管理员要):
+
+```json
+{
+  "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
+  "tos_region": "cn-beijing",
+  "tos_access_key": "AK…",
+  "tos_secret_key": "SK…",
+  "hf_token": "hf_…"
+}
+```
+
+`.rerun` 文件夹不存在就自己建一个(Windows 在 cmd 里执行 `mkdir %USERPROFILE%\.rerun`)。
+这个文件里有密钥,别提交到代码仓库;Linux/macOS 上建议 `chmod 600` 只留自己可读。
+不配这个文件也能用 —— 打开数据集的窗口里可以手动填凭证,配置文件只是帮你预填默认值。
 数据经公网从 TOS 读取,适合本机资源充足的场景。
 
 ### 2.3 云上 native viewer 会话:请管理员按需创建
@@ -185,7 +207,7 @@ rerun rrd-convert tos://<桶>/<路径>/<数据集名>/
 
 - 它逐个 episode 处理:已经是最新的直接跳过(只发一次探测请求),其余的下载、转换、写回缓存桶。
 - **可以反复跑**,数据没变时几乎零成本,适合放进定时任务或数据上线流程里。
-- 凭证和缓存位置读本机 `~/.rerun/tos-config.json`(或对应环境变量),用 `--artifacts-url tos://桶/前缀/` 可指定写到哪个缓存桶。
+- 凭证和缓存位置读本机 `~/.rerun/config.json`(或对应环境变量),用 `--artifacts-url tos://桶/前缀/` 可指定写到哪个缓存桶。
 
 跑完之后,任何人在 viewer 里打开这个数据集都是直接命中缓存、秒开。
 

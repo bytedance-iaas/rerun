@@ -2,7 +2,7 @@
 
 One image (`rerun-viewer-unified`) built from this repo, three modes selected by the `MODE` env var:
 
-- `MODE=web` (default): nginx serving the wasm web viewer, plus server-side default credentials (`/tos-config.json`) and an `rrd-cache` volume (port 80).
+- `MODE=web` (default): nginx serving the wasm web viewer, plus server-side default credentials (`/config.json`) and an `rrd-cache` volume (port 80).
 - `MODE=native`: the Linux-native viewer on a virtual display, streamed to the browser via noVNC (port 8080) — for datasets beyond the browser's ~1.5 GB per-file limit.
 - `MODE=server`: the rerun catalog server (gRPC, port 51234) with two cloud additions — `dataset.register()` / `register_prefix()` accept `tos://` URLs, and the catalog survives restarts (SQLite on the `server-data` volume). Clients use the stock SDK: `rr.catalog.CatalogClient("rerun+http://<host>:9094")`.
 
@@ -16,8 +16,8 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 |---|---|
 | `Dockerfile` | Multi-stage: wasm viewer build + native viewer build (serialized to avoid OOM) + one runtime with nginx and the Xvnc/noVNC stack. Build context is the repo root. |
 | `docker-compose.yml` | Three services from the same image: `viewer` (web, `:9091`), `native-session` (native, `:9092`), `server` (catalog, `:9094`). |
-| `entrypoint.sh` | `MODE` dispatch: web renders `/tos-config.json` and runs nginx; native starts Xvnc + websockify + the viewer; server runs the catalog. |
-| `nginx.conf` | Static serving + `/tos-config.json` + WebDAV `PUT` on `/rrd-cache/` (phase-2 write-back) + `301 /rerun → /` (the gateway routes `/curation` to the curation console, everything else here). |
+| `entrypoint.sh` | `MODE` dispatch: web renders `/config.json` and runs nginx; native starts Xvnc + websockify + the viewer; server runs the catalog. |
+| `nginx.conf` | Static serving + `/config.json` + WebDAV `PUT` on `/rrd-cache/` (phase-2 write-back) + `301 /rerun → /` (the gateway routes `/curation` to the curation console, everything else here). |
 | `helm/dataverse/` | The whole cloud stack as one Helm chart bundling two components: **ReRun** (web + catalog StatefulSet with a persistent volume) and the **curation console** (its own StatefulSet, reading and writing TOS through the SDK, served under `/curation`; the viewer's Diagnose buttons deep-link into it, `?dataset=<name>`), plus the APIG gateway they share — path-routed Ingress (`/` = viewer, `/curation` = console) and a dedicated gRPC route for the catalog. `helm install dataverse deploy/helm/dataverse -f <your-values>.yaml`. |
 | `helm/rerun-native-session/` | On-demand native-viewer session (one pod per user), started/torn down per session. |
 | `publish_charts.sh` | Packages **both** charts (`helm/dataverse/` and `helm/rerun-native-session/`) and pushes them to the Volcengine OCI registry. Registry coordinates and the robot account come from the environment (`HELM_REGISTRY_HOST`, `HELM_REGISTRY_NAMESPACE`, `HELM_REGISTRY_USERNAME`, `HELM_REGISTRY_PASSWORD`); `DRY_RUN=1` packages and lints without logging in, `CHARTS="<name>"` restricts it to one chart. |
@@ -87,9 +87,9 @@ See [`docs/local-native-viewer.md`](../docs/local-native-viewer.md) for the full
 pixi run local-viewer
 
 # 2. (Optional) pre-fill credentials so you don't retype them.
-#    Same file the web deployment serves as /tos-config.json, read from your home dir.
+#    Same file the web deployment serves as /config.json, read from your home dir.
 mkdir -p ~/.rerun
-cat > ~/.rerun/tos-config.json <<'EOF'
+cat > ~/.rerun/config.json <<'EOF'
 {
   "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
   "tos_region": "cn-beijing",
@@ -98,14 +98,14 @@ cat > ~/.rerun/tos-config.json <<'EOF'
   "hf_token": "hf_…"
 }
 EOF
-chmod 600 ~/.rerun/tos-config.json
+chmod 600 ~/.rerun/config.json
 
 # 3. Run it.
 ./target/release/rerun
 ```
 
 Then, in the viewer: **Menu → Open → Open from Volcengine TOS…**, enter a `tos://bucket/prefix/` URL, and click **Open** — episodes should appear immediately and stream in one by one.
-Credentials can come from three places (highest priority first): the `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` environment variables, then `~/.rerun/tos-config.json` (or `$RERUN_TOS_CONFIG`), then whatever you type into the dialog.
+Credentials can come from three places (highest priority first): the `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` environment variables, then `~/.rerun/config.json` (or `$RERUN_CONFIG`), then whatever you type into the dialog.
 With no file and no env vars, the dialog just asks for the AK/SK directly — nothing cloud-side is required.
 
 ## Cloud / CI builds
@@ -151,11 +151,11 @@ The `ExposeHeader` entries for `x-amz-meta-rerun-*` are equally load-bearing: wi
 
 ## Credential model
 
-`entrypoint.sh` reads AK/SK/token from docker/k8s secrets (`/run/secrets/*`), falling back to `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` env vars. In `web` mode these are baked into `/tos-config.json` for the browser dialogs; in `native` and `server` modes they are exported into the viewer's environment.
+`entrypoint.sh` reads AK/SK/token from docker/k8s secrets (`/run/secrets/*`), falling back to `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `HF_TOKEN` env vars. In `web` mode these are baked into `/config.json` for the browser dialogs; in `native` and `server` modes they are exported into the viewer's environment.
 
 Two more optional secrets gate access to the browser-facing modes (see the auth commit / `helm/dataverse/README.md`):
 
-- `web_htpasswd` (htpasswd format) — enables nginx Basic auth for the whole web mode, including `/tos-config.json`. Without it the site (and the default credentials) is readable by anyone who can reach it — fine locally, not on a public address. `/healthz` stays open for probes.
+- `web_htpasswd` (htpasswd format) — enables nginx Basic auth for the whole web mode, including `/config.json`. Without it the site (and the default credentials) is readable by anyone who can reach it — fine locally, not on a public address. `/healthz` stays open for probes.
 - `session_password` / `SESSION_PASSWORD` env — enables the VNC password prompt on native sessions.
 
-With Basic auth on, `/tos-config.json` is only readable by authenticated users; the endgame (server-side URL pre-signing, so browsers never hold AK/SK at all) is a later phase.
+With Basic auth on, `/config.json` is only readable by authenticated users; the endgame (server-side URL pre-signing, so browsers never hold AK/SK at all) is a later phase.

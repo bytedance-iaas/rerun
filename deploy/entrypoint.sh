@@ -1,6 +1,6 @@
 #!/bin/sh
 # One image, three modes:
-#   MODE=web    — nginx serving the wasm web viewer + /tos-config.json  (port 80)
+#   MODE=web    — nginx serving the wasm web viewer + /config.json  (port 80)
 #   MODE=native — the native viewer on a virtual display, via noVNC     (port 8080)
 #   MODE=server — the rerun catalog server with tos:// registration and
 #                 a persistent catalog                                  (port 51234)
@@ -34,7 +34,7 @@ HF_TOKEN_VALUE="$(read_secret hf_token HF_TOKEN)"
 case "$MODE" in
 web)
     # Optional Basic auth: a `web_htpasswd` secret (htpasswd format, e.g. from
-    # `htpasswd -nbB user pass`) locks the whole site — viewer, /tos-config.json,
+    # `htpasswd -nbB user pass`) locks the whole site — viewer, /config.json,
     # /rrd-cache. Without it everything stays open (local dev). /healthz is always open.
     WEB_HTPASSWD_VALUE="$(read_secret web_htpasswd WEB_HTPASSWD)"
     if [ -n "$WEB_HTPASSWD_VALUE" ]; then
@@ -61,7 +61,7 @@ AUTH
     # tos_access_key/tos_secret_key/hf_token are the server-side defaults for the browser dialogs
     # (used unless the user opts into "Use non-default AK/SK"). No daft_url: the viewer derives the
     # curation console as the same-origin /curation sibling path on its own.
-    cat > /run/tos-config.json <<EOF
+    cat > /run/config.json <<EOF
 {
   "tos_endpoint": "${TOS_ENDPOINT}",
   "tos_region": "${TOS_REGION}",
@@ -72,7 +72,7 @@ AUTH
   "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH}
 }
 EOF
-    chmod 644 /run/tos-config.json
+    chmod 644 /run/config.json
     # Adopt the cache volume: a volume created by an earlier image keeps that
     # image's ownership, which blocks WebDAV PUTs from this nginx's www-data.
     chown www-data:www-data /rrd-cache

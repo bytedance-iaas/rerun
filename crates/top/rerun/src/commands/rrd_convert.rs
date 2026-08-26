@@ -11,7 +11,7 @@ use re_log_channel::SmartMessagePayload;
 ///
 /// Credentials and the artifacts-store location resolve exactly like in the viewer:
 /// the `TOS_*` / `HF_TOKEN` / `TOS_RRD_ARTIFACTS_URL` environment variables override
-/// `~/.rerun/tos-config.json` (or the file `$RERUN_TOS_CONFIG` points at).
+/// `~/.rerun/config.json` (or the file `$RERUN_CONFIG` points at).
 ///
 /// Examples:
 ///
@@ -38,7 +38,7 @@ impl RrdConvertCommand {
         let config = re_data_source::rrd_artifacts::load_local_config();
         anyhow::ensure!(
             !config.tos_access_key.is_empty() && !config.tos_secret_key.is_empty(),
-            "No TOS credentials. Provide TOS_ACCESS_KEY / TOS_SECRET_KEY (or ~/.rerun/tos-config.json) — \
+            "No TOS credentials. Provide TOS_ACCESS_KEY / TOS_SECRET_KEY (or ~/.rerun/config.json) — \
              they are needed both for tos:// sources and for uploading to the artifacts store."
         );
 

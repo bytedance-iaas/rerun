@@ -33,7 +33,7 @@ spec:
       #    `kubectl rollout restart` is what picks up rotated credentials.
       automountServiceAccountToken: false
       containers:
-        # ---- Container 1: the web viewer (nginx + wasm + /tos-config.json) ----
+        # ---- Container 1: the web viewer (nginx + wasm + /config.json) ----
         - name: web
           image: {{ include "dataverse.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}

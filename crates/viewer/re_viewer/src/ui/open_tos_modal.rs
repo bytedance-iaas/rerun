@@ -7,7 +7,7 @@ use re_ui::UiExt as _;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 
-/// The deployment's TOS connection settings, served at `/tos-config.json`.
+/// The deployment's TOS connection settings, served at `/config.json`.
 ///
 /// Endpoint and credentials (injected as docker secrets) come exclusively from here —
 /// the dialog itself only asks for the dataset URL.
@@ -74,7 +74,7 @@ pub struct OpenTosModal {
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
 
-    /// Filled asynchronously from the server's `/tos-config.json` (web only).
+    /// Filled asynchronously from the server's `/config.json` (web only).
     /// `Err` holds why the fetch failed — shown in the dialog, because a silently missing
     /// config looks exactly like "this deployment has no credentials" and is undebuggable.
     server_config: Arc<Mutex<Option<Result<ServerTosConfig, String>>>>,
@@ -105,7 +105,7 @@ impl OpenTosModal {
         }
         self.server_config_requested = true;
 
-        // On the web the viewer is served next to `/tos-config.json`; natively there is no
+        // On the web the viewer is served next to `/config.json`; natively there is no
         // server, so read the same file from the user's config dir and let env vars override.
         #[cfg(target_arch = "wasm32")]
         {
@@ -113,7 +113,7 @@ impl OpenTosModal {
             // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
             // default (`Omit`) tells the browser to strip the authenticated session,
             // turning every fetch into a 401.
-            let request = ehttp::Request::get("tos-config.json")
+            let request = ehttp::Request::get("config.json")
                 .with_credentials(ehttp::Credentials::SameOrigin);
             ehttp::fetch(request, move |result| {
                 let outcome = match result {
@@ -128,7 +128,7 @@ impl OpenTosModal {
                 };
                 if let Err(err) = &outcome {
                     re_log::warn!(
-                        "Failed to load server TOS defaults: {err}\nFile: tos-config.json"
+                        "Failed to load server TOS defaults: {err}\nFile: config.json"
                     );
                 }
                 *config.lock() = Some(outcome);
@@ -236,7 +236,7 @@ impl OpenTosModal {
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
                         "Failed to load the deployment's TOS settings (endpoint, credentials): \
-                         {err}\nFile: tos-config.json — opening datasets needs this fixed.",
+                         {err}\nFile: config.json — opening datasets needs this fixed.",
                     ));
                 }
 
@@ -252,7 +252,7 @@ impl OpenTosModal {
                 }
 
                 // Credentials come exclusively from the deployment config (docker secrets
-                // on the web, tos-config.json natively); the endpoint is derived from the
+                // on the web, config.json natively); the endpoint is derived from the
                 // chosen region. The signing region in turn is derived from the endpoint
                 // (see `TosCredentials::region`).
                 let connection_ok =
@@ -269,7 +269,7 @@ impl OpenTosModal {
                     } else if self.region.trim().is_empty() {
                         "Region is required."
                     } else {
-                        "This deployment has no TOS credentials configured (tos-config.json)."
+                        "This deployment has no TOS credentials configured (config.json)."
                     });
                 } else {
                     ui.label(

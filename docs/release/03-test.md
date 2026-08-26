@@ -114,7 +114,7 @@ print([d.name for d in client.datasets()])   # 预期:正常返回(首次为空�
 - 首次打开数据集后,查看 rrd 缓存桶(`values` 里 `tos.rrdArtifactsUrl` 指向的位置)→ **出现新的 rrd 产物对象**。
 - 二次打开 → **明显加速**(冒烟 2.6 已覆盖,此处确认产物确实来自缓存桶)。
 - 删掉该数据集的缓存产物再打开 → **退回首次的转换流程,完成后产物重新出现**(缓存只是加速,删了不丢数据)。
-- **离线预转换**(`rerun rrd-convert`):在装了 SDK、配好 `~/.rerun/tos-config.json`(含 TOS 凭证与 `tos_rrd_artifacts_url` 缓存桶)的机器上,对一个**未打开过、缓存桶里没有产物**的数据集跑:
+- **离线预转换**(`rerun rrd-convert`):在装了 SDK、配好 `~/.rerun/config.json`(含 TOS 凭证与 `tos_rrd_artifacts_url` 缓存桶)的机器上,对一个**未打开过、缓存桶里没有产物**的数据集跑:
 
   ```sh
   rerun rrd-convert tos://<桶>/<路径>/<数据集名>/
@@ -184,7 +184,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
   rerun            # 直接开 viewer 窗口
   ```
 
-  本机 `~/.rerun/tos-config.json` 配好 TOS 凭证后打开同一 `tos://` 地址 → **能加载**(数据走公网)。升级 = 重装同一 wheel URL。Windows / Intel Mac / arm64 Linux 暂需源码构建。
+  本机 `~/.rerun/config.json`(Windows 为 `%USERPROFILE%\.rerun\config.json`)配好 TOS 凭证后打开同一 `tos://` 地址 → **能加载**(数据走公网)。升级 = 重装同一 wheel URL。四个平台(Linux x64/arm64、macOS Apple Silicon、Windows x64)均有 wheel;Intel Mac 暂不支持(苹果已停产该硬件)。
 
 ## 4. 常见问题排查
 

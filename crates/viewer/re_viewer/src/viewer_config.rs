@@ -1,8 +1,8 @@
 //! Silent resolution of the default TOS/HF connection settings, for session restore.
 //!
 //! Same sources as the "Open from …" dialogs: on the web the deployment serves
-//! `/tos-config.json` next to the viewer; natively `~/.rerun/tos-config.json`
-//! (or `$RERUN_TOS_CONFIG`) with environment-variable overrides.
+//! `/config.json` next to the viewer; natively `~/.rerun/config.json`
+//! (or `$RERUN_CONFIG`) with environment-variable overrides.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -87,7 +87,7 @@ pub fn request() {
         // default (`Omit`) tells the browser to strip the authenticated session,
         // turning every fetch into a 401.
         let request =
-            ehttp::Request::get("tos-config.json").with_credentials(ehttp::Credentials::SameOrigin);
+            ehttp::Request::get("config.json").with_credentials(ehttp::Credentials::SameOrigin);
         ehttp::fetch(request, move |result| {
             // A missing/broken config file resolves to empty settings (not an error):
             // the viewer works without defaults, credentials are just not pre-resolved.
@@ -96,21 +96,21 @@ pub fn request() {
                 Ok(response) if response.status == 200 => {
                     serde_json::from_slice::<ViewerConfig>(&response.bytes).unwrap_or_else(|err| {
                         re_log::warn!(
-                            "Failed to parse viewer defaults: {err}\nFile: tos-config.json"
+                            "Failed to parse viewer defaults: {err}\nFile: config.json"
                         );
                         ViewerConfig::default()
                     })
                 }
                 Ok(response) => {
                     re_log::warn!(
-                        "Failed to load viewer defaults: HTTP {} {}\nFile: tos-config.json",
+                        "Failed to load viewer defaults: HTTP {} {}\nFile: config.json",
                         response.status,
                         response.status_text
                     );
                     ViewerConfig::default()
                 }
                 Err(err) => {
-                    re_log::warn!("Failed to load viewer defaults: {err}\nFile: tos-config.json");
+                    re_log::warn!("Failed to load viewer defaults: {err}\nFile: config.json");
                     ViewerConfig::default()
                 }
             };

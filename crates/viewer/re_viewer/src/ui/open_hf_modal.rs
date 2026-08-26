@@ -7,7 +7,7 @@ use re_ui::UiExt as _;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 
-/// Server-side Hugging Face defaults, served by the deployment at `/tos-config.json`.
+/// Server-side Hugging Face defaults, served by the deployment at `/config.json`.
 ///
 /// The deployment can hold a default token (injected as a docker secret); it is used unless the
 /// user opts into providing their own. The token is never shown in the dialog.
@@ -84,7 +84,7 @@ pub struct OpenHfModal {
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
 
-    /// Filled asynchronously from the server's `/tos-config.json` (web only).
+    /// Filled asynchronously from the server's `/config.json` (web only).
     /// `Err` holds why the fetch failed — shown in the dialog: without this config the
     /// rrd artifacts store has no credentials and silently degrades to mp4 conversion.
     server_config: Arc<Mutex<Option<Result<ServerHfConfig, String>>>>,
@@ -112,7 +112,7 @@ impl OpenHfModal {
         }
         self.server_config_requested = true;
 
-        // On the web the viewer is served next to `/tos-config.json`; natively there is no
+        // On the web the viewer is served next to `/config.json`; natively there is no
         // server, so read the same file from the user's config dir and let env vars override.
         #[cfg(target_arch = "wasm32")]
         {
@@ -120,7 +120,7 @@ impl OpenHfModal {
             // `SameOrigin`: the deployment may sit behind HTTP Basic auth, and ehttp's
             // default (`Omit`) tells the browser to strip the authenticated session,
             // turning every fetch into a 401.
-            let request = ehttp::Request::get("tos-config.json")
+            let request = ehttp::Request::get("config.json")
                 .with_credentials(ehttp::Credentials::SameOrigin);
             ehttp::fetch(request, move |result| {
                 let outcome = match result {
@@ -135,7 +135,7 @@ impl OpenHfModal {
                 };
                 if let Err(err) = &outcome {
                     re_log::warn!(
-                        "Failed to load server TOS defaults: {err}\nFile: tos-config.json"
+                        "Failed to load server TOS defaults: {err}\nFile: config.json"
                     );
                 }
                 *config.lock() = Some(outcome);
@@ -219,7 +219,7 @@ impl OpenHfModal {
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
                         "Failed to load the server-side defaults (HF token, artifact-store \
-                         credentials): {err}\nFile: tos-config.json — episodes will be \
+                         credentials): {err}\nFile: config.json — episodes will be \
                          converted locally instead of loading from the artifacts store.",
                     ));
                 }
