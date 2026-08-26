@@ -87,15 +87,17 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
   "tos_access_key": "AK…",
   "tos_secret_key": "SK…",
   "hf_token": "hf_…",
-  "tos_rrd_artifacts_url": "tos://<缓存桶>/rrd-data/"
+  "tos_rrd_artifacts_url": "tos://<rrd 缓存路径>"
 }
 ```
 
-不需要配 region —— viewer 会从 endpoint 域名里自动识别区域。
-如果你还要打开 Hugging Face 数据集且直连 `huggingface.co` 不通,加一行 `"hf_endpoint": "https://hf-mirror.com"` 指向镜像站。
-
-`tos_rrd_artifacts_url` 是转换产物的缓存桶,问管理员要,和云端部署配同一个 —— 这样二次打开数据集能直接命中共享缓存、秒开。
+`tos_rrd_artifacts_url` 是转换产物的 rrd 缓存路径(桶+前缀),问管理员要,和云端部署配同一个 —— 这样二次打开数据集能直接命中共享缓存、秒开。
 不写这行(或写 `"off"`)= 不启用缓存,每次打开都现场转换,功能不受影响只是慢。
+
+`tos_endpoint` 和它是配合使用的:填 **rrd 缓存桶所在区域**的 endpoint,viewer 从这个域名自动识别区域并用它访问缓存桶,不需要也没有单独的 region 配置。
+数据集本身在哪个区域无所谓 —— 打开数据集的窗口里有独立的 Region 下拉,按数据集选即可。
+
+如果你还要打开 Hugging Face 数据集且直连 `huggingface.co` 不通,加一行 `"hf_endpoint": "https://hf-mirror.com"` 指向镜像站。
 
 `.rerun` 文件夹不存在就自己建一个(Windows 在 cmd 里执行 `mkdir %USERPROFILE%\.rerun`)。
 这个文件里有密钥,别提交到代码仓库;Linux/macOS 上建议 `chmod 600` 只留自己可读。

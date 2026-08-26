@@ -59,12 +59,14 @@ Example `config.json`:
   "tos_secret_key": "SK…",
   "hf_token": "hf_…",
   "hf_endpoint": "",
-  "tos_rrd_artifacts_url": "tos://<your-cache-bucket>/rrd-data/",
+  "tos_rrd_artifacts_url": "tos://<your-rrd-cache-path>/",
   "rrd_artifacts_prefetch": 0
 }
 ```
 
-There is no region key: the region is derived from the endpoint hostname (and the "Open from …" dialog's Region dropdown lets you pick another one per dataset).
+There is no region key: the region is derived from the endpoint hostname.
+`tos_endpoint` pairs with `tos_rrd_artifacts_url` — set it to the endpoint of the region the rrd cache bucket lives in; the cache bucket is accessed through it.
+Datasets can live in any region: the "Open from …" dialog's Region dropdown picks their region per dataset.
 
 `hf_endpoint` overrides the Hugging Face hub base URL — set it to a mirror such as `https://hf-mirror.com` where huggingface.co is unreachable.
 Absent/empty = the official `https://huggingface.co`; the `HF_ENDPOINT` environment variable wins over the file.
