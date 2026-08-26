@@ -87,9 +87,12 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
   "tos_region": "cn-beijing",
   "tos_access_key": "AK…",
   "tos_secret_key": "SK…",
-  "hf_token": "hf_…"
+  "hf_token": "hf_…",
+  "tos_rrd_artifacts_url": "tos://<缓存桶>/rrd-data/"
 }
 ```
+
+`tos_rrd_artifacts_url` 是转换产物的缓存桶(和云端部署配同一个,二次打开数据集才能秒开):不写这行 = 用内置默认桶,写 `"off"` = 关掉缓存功能。
 
 `.rerun` 文件夹不存在就自己建一个(Windows 在 cmd 里执行 `mkdir %USERPROFILE%\.rerun`)。
 这个文件里有密钥,别提交到代码仓库;Linux/macOS 上建议 `chmod 600` 只留自己可读。
