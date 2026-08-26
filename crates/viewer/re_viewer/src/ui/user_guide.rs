@@ -8,8 +8,6 @@
 
 use std::sync::OnceLock;
 
-use re_ui::modal::{ModalHandler, ModalWrapper};
-
 struct Page {
     tab: &'static str,
     markdown: &'static str,
@@ -99,10 +97,11 @@ pub fn request_open(ctx: &egui::Context, page: usize) {
     ctx.data_mut(|data| data.insert_temp(open_request_id(), page));
 }
 
-/// The guide window: tab per page, markdown rendered in-app.
+/// The guide window: tab per page, markdown rendered in-app. A resizable, movable
+/// [`egui::Window`] (not a modal), so it can sit next to the UI while following along.
 #[derive(Default)]
 pub struct UserGuideModal {
-    modal: ModalHandler,
+    open: bool,
     selected: usize,
     images_registered: bool,
     commonmark_cache: egui_commonmark::CommonMarkCache,
@@ -119,7 +118,7 @@ impl UserGuideModal {
         });
         if let Some(page) = requested {
             self.selected = page.min(PAGES.len() - 1);
-            self.modal.open();
+            self.open = true;
 
             if !self.images_registered {
                 for (name, bytes) in IMAGES {
@@ -143,17 +142,22 @@ impl UserGuideModal {
                 self.images_registered = true;
             }
         }
+        if !self.open {
+            return;
+        }
 
         let selected = &mut self.selected;
         let commonmark_cache = &mut self.commonmark_cache;
-        self.modal.ui(
-            ui.ctx(),
-            || {
-                ModalWrapper::new("User guide")
-                    .min_width(760.0)
-                    .max_height(640.0)
-            },
-            |ui| {
+        let mut open = self.open;
+        let default_size = egui::vec2(840.0, 620.0);
+        egui::Window::new("User guide")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size(default_size)
+            .min_size(egui::vec2(420.0, 320.0))
+            .default_pos(ui.ctx().content_rect().center() - 0.5 * default_size)
+            .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
                     for (index, page) in PAGES.iter().enumerate() {
                         ui.selectable_value(selected, index, page.tab);
@@ -162,12 +166,16 @@ impl UserGuideModal {
                 ui.separator();
                 egui::ScrollArea::vertical()
                     .id_salt(*selected) // separate scroll position per page
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
+                        // Cap images to the window width, so every section wraps to the
+                        // same line length no matter how wide the screenshots are.
+                        let max_image_width = (ui.available_width() - 12.0).max(100.0) as usize;
                         egui_commonmark::CommonMarkViewer::new()
-                            .max_image_width(Some(720))
+                            .max_image_width(Some(max_image_width))
                             .show(ui, commonmark_cache, processed_markdown(*selected));
                     });
-            },
-        );
+            });
+        self.open = open;
     }
 }

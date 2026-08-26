@@ -326,12 +326,18 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
         }
         ui.strong(RichText::new(header).size(15.0));
         ui.add_space(8.0);
-        CardLayout::new(
-            row.iter().map(|item| item.card_item(ui)).collect(),
-            Frame::NONE,
-        )
-        .show(ui, |ui, index, _card_hovered| {
-            row[index].show(ui, ctx, cloud_state);
+        // Cards stretch to fill the row, which looks silly when there are only one or
+        // two (natively only the User guide card shows) — cap the row width per card.
+        let max_row_width = row.len() as f32 * 450.0;
+        ui.scope(|ui| {
+            ui.set_max_width(ui.available_width().min(max_row_width));
+            CardLayout::new(
+                row.iter().map(|item| item.card_item(ui)).collect(),
+                Frame::NONE,
+            )
+            .show(ui, |ui, index, _card_hovered| {
+                row[index].show(ui, ctx, cloud_state);
+            });
         });
         ui.add_space(24.0);
     }
