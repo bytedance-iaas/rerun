@@ -42,8 +42,26 @@ pub enum IntroItem {
         url: String,
         body: &'static str,
     },
+    /// Our user-guide links (GitHub-hosted markdown) — absolute URLs, so this card shows
+    /// on the web and natively alike.
+    GuideItem {
+        title: &'static str,
+        links: &'static [(&'static str, &'static str)],
+    },
     CloudLoginItem,
 }
+
+/// The user guides for this fork's features, one link per guide.
+const GUIDE_LINKS: &[(&str, &str)] = &[
+    (
+        "Viewer — open, visualize & explore datasets",
+        "https://github.com/bytedance-iaas/rerun/blob/release_v1/docs/release/user-guide/01-viewer.md",
+    ),
+    (
+        "Catalog server — query & train on TOS datasets",
+        "https://github.com/bytedance-iaas/rerun/blob/release_v1/docs/release/user-guide/02-catalog.md",
+    ),
+];
 
 impl IntroItem {
     fn items(login_enabled: bool) -> Vec<Self> {
@@ -64,6 +82,10 @@ impl IntroItem {
                 body: "Volcengine-enhanced Python SDK — wheels for every platform with the viewer built in. Install with pip.",
             });
         }
+        items.push(Self::GuideItem {
+            title: "User guide",
+            links: GUIDE_LINKS,
+        });
         items.extend([
             Self::DocItem {
                 title: "Send data in",
@@ -99,14 +121,14 @@ impl IntroItem {
             .corner_radius(8)
             .stroke(tokens.native_frame_stroke);
         match self {
-            Self::DocItem { .. } | Self::DeploymentItem { .. } => frame,
+            Self::DocItem { .. } | Self::DeploymentItem { .. } | Self::GuideItem { .. } => frame,
             Self::CloudLoginItem => frame.fill(opposite_tokens.panel_bg_color),
         }
     }
 
     fn card_item(&self, ui: &Ui) -> CardLayoutItem {
         let min_width = match &self {
-            Self::DocItem { .. } | Self::DeploymentItem { .. } => 200.0,
+            Self::DocItem { .. } | Self::DeploymentItem { .. } | Self::GuideItem { .. } => 200.0,
             Self::CloudLoginItem => 400.0,
         };
         CardLayoutItem {
@@ -167,6 +189,28 @@ impl IntroItem {
                     },
                 );
                 ui.label(RichText::new(*body).size(label_size));
+            }
+            Self::GuideItem { title, links } => {
+                ui.heading(RichText::new(*title).strong());
+                ui.add_space(2.0);
+                for (label, url) in *links {
+                    ui.style_mut()
+                        .text_styles
+                        .get_mut(&TextStyle::Body)
+                        .expect("Should always have body text style")
+                        .size = label_size;
+                    let _response = ui.re_hyperlink(*label, *url, true);
+                    #[cfg(feature = "analytics")]
+                    if _response.clicked() || _response.clicked_with_open_in_background() {
+                        re_analytics::record(|| re_analytics::event::WelcomeScreenNavigation {
+                            card_type: "guide".to_owned(),
+                            destination: (*url).to_owned(),
+                            cta_cloud: false,
+                            is_logged_in: cloud_state.is_logged_in(),
+                            has_server: cloud_state.has_server(),
+                        });
+                    }
+                }
             }
             Self::CloudLoginItem => {
                 let opposite_theme = match ui.theme() {
@@ -273,12 +317,30 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
         ui.add_space(32.0);
     }
 
-    CardLayout::new(
-        items.iter().map(|item| item.card_item(ui)).collect(),
-        Frame::NONE,
-    )
-    .show(ui, |ui, index, _card_hovered| {
-        let item = &items[index];
-        item.show(ui, ctx, cloud_state);
+    // Two labeled rows: this deployment's own cards (curation, SDK, user guide) first,
+    // the upstream doc cards and the cloud banner below.
+    let (ours, upstream): (Vec<_>, Vec<_>) = items.into_iter().partition(|item| {
+        matches!(
+            item,
+            IntroItem::DeploymentItem { .. } | IntroItem::GuideItem { .. }
+        )
     });
+    for (header, row) in [
+        ("Volcengine enhancements", ours),
+        ("About the original Rerun", upstream),
+    ] {
+        if row.is_empty() {
+            continue;
+        }
+        ui.strong(RichText::new(header).size(15.0));
+        ui.add_space(8.0);
+        CardLayout::new(
+            row.iter().map(|item| item.card_item(ui)).collect(),
+            Frame::NONE,
+        )
+        .show(ui, |ui, index, _card_hovered| {
+            row[index].show(ui, ctx, cloud_state);
+        });
+        ui.add_space(24.0);
+    }
 }
