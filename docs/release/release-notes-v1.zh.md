@@ -17,7 +17,7 @@ v1 是首个正式版本,面向在火山引擎上浏览、管理、训练机器�
 - **一键质检 Diagnose**:web viewer 中一键跳转 Daft 质检台,数据集的 TOS 路径与地区自动填好;仅对 TOS 上的 LeRobot v2 / v3 数据集提供。
 - **三种 viewer**:浏览器 web viewer(随开随用)、本地 native viewer、云上 native viewer 会话(经内网读 TOS、看超大数据集),三者共用同一套实现。
 
-### Catalog server:数据集管理与训练取数
+### Catalog server:数据集管理与训练取数据
 
 - **数据集注册与查询**:把 TOS 上的数据集登记进目录,之后按名字引用;登记的只是元数据,数据本体留在 TOS。
 - **训练直读(预签名)**:训练时数据字节直接从 TOS 流到训练机,不经过服务器中转,训练机也无需持有 TOS 密钥;`RerunIterableDataset` 可直接喂给 PyTorch。
