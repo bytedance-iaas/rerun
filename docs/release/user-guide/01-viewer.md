@@ -158,6 +158,8 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 | **Region** | 桶所在地区,从下拉里选(示例数据在 `cn-beijing`)。选错地区会连不上桶。 |
 | **Upload converted rrd to the artifacts store** | 是否把转换结果写回缓存(默认勾选)。保持勾选,下次打开同一数据集会直接秒开,详见第 5 节。 |
 
+对话框里还有一个 **Use non-default credentials** 复选框,平时不用管:访问密钥默认用部署(或本机 `config.json`)里配好的;要打开默认凭证读不了的桶(例如另一个账号下的数据)时,勾上它手动输入这次用的 AK/SK 即可。手填的密钥只在内存里使用,不会写进任何配置文件,关掉 viewer 就没了。
+
 ### 3.3 选择 episode,认识面板上的按钮
 
 点 Open 后,左侧 **Sources** 面板下会列出数据集里的各个 episode(片段)。
