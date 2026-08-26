@@ -21,7 +21,7 @@ rerun 是开源的时序多模态数据可视化工具(官网 [rerun.io](https:/
 **Web viewer 的最大限制来自 WASM**:它在浏览器里以 WebAssembly 运行,受 32 位地址空间约束,实际可用内存只有约 1.4 GB,所以较大的数据集可能打不开或加载中崩溃。
 两种 native viewer 是原生程序,没有这个限制,可用内存只取决于所在机器。
 
-反过来,**web viewer 能更好地与火山引擎的其他云服务联动** —— 例如一键跳转 Daft 质检台对数据集做质检(Diagnose,见第 6 节),这是 native viewer 不具备的。
+反过来,**web viewer 能更好地与火山引擎的其他云服务联动** —— 例如一键跳转质检台对数据集做质检(Diagnose,见第 6 节),这是 native viewer 不具备的。
 
 **拿不准选哪个,就用 web viewer** —— 打开浏览器就能用,一般都够用。
 只有当数据集大到 web viewer 打不开时,才换 native viewer(打开方式见第 2 节)。
@@ -241,7 +241,7 @@ rerun rrd-convert tos://<桶>/<路径>/<数据集名>/
 ## 6. 一键质检:Diagnose
 
 数据集打开后,左侧数据集名字旁边可能有一个 **Diagnose** 按钮。
-它把 viewer 和火山引擎的质检服务(Daft robot-curation)联动起来:点一下跳转到质检台,并**自动把当前数据集的 TOS 路径和地区填好**,你直接开跑质检即可。
+它把 viewer 和本服务内置的质检台联动起来:点一下跳转到质检台,并**自动把当前数据集的 TOS 路径和地区填好**,你直接开跑质检即可。
 
 ![Diagnose 按钮](images/viewer-panel-buttons-annotated.png)
 
