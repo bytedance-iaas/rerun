@@ -55,7 +55,7 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 - **Volcengine enhancements** 一排卡片:本服务的快捷入口,点卡片右上角的链接直达 ——
   - **Curate data**:跳转质检台(见第 6 节;这里进去是空白表单,想带着当前数据集跳转用数据集行上的 Diagnose 按钮);
   - **Get the SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
-  - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/`。
+  - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/01-viewer.html` 和 `…/docs/02-catalog.html`(注意要带页面文件名,只开 `/docs/` 目录会报 403)。
 
   下方 **About the original Rerun** 一排卡片和黑色的 **Rerun Hub** 横幅是开源 rerun 的通用文档和官方服务入口,与本服务无关,一般用不到。
 
