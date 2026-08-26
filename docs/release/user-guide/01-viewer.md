@@ -35,7 +35,7 @@ Web viewer 的最大限制来自 WASM:它在浏览器里以 WebAssembly 运行,�
 ### 2.1 Web viewer:用域名打开
 
 Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的网关域名>/`。
-本文示例用 `https://snjeoa6admgt5t57qrqrn.apigateway-cn-beijing.volceapi.com/`,请替换成你自己的。
+本文示例用 `https://scjo9th1m255uu5mjsa40.apigateway-cn-beijing.volceapi.com/`,请替换成你自己的。
 
 在浏览器地址栏输入这个地址,回车,浏览器会弹出登录框,填入管理员给你的用户名和密码即可进入。
 
@@ -50,14 +50,14 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 欢迎页上需要关注三处:
 
 - 左上角的 **`+`** 按钮:打开数据集的入口(见第 3 节)。
-- 右侧 **Recently opened**:最近打开过的数据集列表,点一下就能重新打开。
+- 右侧 **Recently opened**:最近打开过的数据集列表,点一下会弹出已预填好地址的打开对话框,直接点 Open 即可重新打开。
   远程数据集不会常驻,重启服务后列表会清空,但随时可以按第 3 节的方式再打开。
 - **Volcengine enhancements** 一排卡片:本服务的快捷入口,点卡片右上角的链接直达 ——
   - **Curate data**:跳转质检台(见第 6 节;这里进去是空白表单,想带着当前数据集跳转用数据集行上的 Diagnose 按钮);
   - **Get the SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
   - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/`。
 
-  下方 **About the original Rerun** 一排是开源 rerun 的通用文档和官方服务入口,与本服务无关,一般用不到。
+  下方 **About the original Rerun** 一排卡片和黑色的 **Rerun Hub** 横幅是开源 rerun 的通用文档和官方服务入口,与本服务无关,一般用不到。
 
 ### 2.2 本地 native viewer:下载安装到本机
 
@@ -163,7 +163,7 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 ### 3.3 选择 episode,认识面板上的按钮
 
 点 Open 后,左侧 **Sources** 面板下会列出数据集里的各个 episode(片段)。
-每条显示片段序号、任务描述和帧数,例如 `Episode 0 · Grab the red cube · 593 frames`。
+每条显示片段序号、数据量、任务描述和帧数,例如 `Episode 0 · ~28.8 MiB · Grab the red cube · 593 frames`。
 这些片段会自动逐个流式载入,无需手动下载;点其中一条即可查看它,也可让它优先加载。
 
 数据集和每个 episode 旁边有几个控制按钮,鼠标移上去会显示名称:
