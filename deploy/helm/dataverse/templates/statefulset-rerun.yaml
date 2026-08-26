@@ -121,26 +121,16 @@ spec:
             - name: server-data
               mountPath: /server-data
       volumes:
-        # The web container only ever sees the application credentials (AK/SK, hf_token, the account
-        # table) — the signing secret is not among them.
+        # One Secret carries every credential (see values.yaml `secrets:`). Both containers mount
+        # it at /run/secrets; the catalog volume tightens the file mode for the signing key it
+        # holds. Keys a mode does not read are simply never opened by its entrypoint.
         - name: tos-secrets
           secret:
             secretName: {{ include "dataverse.viewerSecretName" . }}
-        # The catalog container gets the signing secret projected into the same directory, as a
-        # single 0400 file (owner-readable only).
         - name: catalog-secrets
-          projected:
-            sources:
-              - secret:
-                  name: {{ include "dataverse.viewerSecretName" . }}
-              {{- if .Values.catalog.tokenAuth.enabled }}
-              - secret:
-                  name: {{ include "dataverse.tokenSecretName" . }}
-                  items:
-                    - key: server_token_secret
-                      path: server_token_secret
-                      mode: 256 # 0400
-              {{- end }}
+          secret:
+            secretName: {{ include "dataverse.viewerSecretName" . }}
+            defaultMode: 256 # 0400, owner-readable only — this mount includes server_token_secret
         - name: rrd-cache
           emptyDir: {} # nginx's WebDAV write-back directory (a fallback path); losing it costs nothing
   # The catalog database plus the remote-file cache. Losing it is survivable — the server re-fetches

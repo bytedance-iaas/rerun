@@ -131,20 +131,9 @@ read them back.
 */}}
 {{- define "dataverse.viewerSecretName" -}}
 {{- if not .Values.secrets.existingSecret }}
-{{- fail "secrets.existingSecret is required: the name of a Secret in this namespace carrying tos_access_key, tos_secret_key and, when web.basicAuth.enabled, web_htpasswd.\n  kubectl -n <namespace> create secret generic dataverse-secrets --from-literal=tos_access_key=<ak> --from-literal=tos_secret_key=<sk> --from-literal=web_htpasswd='<user>:<hash>'\nThe chart deliberately cannot build it from values: Helm stores values verbatim in the release history, where anyone who can run `helm get values` could read the credentials back." }}
+{{- fail "secrets.existingSecret is required: the name of a Secret in this namespace carrying tos_access_key, tos_secret_key, server_token_secret (when catalog.tokenAuth.enabled) and web_htpasswd (when web.basicAuth.enabled).\n  kubectl -n <namespace> create secret generic dataverse-secrets --from-literal=tos_access_key=<ak> --from-literal=tos_secret_key=<sk> --from-literal=server_token_secret=\"$(rerun server generate-secret)\" --from-literal=web_htpasswd='<user>:<hash>'\nThe chart deliberately cannot build it from values: Helm stores values verbatim in the release history, where anyone who can run `helm get values` could read the credentials back." }}
 {{- end }}
 {{- .Values.secrets.existingSecret -}}
-{{- end -}}
-
-{{/*
-The catalog's token-signing Secret, kept separate so it can be mounted into the catalog container
-alone. Only consulted when token auth is on.
-*/}}
-{{- define "dataverse.tokenSecretName" -}}
-{{- if not .Values.secrets.existingTokenSecret }}
-{{- fail "secrets.existingTokenSecret is required when catalog.tokenAuth.enabled=true: the name of a Secret in this namespace carrying a server_token_secret key. Create it through a pipe so it never touches disk:\n  rerun server generate-secret | kubectl -n <namespace> create secret generic rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin\nTo serve an unauthenticated catalog on a private network, set catalog.tokenAuth.enabled=false explicitly." }}
-{{- end }}
-{{- .Values.secrets.existingTokenSecret -}}
 {{- end -}}
 
 {{/* ── APIG ────────────────────────────────────────────────────────────────────────────────── */}}

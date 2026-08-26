@@ -8,7 +8,7 @@
 # Everything else has a default that works.
 #
 # ⚠️ Keep credentials out of this file. Create the Secrets with kubectl and reference them by name
-#    (secrets.existingSecret / secrets.existingTokenSecret), and put the rest of your deployment's
+#    (secrets.existingSecret), and put the rest of your deployment's
 #    values in a separate, gitignored file installed with `-f values-prod.yaml`. Helm stores values
 #    verbatim in the release history, where anyone who can run `helm get values` can read them.
 
@@ -52,24 +52,30 @@ tos:
   # "off" disables the cache: everything still works, datasets just get converted on every open.
   rrdArtifactsUrl: "off"
 
-# All credentials come from Secrets you create yourself. The chart never renders one: Helm stores
-# values verbatim in the release history, so a credential passed through values stays readable to
-# anyone who can run `helm get values`. Both names below are REQUIRED — rendering fails naming the
-# missing one rather than deploying something that cannot start.
+# All credentials come from ONE Secret you create yourself. The chart never renders it: Helm
+# stores values verbatim in the release history, so a credential passed through values stays
+# readable to anyone who can run `helm get values`. The name below is REQUIRED — rendering fails
+# with instructions rather than deploying something that cannot start.
 #
-# ⚠️ Both Secrets must live in the release's namespace. Kubernetes does not let a pod reference a
+# ⚠️ The Secret must live in the release's namespace. Kubernetes does not let a pod reference a
 #    Secret from another one, so sharing credentials across namespaces means creating the same
 #    Secret name in each — the name is what is common, not the object.
 secrets:
-  # The application credentials every pod shares:
+  # Every credential of the deployment, in one Secret. `rerun server generate-secret` prints the
+  # token signing key as plain text — store it like any other credential (paste into a console
+  # form, or an env var for the CLI flow):
   #
   #   kubectl -n <namespace> create secret generic dataverse-secrets \
   #       --from-literal=tos_access_key=<ak> \
   #       --from-literal=tos_secret_key=<sk> \
+  #       --from-literal=server_token_secret="$(rerun server generate-secret)" \
   #       --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"
   #
   # Keys, and what reads them:
   #   tos_access_key / tos_secret_key   REQUIRED — the viewer, the catalog and the console
+  #   server_token_secret               REQUIRED when catalog.tokenAuth.enabled — the catalog's
+  #                                     token signing key (`rerun server generate-secret`).
+  #                                     Whoever holds it can sign a token with any permission
   #   web_htpasswd                      REQUIRED when web.basicAuth.enabled — one
   #                                     `username:password-hash` per line, in Apache htpasswd
   #                                     format (`openssl passwd -apr1` or `htpasswd -B`). The
@@ -83,18 +89,9 @@ secrets:
   # leaves the matching feature off.
   # ⚠️ The chart cannot see this Secret's contents, so editing it does NOT roll the pods. Run
   #    `kubectl rollout restart` afterwards, or the old values stay live.
+  # ⚠️ To update single keys later, `kubectl patch secret … -p '{"stringData":{…}}'` — a
+  #    re-created Secret drops every key the create command does not list.
   existingSecret: ""
-
-  # The signing secret for catalog tokens, in a Secret of its own so it can be mounted into the
-  # catalog container alone — neither the web viewer nor a native session can see it. Create it
-  # through a pipe, so it never touches disk:
-  #
-  #   rerun server generate-secret | kubectl -n <namespace> create secret generic \
-  #       rerun-catalog-server-secrets --from-file=server_token_secret=/dev/stdin
-  #
-  # The key must be `server_token_secret`. Whoever holds this value can sign a token with any
-  # permission. Required whenever catalog.tokenAuth.enabled.
-  existingTokenSecret: ""
 
 # The web viewer container: nginx serving the wasm viewer plus the browser's /config.json.
 web:
