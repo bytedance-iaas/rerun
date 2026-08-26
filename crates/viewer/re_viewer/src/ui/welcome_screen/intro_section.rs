@@ -42,25 +42,18 @@ pub enum IntroItem {
         url: String,
         body: &'static str,
     },
-    /// Our user-guide links — served by the deployment at `/docs/` (GitHub is not
-    /// reachable from mainland China), so web only, like the other deployment cards.
+    /// Our user-guide links — the guide is embedded and rendered in-app
+    /// (`crate::ui::user_guide`), so this card shows on every viewer alike.
     GuideItem {
         title: &'static str,
-        links: Vec<(&'static str, String)>,
     },
     CloudLoginItem,
 }
 
-/// The user guides for this fork's features: label and `/docs/` page name.
-const GUIDE_PAGES: &[(&str, &str)] = &[
-    (
-        "Viewer — open, visualize & explore datasets",
-        "01-viewer.html",
-    ),
-    (
-        "Catalog server — query & train on TOS datasets",
-        "02-catalog.html",
-    ),
+/// The user guides for this fork's features: label and in-app guide page index.
+const GUIDE_PAGES: &[(&str, usize)] = &[
+    ("Viewer — open, visualize & explore datasets", 0),
+    ("Catalog server — query & train on TOS datasets", 1),
 ];
 
 impl IntroItem {
@@ -82,18 +75,9 @@ impl IntroItem {
                 body: "Volcengine-enhanced Python SDK — wheels for every platform with the viewer built in. Install with pip.",
             });
         }
-        let guide_links: Vec<(&'static str, String)> = GUIDE_PAGES
-            .iter()
-            .filter_map(|(label, page)| {
-                re_viewer_context::daft_link::user_guide_url(page).map(|url| (*label, url))
-            })
-            .collect();
-        if !guide_links.is_empty() {
-            items.push(Self::GuideItem {
-                title: "User guide",
-                links: guide_links,
-            });
-        }
+        items.push(Self::GuideItem {
+            title: "User guide",
+        });
         items.extend([
             Self::DocItem {
                 title: "Send data in",
@@ -198,21 +182,21 @@ impl IntroItem {
                 );
                 ui.label(RichText::new(*body).size(label_size));
             }
-            Self::GuideItem { title, links } => {
+            Self::GuideItem { title } => {
                 ui.heading(RichText::new(*title).strong());
                 ui.add_space(2.0);
-                for (label, url) in links {
+                for (label, page) in GUIDE_PAGES {
                     ui.style_mut()
                         .text_styles
                         .get_mut(&TextStyle::Body)
                         .expect("Should always have body text style")
                         .size = label_size;
-                    let _response = ui.re_hyperlink(*label, url.as_str(), true);
-                    #[cfg(feature = "analytics")]
-                    if _response.clicked() || _response.clicked_with_open_in_background() {
+                    if ui.link(*label).clicked() {
+                        crate::ui::user_guide::request_open(ui.ctx(), *page);
+                        #[cfg(feature = "analytics")]
                         re_analytics::record(|| re_analytics::event::WelcomeScreenNavigation {
                             card_type: "guide".to_owned(),
-                            destination: (*url).to_owned(),
+                            destination: format!("user-guide:{page}"),
                             cta_cloud: false,
                             is_logged_in: cloud_state.is_logged_in(),
                             has_server: cloud_state.has_server(),

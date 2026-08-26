@@ -30,7 +30,7 @@ rerun 是开源的时序多模态数据可视化工具(官网 [rerun.io](https:/
 ## 2. viewer 的安装和打开
 
 三种 viewer 的进入方式不同,按第 1 节选好后对号入座。
-打开后看到的欢迎页大同小异:web 版比 native 版多一排本服务的快捷入口卡片(见 2.1;native 的差别在 2.2 说明)。
+打开后看到的欢迎页大同小异(见 2.1;native 版的小差别在 2.2 说明)。
 
 ### 2.1 Web viewer:用域名打开
 
@@ -55,7 +55,7 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 - **Volcengine enhancements** 一排卡片:本服务的快捷入口,点卡片右上角的链接直达 ——
   - **Curate data**:跳转质检台(见第 6 节;这里进去是空白表单,想带着当前数据集跳转用数据集行上的 Diagnose 按钮);
   - **Get the SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
-  - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇),打开的是部署自带的网页版,不依赖外网。
+  - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/`。
 
   下方 **About the original Rerun** 一排是开源 rerun 的通用文档和官方服务入口,与本服务无关,一般用不到。
 
@@ -110,7 +110,8 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 不配这个文件也能用 —— 打开数据集的窗口里可以手动填凭证,配置文件只是帮你预填默认值。
 数据经公网从 TOS 读取,适合本机资源充足的场景。
 
-本地 native viewer 的欢迎页与 web 版基本相同,差别只有一点:没有 Volcengine enhancements 这排卡片 —— 那三张卡指向的都是部署域名下的页面(质检台、下载页、本手册),本地程序不知道你的部署地址,需要时直接用浏览器访问对应页面即可。
+本地 native viewer 的欢迎页与 web 版基本相同,差别只有一点:Volcengine enhancements 一排只有 **User guide** 一张卡(文档内置在 viewer 里,照常可读)。
+另外两张(质检台、下载页)是部署域名下的网页,本地程序不知道你的部署地址所以不显示,需要时直接用浏览器访问对应页面即可。
 
 ### 2.3 云上 native viewer 会话:请管理员按需创建
 
