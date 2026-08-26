@@ -55,14 +55,19 @@ Example `config.json`:
 ```json
 {
   "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
-  "tos_region": "cn-beijing",
   "tos_access_key": "AK…",
   "tos_secret_key": "SK…",
   "hf_token": "hf_…",
+  "hf_endpoint": "",
   "tos_rrd_artifacts_url": "tos://<your-cache-bucket>/rrd-data/",
   "rrd_artifacts_prefetch": 0
 }
 ```
+
+There is no region key: the region is derived from the endpoint hostname (and the "Open from …" dialog's Region dropdown lets you pick another one per dataset).
+
+`hf_endpoint` overrides the Hugging Face hub base URL — set it to a mirror such as `https://hf-mirror.com` where huggingface.co is unreachable.
+Absent/empty = the official `https://huggingface.co`; the `HF_ENDPOINT` environment variable wins over the file.
 
 `tos_rrd_artifacts_url` is where converted rrd artifacts are stored (read + write-back), shared by all viewers.
 There is no default bucket: an absent key (or `""`/`"off"`, also via `TOS_RRD_ARTIFACTS_URL`) disables the artifacts store.

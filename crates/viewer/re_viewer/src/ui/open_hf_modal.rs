@@ -16,6 +16,9 @@ use re_viewer_context::{CommandSender, SystemCommand, SystemCommandSender as _};
 struct ServerHfConfig {
     hf_token: String,
 
+    /// Hub base-URL override (e.g. a mirror); empty = the official huggingface.co.
+    hf_endpoint: String,
+
     // The rrd artifacts store lives in a TOS bucket regardless of the dataset's source, so the HF dialog
     // needs the TOS connection settings too (same keys, same config file).
     tos_endpoint: String,
@@ -33,6 +36,7 @@ impl Default for ServerHfConfig {
     fn default() -> Self {
         Self {
             hf_token: String::new(),
+            hf_endpoint: String::new(),
             tos_endpoint: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
@@ -123,6 +127,9 @@ impl OpenHfModal {
                 let outcome = match result {
                     Ok(response) if response.status == 200 => {
                         serde_json::from_slice::<ServerHfConfig>(&response.bytes)
+                            .inspect(|parsed| {
+                                re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
+                            })
                             .map_err(|err| format!("invalid JSON: {err}"))
                     }
                     Ok(response) => {
@@ -153,10 +160,12 @@ impl OpenHfModal {
                 }
             }
             env_override(&mut parsed.hf_token, "HF_TOKEN");
+            env_override(&mut parsed.hf_endpoint, "HF_ENDPOINT");
             env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+            re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
             if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
                 && let Ok(n) = value.trim().parse()
             {

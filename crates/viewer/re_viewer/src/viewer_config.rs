@@ -17,6 +17,9 @@ pub struct ViewerConfig {
     pub tos_secret_key: String,
     pub hf_token: String,
 
+    /// Hub base-URL override (e.g. a mirror); empty = the official huggingface.co.
+    pub hf_endpoint: String,
+
     /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     pub tos_rrd_artifacts_url: String,
 
@@ -35,6 +38,7 @@ impl Default for ViewerConfig {
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             hf_token: String::new(),
+            hf_endpoint: String::new(),
             tos_rrd_artifacts_url: String::new(),
             rrd_artifacts_prefetch: 0,
             daft_url: String::new(),
@@ -113,6 +117,7 @@ pub fn request() {
                 }
             };
             re_viewer_context::daft_link::set_base_url(&parsed.daft_url);
+            re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
             *CONFIG.lock() = Some(parsed);
         });
     }
@@ -134,6 +139,7 @@ pub fn request() {
         env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
         env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
         env_override(&mut parsed.hf_token, "HF_TOKEN");
+        env_override(&mut parsed.hf_endpoint, "HF_ENDPOINT");
         env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
         if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
             && let Ok(n) = value.trim().parse()
@@ -141,6 +147,7 @@ pub fn request() {
             parsed.rrd_artifacts_prefetch = n;
         }
 
+        re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
         *CONFIG.lock() = Some(parsed);
     }
 }

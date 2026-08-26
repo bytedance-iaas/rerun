@@ -91,7 +91,6 @@ mkdir -p ~/.rerun
 cat > ~/.rerun/config.json <<'EOF'
 {
   "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
-  "tos_region": "cn-beijing",
   "tos_access_key": "AK…",
   "tos_secret_key": "SK…",
   "hf_token": "hf_…"

@@ -141,7 +141,8 @@ catalog:
   presignNetwork: public
 
   # Mirror for HuggingFace operations. Empty = go straight to the official site, which is the right
-  # setting for clusters outside China.
+  # setting for clusters outside China. Reaches the in-cloud components as the HF_ENDPOINT env var
+  # AND the user's browser via the web viewer's /config.json (hf_endpoint key).
   hfEndpoint: https://hf-mirror.com
 
   # The catalog database plus the remote-file cache disk, mounted at /server-data.

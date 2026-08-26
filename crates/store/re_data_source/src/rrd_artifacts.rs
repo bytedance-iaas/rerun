@@ -253,6 +253,7 @@ pub struct LocalConfig {
     pub tos_access_key: String,
     pub tos_secret_key: String,
     pub hf_token: String,
+    pub hf_endpoint: String,
     pub tos_rrd_artifacts_url: String,
 }
 
@@ -286,7 +287,9 @@ pub fn load_local_config() -> LocalConfig {
     env_override(&mut config.tos_access_key, "TOS_ACCESS_KEY");
     env_override(&mut config.tos_secret_key, "TOS_SECRET_KEY");
     env_override(&mut config.hf_token, "HF_TOKEN");
+    env_override(&mut config.hf_endpoint, "HF_ENDPOINT");
     env_override(&mut config.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+    crate::hf::set_configured_endpoint(&config.hf_endpoint);
     config
 }
 

@@ -51,23 +51,24 @@ AUTH
         echo "web: no web_htpasswd secret — serving without authentication"
     fi
 
-    # Endpoint/region/bucket come from the deployment — fail loudly rather than baking in a stand-in
-    # that would quietly point the browser at the wrong TOS.
+    # Endpoint/bucket come from the deployment — fail loudly rather than baking in a stand-in
+    # that would quietly point the browser at the wrong TOS. No region key: the viewer derives
+    # the region from the endpoint hostname.
     require_env TOS_ENDPOINT
-    require_env TOS_REGION
     require_env TOS_RRD_ARTIFACTS_URL
     require_env RRD_ARTIFACTS_PREFETCH
 
     # tos_access_key/tos_secret_key/hf_token are the server-side defaults for the browser dialogs
     # (used unless the user opts into "Use non-default AK/SK"). No daft_url: the viewer derives the
     # curation console as the same-origin /curation sibling path on its own.
+    # hf_endpoint is optional: empty = the official https://huggingface.co.
     cat > /run/config.json <<EOF
 {
   "tos_endpoint": "${TOS_ENDPOINT}",
-  "tos_region": "${TOS_REGION}",
   "tos_access_key": "${TOS_AK}",
   "tos_secret_key": "${TOS_SK}",
   "hf_token": "${HF_TOKEN_VALUE}",
+  "hf_endpoint": "${HF_ENDPOINT:-}",
   "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL}",
   "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH}
 }
