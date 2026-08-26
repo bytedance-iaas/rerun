@@ -61,7 +61,7 @@ curl -s -u 'alice:passwd_1' $WEB/config.json | head -c 200; echo
    预期:左侧面板出现 **Volcengine TOS** 分组,数据集名显示为完整 tos:// 路径,
    episode 逐个出现并流入;点某个 episode 会被优先加载。
 4. 打不开先分辨两种失败(README 故障速查有细节):
-   F12 → Network 筛 `tos-s3` —— "blocked by CORS policy" = 桶 CORS 白名单没加这个域名;
+   F12 → Network 筛 `tos-s3` —— "blocked by CORS policy" = 桶 CORS 自动配置没生效(查 catalog 日志的 auto-CORS 行);
    403 = AK/SK 权限;"Failed to fetch" 且 curl 正常 = 浏览器缓存投毒,清缓存硬刷。
 
 ## 3. Daft 质检台(同域名 /curation)

@@ -49,7 +49,8 @@ Browser, local desktop, and the cloud-hosted native session are one codebase wit
 
 ## Prerequisites for the browser path
 
-Browsers enforce CORS, so a bucket must opt in to being read cross-origin: a one-time bucket configuration allowing GET/HEAD from the viewer's origin (`deploy/enable-cors.sh`).
+Browsers enforce CORS, so a bucket must opt in to being read cross-origin.
+This is self-service: the web viewer asks the same-origin `/api/ensure-cors` endpoint (the catalog server) to install the rule on first contact with a bucket (`crates/store/re_data_source/src/tos/cors.rs`).
 Native viewers need no CORS.
 
 ## Key code index
@@ -64,4 +65,4 @@ Native viewers need no CORS.
 | Client-side LeRobot → Rerun conversion (in-memory VFS) | `crates/store/re_importer/src/lerobot/vfs.rs` |
 | Viewer entry points (dialogs) | `crates/viewer/re_viewer/src/ui/open_tos_modal.rs`, `open_hf_modal.rs` |
 | Web deployment serves static only (no `proxy_pass`) | `deploy/nginx.conf`, `deploy/entrypoint.sh` |
-| Bucket CORS for browser direct read | `deploy/enable-cors.sh` |
+| Bucket CORS for browser direct read (self-service) | `crates/store/re_data_source/src/tos/cors.rs` |

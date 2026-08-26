@@ -246,7 +246,8 @@ cache and the task history — never a delivery, which is uploaded to the user's
 visible only at <https://console.volcengine.com/veapig> → instance → service list. `kubectl` cannot
 read it. Never put an assigned `*.volceapi.com` name into `apig.host`, and never change `apig.host`
 on a live deployment: the Ingress keeps its old ADDRESS, and a new host means a new public domain
-that bookmarks and bucket CORS rules have to follow.
+that bookmarks have to follow (bucket CORS keeps working — the auto-installed rule uses the
+region-wide gateway wildcard).
 
 **Do not verify APIG by curling the CLB IP with a Host header.** It answers 401 with error code
 010002 for every host, working ones included. Test the assigned domain instead.

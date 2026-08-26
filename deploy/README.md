@@ -24,7 +24,6 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 | `novnc-paste-bridge.js` | Appended into noVNC's `ui.js` at build time so Cmd+V / Ctrl+V pastes into the native session in one step. |
 | `.env.example` | Non-secret settings: endpoint, region. Copy to `.env` (gitignored). |
 | `gen-ca-bundle.sh` | Exports macOS keychain certs so cargo can download deps behind a corporate TLS-intercepting proxy. Optional; skip on Linux / no proxy. |
-| `enable-cors.sh` | CORS setup for the TOS bucket (so the browser reads the bucket directly). Must list **every origin the web viewer is served from** — re-run it whenever the viewer gets a new address (see "Bucket CORS"). |
 | `run-native.sh` | Runs a host-built native viewer with credentials from `secrets/` (dev convenience). |
 
 Credentials live in `deploy/secrets/` (`tos_access_key`, `tos_secret_key`, `hf_token`) — gitignored, mounted as docker secrets. `secrets/`, `.env`, and `ca-bundle.pem` are all gitignored.
@@ -132,22 +131,20 @@ Building inside mainland China, point every download at a mirror:
   --build-arg CARGO_MIRROR=sparse+https://rsproxy.cn/index/
 ```
 
-## Bucket CORS — required for every new web-viewer address
+## Bucket CORS — automatic
 
-The web viewer talks to TOS **directly from the browser**, and browsers enforce CORS: the bucket only answers pages served from an origin on its `AllowedOrigin` whitelist.
-That whitelist lives in `enable-cors.sh`, so putting the web viewer at a new address is always two steps:
+The web viewer talks to TOS **directly from the browser**, and browsers enforce CORS: the bucket only answers pages served from an allowed origin.
+This is self-service: before the first request to a bucket, the web viewer asks the same-origin `/api/ensure-cors` endpoint (routed to the catalog server, which is not subject to browser CORS) to install the viewer's CORS rule on that bucket — appending to whatever rules the bucket already has, never overwriting.
+Implementation and the exact rule: `crates/store/re_data_source/src/tos/cors.rs`.
+The rule's origins are the region's APIG wildcard (`https://*.apigateway-<region>.volceapi.com`) plus the local-docker origins, so gateway re-creates need no CORS follow-up.
+Requires TOS credentials with bucket-management permission; opt out with `catalog.autoCors.enabled=false` in the helm values.
 
-1. Add the new origin (scheme + host + port, no trailing slash) to the `AllowedOrigin` list in `enable-cors.sh`. Common ones:
-   - `https://*.apigateway-cn-beijing.volceapi.com` — **use the wildcard** for the auto-assigned APIG domain (how most users reach the viewer publicly). The APIG domain is re-assigned on every gateway recreate, so a wildcard means you never have to chase the new `<id>` — TOS supports one `*` in an `AllowedOrigin`.
-   - `http://rerun-web` — the in-cluster Service name, when testing the web viewer from a browser running inside the cluster (e.g. `browser-test.yaml`).
-   - `http://101.126.41.246` — a VKE LoadBalancer / gateway public IP.
-   - `http://127.0.0.1:9091` — local docker.
-2. Re-run `./enable-cors.sh` (needs `secrets/`) — it overwrites the bucket's CORS config and prints a verification preflight.
+Manual fallback (auto-CORS disabled, or credentials without bucket-management permission): add an equivalent rule in the TOS console — allow GET/HEAD/PUT/DELETE from the viewer origins, `AllowedHeader *`, and ExposeHeader `ETag`, `Content-Range`, `Content-Length`, `x-amz-meta-rerun-fingerprint`, `x-amz-meta-rerun-source-url`.
+The ExposeHeader entries are load-bearing: without them the browser hides the fingerprint header and every artifact lookup silently misses.
+The origin is the address in the browser's URL bar (the viewer's own host), **not** the TOS endpoint the data lives on.
 
-The origin is the address in the browser's URL bar (the viewer's own host), **not** the TOS endpoint the data lives on — those are different hosts.
-
-Symptoms of a missing origin: the web viewer loads fine, but opening any `tos://` dataset fails in the browser with a cryptic `Request failed: Failed to fetch` (CORS errors in the dev console), and rrd-artifact lookups silently miss — while the native viewers (which are not subject to CORS) work normally.
-The `ExposeHeader` entries for `x-amz-meta-rerun-*` are equally load-bearing: without them the browser hides the fingerprint header and every artifact lookup misses.
+Symptoms of missing CORS: the web viewer loads fine, but opening any `tos://` dataset fails with a cryptic `Request failed: Failed to fetch` (CORS errors in the dev console) — while the native viewers (not subject to CORS) work normally.
+Check the catalog logs for `auto-CORS` lines to see why the self-service path did not fix it.
 
 ## Credential model
 
