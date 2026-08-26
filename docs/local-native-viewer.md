@@ -59,13 +59,14 @@ Example `config.json`:
   "tos_access_key": "AK…",
   "tos_secret_key": "SK…",
   "hf_token": "hf_…",
-  "tos_rrd_artifacts_url": "tos://physical-ai-rerun-test/rrd-data/",
+  "tos_rrd_artifacts_url": "tos://<your-cache-bucket>/rrd-data/",
   "rrd_artifacts_prefetch": 0
 }
 ```
 
 `tos_rrd_artifacts_url` is where converted rrd artifacts are stored (read + write-back), shared by all viewers.
-When the key is absent the default bucket above is used; set it to `"off"` (or use `TOS_RRD_ARTIFACTS_URL=off`) to disable the artifacts store.
+There is no default bucket: an absent key (or `""`/`"off"`, also via `TOS_RRD_ARTIFACTS_URL`) disables the artifacts store.
+Point it at the same bucket your deployment uses so locally-opened datasets hit the shared cache.
 
 `rrd_artifacts_prefetch` is how many ready-made rrd artifacts to download at once when opening a dataset (also `RRD_ARTIFACTS_PREFETCH`).
 `0` (or absent) picks the automatic default — 3 in the browser (its ~6-connections-per-host budget), 4 in the native viewer; explicit values are capped at 16.

@@ -18,9 +18,7 @@ struct ServerTosConfig {
     tos_access_key: String,
     tos_secret_key: String,
 
-    /// Where converted rrds are stored; an absent key means the default bucket,
-    /// `""`/`"off"` disables the artifacts store.
-    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     tos_rrd_artifacts_url: String,
 
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
@@ -33,8 +31,7 @@ impl Default for ServerTosConfig {
             tos_endpoint: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
-            // The artifacts store is on by default, even with no config file at all.
-            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            tos_rrd_artifacts_url: String::new(),
             rrd_artifacts_prefetch: 0,
         }
     }

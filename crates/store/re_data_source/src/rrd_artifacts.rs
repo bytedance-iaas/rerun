@@ -15,17 +15,10 @@
 
 use crate::tos::{TosCredentials, TosLocation};
 
-/// Where converted rrds go unless configured otherwise (`tos_rrd_artifacts_url`).
-pub const DEFAULT_RRD_ARTIFACTS_URL: &str = "tos://physical-ai-rerun-test/rrd-data/";
-
 /// Setting `tos_rrd_artifacts_url` (or `TOS_RRD_ARTIFACTS_URL`) to this disables the artifacts store.
+/// An absent or empty value disables it too — there is no default bucket; every deployment
+/// configures its own.
 pub const RRD_ARTIFACTS_OFF: &str = "off";
-
-/// Serde default for `tos_rrd_artifacts_url` config fields: an *absent* key means the default
-/// bucket (the artifacts store is on by default); an explicit `""`/`"off"` disables it.
-pub fn default_artifacts_url() -> String {
-    DEFAULT_RRD_ARTIFACTS_URL.to_owned()
-}
 
 /// Bump when the conversion output changes (importer fixes, layout changes, …):
 /// every artifact produced by older revisions becomes stale at once.
@@ -260,7 +253,6 @@ pub struct LocalConfig {
     pub tos_access_key: String,
     pub tos_secret_key: String,
     pub hf_token: String,
-    #[serde(default = "default_artifacts_url")]
     pub tos_rrd_artifacts_url: String,
 }
 
@@ -432,9 +424,9 @@ mod tests {
         assert_eq!(parse_artifacts_url("off"), None);
         assert_eq!(parse_artifacts_url("OFF"), None);
         assert_eq!(
-            parse_artifacts_url(DEFAULT_RRD_ARTIFACTS_URL),
+            parse_artifacts_url("tos://example-bucket/rrd-data/"),
             Some(TosLocation {
-                bucket: "physical-ai-rerun-test".to_owned(),
+                bucket: "example-bucket".to_owned(),
                 prefix: "rrd-data/".to_owned(),
             })
         );

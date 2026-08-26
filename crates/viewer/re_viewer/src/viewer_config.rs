@@ -17,9 +17,7 @@ pub struct ViewerConfig {
     pub tos_secret_key: String,
     pub hf_token: String,
 
-    /// Where converted rrds are stored; an absent key means the default bucket,
-    /// `""`/`"off"` disables the artifacts store.
-    #[serde(default = "re_data_source::rrd_artifacts::default_artifacts_url")]
+    /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     pub tos_rrd_artifacts_url: String,
 
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
@@ -37,7 +35,7 @@ impl Default for ViewerConfig {
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             hf_token: String::new(),
-            tos_rrd_artifacts_url: re_data_source::rrd_artifacts::default_artifacts_url(),
+            tos_rrd_artifacts_url: String::new(),
             rrd_artifacts_prefetch: 0,
             daft_url: String::new(),
         }
@@ -169,20 +167,21 @@ mod tests {
     }
 
     #[test]
-    fn artifacts_store_defaults_on_but_needs_credentials() {
-        // An absent key resolves to the default bucket…
+    fn artifacts_store_needs_explicit_url_and_credentials() {
+        // An absent key means no artifacts store: there is no default bucket.
         let mut config: ViewerConfig = serde_json::from_slice(b"{}").unwrap();
-        assert_eq!(
-            config.tos_rrd_artifacts_url,
-            re_data_source::rrd_artifacts::DEFAULT_RRD_ARTIFACTS_URL
-        );
-        // …but without TOS credentials there is no artifacts target.
+        assert!(config.tos_rrd_artifacts_url.is_empty());
         assert!(config.rrd_artifacts(true).is_none());
 
+        // A configured URL alone is not enough either — TOS credentials are required…
+        config.tos_rrd_artifacts_url = "tos://example-bucket/rrd-data/".to_owned();
+        assert!(config.rrd_artifacts(true).is_none());
+
+        // …and with both, the store resolves.
         config.tos_access_key = "ak".to_owned();
         config.tos_secret_key = "sk".to_owned();
         let artifacts = config.rrd_artifacts(true).unwrap();
-        assert_eq!(artifacts.location.bucket, "physical-ai-rerun-test");
+        assert_eq!(artifacts.location.bucket, "example-bucket");
         assert!(artifacts.write_back);
     }
 
