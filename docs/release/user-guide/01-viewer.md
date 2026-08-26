@@ -30,7 +30,7 @@ rerun 是开源的时序多模态数据可视化工具(官网 [rerun.io](https:/
 ## 2. viewer 的安装和打开
 
 三种 viewer 的进入方式不同,按第 1 节选好后对号入座。
-打开后看到的都是同一个欢迎页(见 2.1)。
+打开后看到的欢迎页大同小异:web 版比 native 版多一排本服务的快捷入口卡片(见 2.1;native 的差别在 2.2 说明)。
 
 ### 2.1 Web viewer:用域名打开
 
@@ -43,7 +43,7 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 - 同一个账号在质检台(`/curation` 路径)通用,登录一次两处都通。
 - 一定要用 `https://` 域名访问,不要用 IP;视频回放依赖 HTTPS 安全环境,用 IP 会导致视频区域黑屏。
 
-进入后看到的是 viewer 的欢迎页(三种 viewer 都是这个页面):
+进入后看到的是 viewer 的欢迎页(下图为 web 版;native viewer 的欢迎页与此类似,差别见 2.2):
 
 ![viewer 欢迎页](images/viewer-welcome-annotated.png)
 
