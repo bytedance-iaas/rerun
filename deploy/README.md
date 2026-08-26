@@ -66,9 +66,11 @@ aws s3 cp rerun_sdk-<ver>-cp310-abi3-macosx_11_0_arm64.whl s3://<bucket>/sdk/ \
   --endpoint-url https://tos-s3-cn-beijing.volces.com --region cn-beijing
 
 # 4. Tell the image build where the wheels are, and build (from deploy/).
-#    The bucket URLs are NOT hardcoded — set SDK_WHEEL_URLS (space-separated) in .env
-#    (compose passes it through as a build arg), or `docker build --build-arg SDK_WHEEL_URLS=…`.
-echo 'SDK_WHEEL_URLS=https://<bucket>.tos-s3-cn-beijing.volces.com/sdk/rerun_sdk-<ver>-cp310-abi3-manylinux_2_28_x86_64.whl https://<bucket>.tos-s3-cn-beijing.volces.com/sdk/rerun_sdk-<ver>-cp310-abi3-macosx_11_0_arm64.whl' >> deploy/.env
+#    The bucket URLs are NOT hardcoded — set SDK_WHEEL_URLS (comma- or space-separated;
+#    prefer commas: no shell quoting needed, and CI runners that split arguments on
+#    whitespace can't break the list) in .env (compose passes it through as a build
+#    arg), or `docker build --build-arg SDK_WHEEL_URLS=…`.
+echo 'SDK_WHEEL_URLS=https://<bucket>.tos-s3-cn-beijing.volces.com/sdk/rerun_sdk-<ver>-cp310-abi3-manylinux_2_28_x86_64.whl,https://<bucket>.tos-s3-cn-beijing.volces.com/sdk/rerun_sdk-<ver>-cp310-abi3-macosx_11_0_arm64.whl' >> deploy/.env
 cd deploy && docker compose build
 ```
 

@@ -5,8 +5,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       args:
-        # Space-separated TOS URLs of the SDK wheels (all platforms; built by GitHub
-        # Actions, uploaded to TOS) — not hardcoded in the Dockerfile.
+        # TOS URLs of the SDK wheels, comma- or space-separated (all platforms; built
+        # by GitHub Actions, uploaded to TOS) — not hardcoded in the Dockerfile.
         # Set it in .env (or the shell env); required unless BUILD_SDK_WHEEL=0.
         SDK_WHEEL_URLS: ${SDK_WHEEL_URLS:-}
         # Optional: override which platform tags must be present (empty = the

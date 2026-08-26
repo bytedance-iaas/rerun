@@ -199,8 +199,11 @@ RUN env ${CARGO_JOBS:+CARGO_BUILD_JOBS=${CARGO_JOBS}} cargo build --package reru
 # NOTE: the wheels and this image now come from two separate builds. Build them from the
 # same commit (tag the commit, wait for Actions, upload to TOS, then build the image) or
 # the SDK users install can drift from the catalog server it talks to.
-# The bucket URLs are deliberately NOT hardcoded — pass a space-separated list:
-#   docker build --build-arg SDK_WHEEL_URLS="https://<bucket>…/<linux wheel> https://<bucket>…/<mac wheel>" …
+# The bucket URLs are deliberately NOT hardcoded — pass a comma- or space-separated
+# list. Prefer commas: they survive shells without quoting AND CI systems that split
+# arguments on whitespace regardless of quotes (where a quoted space-separated list
+# arrives as nothing at all):
+#   docker build --build-arg SDK_WHEEL_URLS=https://<bucket>…/<linux wheel>,https://<bucket>…/<mac wheel> …
 #   (docker compose reads it from the SDK_WHEEL_URLS env var / .env)
 # When building the SDK (BUILD_SDK_WHEEL=1, the default) SDK_WHEEL_URLS is REQUIRED and
 # every URL must be reachable: an empty list, a failed download, or an under-1 MB response
@@ -244,7 +247,7 @@ RUN mkdir -p /downloads/sdk; \
         printf '%s\n' "Error: SDK_WHEEL_URLS is not set — pass --build-arg SDK_WHEEL_URLS=\"<TOS wheel URL> [<TOS wheel URL> …]\", or set BUILD_SDK_WHEEL=0 to skip the SDK." >&2; \
         exit 1; \
       fi; \
-      for url in $SDK_WHEEL_URLS; do \
+      for url in $(printf '%s' "$SDK_WHEEL_URLS" | tr ',' ' '); do \
         out="/downloads/sdk/$(basename "${url%%\?*}")"; \
         curl -fSL "$url" -o "$out" || { \
           printf '%s\n' "Error: failed to download SDK wheel." "URL: $url" >&2; exit 1; }; \
