@@ -118,7 +118,7 @@ fn add_button_ui(
 ) {
     ui.add(
         ui.small_icon_button_widget(&re_ui::icons::ADD, "Add…")
-            .on_hover_text("Open a file or connect to a server")
+            .on_hover_text("Open a file, dataset or connect to a server")
             .on_menu(|ui| {
                 if re_ui::UICommand::Open
                     .menu_button_ui(ui, ctx.command_sender())
@@ -542,7 +542,7 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
             // Close-button:
             let resp = ui
                 .small_icon_button(&icons::CLOSE_SMALL, "Close all recordings in this dataset")
-                .on_hover_text("Close all recordings in this dataset. This cannot be undone.");
+                .on_hover_text("Remove this dataset from the viewer");
 
             if resp.clicked() {
                 for db in displayed_segments.iter().filter_map(SegmentData::entity_db) {
@@ -762,7 +762,7 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
             // Close-button:
             let resp = ui
                 .small_icon_button(&icons::CLOSE_SMALL, "Close all recordings in this dataset")
-                .on_hover_text("Close all recordings in this dataset. This cannot be undone.");
+                .on_hover_text("Remove this dataset from the viewer");
 
             if resp.clicked() {
                 ctx.command_sender()
@@ -776,7 +776,7 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
             if let Some(url) = diagnose_url {
                 let resp = ui
                     .add(egui::Button::new("Diagnose").small())
-                    .on_hover_text(format!("Run data curation on this dataset in Daft\n{url}"));
+                    .on_hover_text("Run data curation on this dataset");
                 if resp.clicked() {
                     ui.open_url(egui::OpenUrl::new_tab(url));
                 }
