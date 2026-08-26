@@ -21,7 +21,15 @@ SDK 由**部署本身提供下载**,不走公共 PyPI。
 
 ![SDK 下载目录](images/downloads-sdk-annotated.png)
 
-目录里同时提供 **Linux x86_64** 和 **macOS(Apple Silicon)** 两种 wheel,按你的机器**自己选对应的那个**。
+目录里提供**四种 wheel**,按你的机器**自己选对应的那个**:
+
+| 你的机器 | 选文件名里带这个的 |
+|---|---|
+| macOS(Apple Silicon) | `macosx_11_0_arm64` |
+| Linux arm64 | `manylinux_2_28_aarch64` |
+| Linux x86_64 | `manylinux_2_28_x86_64` |
+| Windows x64 | `win_amd64` |
+
 在你的 Python(3.10 及以上)环境里安装(URL 末尾换成你选的 wheel 文件名):
 
 ```sh
@@ -29,10 +37,11 @@ pip install "https://<用户名>:<密码>@<网关域名>/downloads/sdk/<wheel �
 ```
 
 - 把 `<用户名>:<密码>` 换成你的登录账号,`<wheel 文件名>` 换成页面上列出的实际文件名。
+  两个 Linux wheel 的文件名较长,页面上显示为截断(`…aarc..>`),悬停或点开链接可见全名,拼 URL 时要用全名。
 - 升级:部署更新后,重新 `pip install` 同一个 URL 即可拿到新版。
 - 训练直读(第 5 节)用到 PyTorch dataloader,还需 `pip install torch`。
 - viewer 已随 wheel 一起分发,装完 SDK 后 `rerun` 命令直接可用(见 [01-viewer.md](01-viewer.md) 第 7 节),无需单独下载。
-- Windows、Intel Mac、arm64 Linux 暂无预编译 wheel。
+- Intel 芯片的 Mac 暂无预编译 wheel(苹果已停产该硬件);其余主流平台已全覆盖。
 
 ## 2. 拿到并使用 token
 
