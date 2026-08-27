@@ -212,6 +212,15 @@ and write an HF repo id into `vllm.model`, and vLLM pulls from HuggingFace itsel
 container's image defaults to `image.curator` (which already carries the tooling);
 `vllm.weightFetch.image` overrides it.
 
+## Public datasets mirror
+
+The console's data-source picker offers, next to the user's own bucket, Volcengine's
+anonymous-readable HuggingFace mirror on TOS (the console filters it down to its few
+LeRobot-format datasets). It is on by default — `curator.publicDatasets.bucket` is `ai-infra`,
+with the region following `tos.region` — because the deployment target is the Volcengine network,
+which is the only place the mirror is reachable; set the bucket to `""` to drop the feature.
+The mirror is read with an unsigned client, so it needs no rights on the deployment's AK/SK.
+
 ## Upgrades and configuration changes
 
 `helm upgrade dataverse deploy/helm/dataverse -n rerun -f …` is all it takes. A site-configuration
