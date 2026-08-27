@@ -61,7 +61,15 @@ impl RrdConvertCommand {
             })?;
         let rrd_artifacts = Some(RrdArtifactsConfig {
             location: artifacts_location,
-            credentials: credentials.clone(),
+            credentials: TosCredentials {
+                // The artifacts bucket may live in its own region (empty = the deployment's,
+                // which returns the endpoint verbatim).
+                endpoint: re_data_source::tos::endpoint_for_region(
+                    &config.tos_rrd_artifacts_region,
+                    &config.tos_endpoint,
+                ),
+                ..credentials.clone()
+            },
             write_back: true,
             prefetch_items: 0, // Converting never downloads artifacts.
         });

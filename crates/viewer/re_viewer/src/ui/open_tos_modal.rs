@@ -22,6 +22,9 @@ struct ServerTosConfig {
     /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     tos_rrd_artifacts_url: String,
 
+    /// The artifacts bucket's region; empty = the deployment's own region.
+    tos_rrd_artifacts_region: String,
+
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
     rrd_artifacts_prefetch: usize,
 }
@@ -33,6 +36,7 @@ impl Default for ServerTosConfig {
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             tos_rrd_artifacts_url: String::new(),
+            tos_rrd_artifacts_region: String::new(),
             rrd_artifacts_prefetch: 0,
         }
     }
@@ -154,6 +158,10 @@ impl OpenTosModal {
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+            env_override(
+                &mut parsed.tos_rrd_artifacts_region,
+                "TOS_RRD_ARTIFACTS_REGION",
+            );
             if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
                 && let Ok(n) = value.trim().parse()
             {
@@ -336,14 +344,29 @@ impl OpenTosModal {
                             // The artifacts bucket belongs to the deployment, so prefer its
                             // credentials even when the dataset is opened with custom ones
                             // (which likely can't access the artifacts bucket at all).
+                            // Same for the endpoint: the artifacts bucket has its own
+                            // configured region (empty = the deployment's), independent of
+                            // the dataset region the user picked — `resolved_endpoint`
+                            // (the dataset's) would answer NoSuchBucket.
+                            let artifact_endpoint = re_data_source::tos::endpoint_for_region(
+                                &server_config.tos_rrd_artifacts_region,
+                                if server_config.tos_endpoint.is_empty() {
+                                    &resolved_endpoint
+                                } else {
+                                    &server_config.tos_endpoint
+                                },
+                            );
                             let artifact_credentials = if server_config.has_credentials() {
                                 TosCredentials {
-                                    endpoint: resolved_endpoint.clone(),
+                                    endpoint: artifact_endpoint,
                                     access_key: server_config.tos_access_key.clone(),
                                     secret_key: server_config.tos_secret_key.clone(),
                                 }
                             } else {
-                                credentials.clone()
+                                TosCredentials {
+                                    endpoint: artifact_endpoint,
+                                    ..credentials.clone()
+                                }
                             };
                             let rrd_artifacts = re_data_source::rrd_artifacts::parse_artifacts_url(
                                 &server_config.tos_rrd_artifacts_url,

@@ -70,6 +70,7 @@ AUTH
   "hf_token": "${HF_TOKEN_VALUE}",
   "hf_endpoint": "${HF_ENDPOINT:-}",
   "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL}",
+  "tos_rrd_artifacts_region": "${TOS_RRD_ARTIFACTS_REGION:-}",
   "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH},
   "web_viewer_url": "${WEB_VIEWER_URL:-}"
 }
