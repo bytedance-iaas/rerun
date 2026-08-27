@@ -51,6 +51,11 @@ tos:
   # Cache bucket for converted rrd artifacts, as a `tos://bucket/prefix/` URL.
   # "off" disables the cache: everything still works, datasets just get converted on every open.
   rrdArtifactsUrl: "off"
+  # The cache bucket's region. Empty = `region` above, which is right when the bucket sits in
+  # the deployment's own region — set it only when it does not. Getting this wrong shows as
+  # NoSuchBucket on every cache read/write (a `tos://` URL carries no region of its own).
+  # (Dataset buckets are not affected: their region is picked per dataset in the open dialog.)
+  rrdArtifactsRegion: ""
 
 # All credentials come from ONE Secret you create yourself. The chart never renders it: Helm
 # stores values verbatim in the release history, so a credential passed through values stays

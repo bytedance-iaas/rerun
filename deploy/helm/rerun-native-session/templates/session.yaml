@@ -35,6 +35,10 @@ spec:
           value: {{ .Values.tos.region | quote }}
         - name: TOS_RRD_ARTIFACTS_URL
           value: {{ .Values.tos.rrdArtifactsUrl | quote }}
+        {{- with .Values.tos.rrdArtifactsRegion }}
+        - name: TOS_RRD_ARTIFACTS_REGION
+          value: {{ . | quote }}
+        {{- end }}
         {{- with .Values.catalog.hfEndpoint }}
         - name: HF_ENDPOINT
           value: {{ . | quote }}

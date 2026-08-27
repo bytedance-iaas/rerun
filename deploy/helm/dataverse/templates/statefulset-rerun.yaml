@@ -53,6 +53,10 @@ spec:
             {{- end }}
             - name: TOS_RRD_ARTIFACTS_URL
               value: {{ .Values.tos.rrdArtifactsUrl | quote }}
+            {{- with .Values.tos.rrdArtifactsRegion }}
+            - name: TOS_RRD_ARTIFACTS_REGION
+              value: {{ . | quote }}
+            {{- end }}
             - name: RRD_ARTIFACTS_PREFETCH
               value: {{ .Values.web.rrdArtifactsPrefetch | quote }}
           ports:

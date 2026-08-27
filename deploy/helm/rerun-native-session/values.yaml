@@ -51,6 +51,9 @@ tos:
   # Cache bucket for converted rrd artifacts; "off" disables it. Sharing dataverse's value keeps the
   # native session's cache consistent with the web viewer's.
   rrdArtifactsUrl: "off"
+  # The cache bucket's region; empty = `region` above. Same field as the dataverse chart's, so
+  # a shared values file keeps both viewers pointed at the same bucket in the same region.
+  rrdArtifactsRegion: ""
 
 catalog:
   # HuggingFace mirror; empty reaches the official site, which is right outside China.
@@ -98,7 +101,10 @@ ingress:
   annotations: {}
 
 # A native session exists precisely to open multi-gigabyte recordings — give it memory. Rendering is
-# software-only (lavapipe), so the CPU request is what decides how smooth it feels.
+# software-only (lavapipe) and parallelizes across cores, so CPU is what decides how smooth it feels.
+# Requests are kept modest (they are what each session reserves, and sessions add up); limits are
+# deliberately high so a busy session can burst into whatever the node has free — an idle session
+# costs nothing extra for it.
 resources:
   requests: { cpu: "2", memory: 8Gi }
-  limits:   { cpu: "4", memory: 16Gi }
+  limits:   { cpu: "32", memory: 256Gi }
