@@ -62,6 +62,12 @@ catalog:
 # which is 4.
 rrdArtifactsPrefetch: "8"
 
+# The deployment's web viewer address (e.g. the dataverse APIG domain,
+# https://console-xxx.apig.cn-beijing.volceapi.com) — the base of the "Web viewer" share links
+# this session's viewer produces. Empty = links carry the https://web_viewer_dns/ placeholder,
+# to be replaced by hand.
+webViewerUrl: ""
+
 secrets:
   # Name of dataverse's application-credentials Secret, carrying tos_access_key, tos_secret_key and
   # optionally hf_token. Same field path as dataverse's values, so its value is reused; the default

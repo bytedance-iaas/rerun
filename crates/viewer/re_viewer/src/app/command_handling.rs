@@ -510,6 +510,17 @@ impl App {
                 self.load_data_source(store_hub, egui_ctx, &data_source);
             }
 
+            SystemCommand::LoadTosDataset { location, region } => {
+                // Credentials come from the deployment/user config, whose fetch may still be
+                // in flight — queue the open, `process_pending_tos_opens` finishes it.
+                crate::viewer_config::request();
+                self.pending_tos_opens.push((location, region));
+                // The user asked for this dataset explicitly; don't also bring back the
+                // previous session on top of it.
+                self.session_restore_attempted = true;
+                egui_ctx.request_repaint();
+            }
+
             SystemCommand::ResetViewer => self.reset_viewer(store_hub, egui_ctx),
             SystemCommand::ClearActiveBlueprintAndEnableHeuristics => {
                 re_log::debug!("Clear and generate new blueprint");
@@ -1606,9 +1617,9 @@ impl App {
             ViewerOpenUrl::Settings => false,
 
             // Resolve to a recording loaded from that source: only step back while it's still open.
-            ViewerOpenUrl::HttpUrl(_) | ViewerOpenUrl::WebEventListener => {
-                recording_loaded_from(url)
-            }
+            ViewerOpenUrl::HttpUrl(_)
+            | ViewerOpenUrl::TosDataset { .. }
+            | ViewerOpenUrl::WebEventListener => recording_loaded_from(url),
             #[cfg(not(target_arch = "wasm32"))]
             ViewerOpenUrl::FilePath(_) => recording_loaded_from(url),
 

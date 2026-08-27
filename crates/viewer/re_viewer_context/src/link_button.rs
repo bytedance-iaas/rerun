@@ -138,6 +138,19 @@ pub fn url_atoms(url: &str, lookup: &UrlNameLookup, theme: Theme) -> Option<Link
             ))
         }
 
+        ViewerOpenUrl::TosDataset { location, .. } => {
+            // Show the last meaningful path segment (dataset directory or file name).
+            let name = location
+                .to_string()
+                .trim_end_matches('/')
+                .rsplit('/')
+                .next()
+                .filter(|segment| !segment.is_empty())
+                .unwrap_or(&location.bucket)
+                .to_owned();
+            Some(LinkButton::new(url, (LinkKind::Dataset.icon(theme), name)))
+        }
+
         ViewerOpenUrl::WebViewerUrl { url_parameters, .. } => {
             // A web-viewer share link wrapping one or more content URLs: show the inner one's button,
             // but keep opening the outer share link on click.

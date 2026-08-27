@@ -55,6 +55,17 @@ impl ViewerOpenUrlDescription {
                 target_short: None,
             },
 
+            ViewerOpenUrl::TosDataset { location, .. } => Self {
+                category: "TOS dataset",
+                target_short: location
+                    .to_string()
+                    .trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .filter(|segment| !segment.is_empty())
+                    .map(|segment| segment.to_owned()),
+            },
+
             ViewerOpenUrl::RedapCatalog(uri) => Self {
                 category: "Catalog",
                 target_short: Some(uri.origin.host.to_string()),

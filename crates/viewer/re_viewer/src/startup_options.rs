@@ -146,9 +146,22 @@ impl StartupOptions {
         } else if self.is_in_notebook || cfg!(not(target_arch = "wasm32")) {
             // Notebooks behave like native viewers here because just like on native,
             // there's no useful base url in the address bar to use.
-            let version = re_build_info::build_info!().version.latest_stable();
-
-            url::Url::parse(&format!("https://rerun.io/viewer/version/{version}")).ok()
+            //
+            // The deployment's web viewer address comes from the config (`web_viewer_url`
+            // in config.json, or the WEB_VIEWER_URL env var). The official rerun.io viewer
+            // is NOT a fallback — it cannot open this fork's tos:// links. Unconfigured
+            // deployments get a placeholder host, making the copied link obviously
+            // incomplete instead of quietly wrong.
+            let configured = crate::viewer_config::get()
+                .map(|config| config.web_viewer_url)
+                .unwrap_or_default();
+            if !configured.is_empty()
+                && let Ok(url) = configured.parse::<url::Url>()
+            {
+                Some(url)
+            } else {
+                url::Url::parse("https://web_viewer_dns/").ok()
+            }
         } else {
             cfg_select! {
                 target_arch = "wasm32" => {

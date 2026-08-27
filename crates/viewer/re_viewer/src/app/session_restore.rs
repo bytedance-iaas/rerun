@@ -42,7 +42,8 @@ impl App {
             .store_bundle()
             .entity_dbs()
             .any(|db| db.store_kind() == re_log_types::StoreKind::Recording);
-        if has_recordings || !self.rx_log.sources().is_empty() {
+        if has_recordings || !self.rx_log.sources().is_empty() || !self.pending_tos_opens.is_empty()
+        {
             self.session_restore_attempted = true;
             return;
         }
@@ -121,6 +122,58 @@ impl App {
             );
             self.command_sender
                 .send_system(SystemCommand::LoadDataSource(source));
+        }
+    }
+
+    /// Finishes `tos://` URL opens ([`SystemCommand::LoadTosDataset`]) once the
+    /// deployment/user config — which holds the credentials — has resolved.
+    ///
+    /// Runs every frame; does nothing while there is no pending open.
+    pub(super) fn process_pending_tos_opens(&mut self, egui_ctx: &egui::Context) {
+        if self.pending_tos_opens.is_empty() {
+            return;
+        }
+
+        crate::viewer_config::request();
+        let config = if let Some(config) = crate::viewer_config::get() {
+            self.pending_tos_wait_since = None;
+            config
+        } else {
+            let now = egui_ctx.input(|i| i.time);
+            let started = *self.pending_tos_wait_since.get_or_insert(now);
+            if now - started < CONFIG_WAIT_TIMEOUT {
+                egui_ctx.request_repaint_after(std::time::Duration::from_millis(100));
+                return; // Try again next frame.
+            }
+            // Config never arrived — fail below with a clear message instead of hanging.
+            self.pending_tos_wait_since = None;
+            Default::default()
+        };
+
+        for (location, region) in std::mem::take(&mut self.pending_tos_opens) {
+            if !config.has_tos_credentials() {
+                re_log::error!(
+                    "Can't open {location} — this deployment has no TOS credentials configured \
+                     (config.json). Use the 'Open from Volcengine TOS' dialog to enter your own."
+                );
+                continue;
+            }
+
+            self.command_sender
+                .send_system(SystemCommand::LoadDataSource(LogDataSource::TosDataset(
+                    re_data_source::tos::TosDatasetSource {
+                        location,
+                        credentials: re_data_source::tos::TosCredentials {
+                            endpoint: re_data_source::tos::endpoint_for_region(
+                                &region,
+                                &config.tos_endpoint,
+                            ),
+                            access_key: config.tos_access_key.clone(),
+                            secret_key: config.tos_secret_key.clone(),
+                        },
+                        rrd_artifacts: config.rrd_artifacts(true),
+                    },
+                )));
         }
     }
 }

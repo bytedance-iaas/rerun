@@ -107,6 +107,19 @@ pub struct ListedObject {
     pub etag: Option<String>,
 }
 
+/// One page of a delimiter listing (see [`TosClient::list_dir`]): objects directly under the
+/// prefix plus the immediate "subdirectories" (common prefixes).
+#[derive(Clone, Debug)]
+pub struct ListedDir {
+    pub objects: Vec<ListedObject>,
+
+    /// Immediate subdirectory keys (with trailing `/`), relative to the bucket root.
+    pub subdirs: Vec<String>,
+
+    /// More entries exist than fit one page; `objects`/`subdirs` are incomplete.
+    pub truncated: bool,
+}
+
 /// Size and user metadata of an object, from a HEAD request.
 #[derive(Clone, Debug)]
 pub struct ObjectHead {
@@ -341,6 +354,40 @@ impl TosClient {
                 return Ok(objects);
             }
         }
+    }
+
+    /// List one level under `prefix`: the objects directly there plus the immediate
+    /// subdirectories, in a single request (no pagination).
+    ///
+    /// Used to probe a location without crawling a potentially huge bucket — a full
+    /// [`Self::list_objects`] of e.g. an artifacts bucket can take minutes.
+    pub async fn list_dir(&self, prefix: &str) -> anyhow::Result<ListedDir> {
+        // Kept sorted, as the signature requires canonically ordered query parameters.
+        let query: Vec<(String, String)> = vec![
+            ("delimiter".to_owned(), "/".to_owned()),
+            ("list-type".to_owned(), "2".to_owned()),
+            ("max-keys".to_owned(), "1000".to_owned()),
+            ("prefix".to_owned(), prefix.to_owned()),
+        ];
+
+        let response = self
+            .signed_request("GET", "/", &query, Vec::new(), Vec::new(), LIST_TIMEOUT)
+            .await?;
+        if response.status != 200 {
+            anyhow::bail!(
+                "ListObjectsV2 failed with HTTP {}: {}\nBucket: {}",
+                response.status,
+                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
+                self.bucket,
+            );
+        }
+
+        let xml = String::from_utf8_lossy(&response.bytes);
+        Ok(ListedDir {
+            objects: parse_list_objects(&xml),
+            subdirs: parse_common_prefixes(&xml),
+            truncated: xml_tag_content(&xml, "IsTruncated") == Some("true".into()),
+        })
     }
 
     /// HEAD an object: its size and user metadata, or `None` if it does not exist.
@@ -687,6 +734,24 @@ fn parse_list_objects(xml: &str) -> Vec<ListedObject> {
     objects
 }
 
+/// Pull the `<CommonPrefixes><Prefix>…</Prefix></CommonPrefixes>` entries (the immediate
+/// "subdirectories") out of a delimiter `ListObjectsV2` response.
+fn parse_common_prefixes(xml: &str) -> Vec<String> {
+    let mut prefixes = Vec::new();
+    let mut rest = xml;
+    while let Some(start) = rest.find("<CommonPrefixes>") {
+        let Some(end) = rest[start..].find("</CommonPrefixes>") else {
+            break;
+        };
+        let entry = &rest[start..start + end];
+        if let Some(prefix) = xml_tag_content(entry, "Prefix") {
+            prefixes.push(xml_unescape(&prefix));
+        }
+        rest = &rest[start + end..];
+    }
+    prefixes
+}
+
 fn xml_unescape(s: &str) -> String {
     s.replace("&lt;", "<")
         .replace("&gt;", ">")
@@ -805,5 +870,23 @@ mod tests {
     #[test]
     fn parse_list_objects_on_empty_result() {
         assert!(parse_list_objects("<ListBucketResult></ListBucketResult>").is_empty());
+    }
+
+    #[test]
+    fn parse_common_prefixes_pulls_subdirectories() {
+        let xml = "\
+<?xml version=\"1.0\"?>
+<ListBucketResult>
+  <Contents><Key>datasets/readme.md</Key><Size>10</Size></Contents>
+  <CommonPrefixes><Prefix>datasets/so101-pick-place/</Prefix></CommonPrefixes>
+  <CommonPrefixes><Prefix>datasets/a&amp;b/</Prefix></CommonPrefixes>
+</ListBucketResult>";
+
+        assert_eq!(
+            parse_common_prefixes(xml),
+            vec!["datasets/so101-pick-place/", "datasets/a&b/"]
+        );
+        // No delimiter in the request → no CommonPrefixes in the response.
+        assert!(parse_common_prefixes("<ListBucketResult></ListBucketResult>").is_empty());
     }
 }

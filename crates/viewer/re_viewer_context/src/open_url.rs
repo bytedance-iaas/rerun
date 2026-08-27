@@ -67,6 +67,20 @@ pub enum ViewerOpenUrl {
     /// See also [`LogDataSource::RedapProxy`].
     RedapProxy(re_uri::ProxyUri),
 
+    /// A `tos://bucket/prefix/` `LeRobot` dataset (or single data file) in Volcengine TOS,
+    /// optionally with the bucket's region (`tos://bucket/prefix/?region=cn-guangzhou`).
+    ///
+    /// The URL carries no credentials; they are resolved from the deployment/user config
+    /// (`config.json`) when opening — same as the "Open from Volcengine TOS" dialog.
+    ///
+    /// See also [`LogDataSource::TosDataset`].
+    TosDataset {
+        location: re_data_source::tos::TosLocation,
+
+        /// The bucket's region; empty = the deployment endpoint's region.
+        region: String,
+    },
+
     /// A URL that points to a redap server.
     RedapCatalog(re_uri::CatalogUri),
 
@@ -112,6 +126,9 @@ impl std::fmt::Debug for ViewerOpenUrl {
             Self::FilePath(path) => write!(f, "FilePath({path:?})"),
             Self::RedapDatasetSegment(uri) => write!(f, "RedapDatasetSegment({uri})"),
             Self::RedapProxy(uri) => write!(f, "RedapProxy({uri})"),
+            Self::TosDataset { location, region } => {
+                write!(f, "TosDataset({location}, region: {region:?})")
+            }
             Self::RedapCatalog(uri) => write!(f, "RedapCatalog({uri})"),
             Self::RedapEntry(uri) => write!(f, "RedapEntry({uri})"),
             Self::RedapFolder(uri) => write!(f, "RedapFolder({uri})"),
@@ -190,6 +207,8 @@ impl ViewerOpenUrl {
         } else if url.starts_with(WEB_EVENT_LISTENER_SCHEME) {
             // Web event listener (legacy notebooks).
             Ok(Self::WebEventListener)
+        } else if let Some((location, region)) = parse_tos_url(url) {
+            Ok(Self::TosDataset { location, region })
         } else if let Some(data_source) =
             LogDataSource::from_uri(re_log_types::FileSource::Uri, url, from_uri_options)
         {
@@ -215,10 +234,10 @@ impl ViewerOpenUrl {
                 LogDataSource::RedapProxy(proxy_uri) => Ok(Self::RedapProxy(proxy_uri)),
 
                 LogDataSource::TosDataset(_) => {
-                    // TOS datasets carry credentials, which don't belong in a shareable URL;
-                    // they are opened via the dedicated dialog instead.
+                    // `tos://` URLs are parsed into `Self::TosDataset` above;
+                    // `LogDataSource::from_uri` never constructs this variant.
                     Err(anyhow::anyhow!(
-                        "TOS datasets are opened via the 'Open from Volcengine TOS' dialog"
+                        "TOS datasets are opened via tos:// URLs or the 'Open from Volcengine TOS' dialog"
                     ))
                 }
 
@@ -233,6 +252,25 @@ impl ViewerOpenUrl {
             anyhow::bail!("Failed to parse URL: {url}")
         }
     }
+}
+
+/// Parse `tos://bucket/prefix/`, optionally with a `?region=…` query (also accepts `s3://`).
+///
+/// Returns the location and the region (empty if the URL has none).
+fn parse_tos_url(url: &str) -> Option<(re_data_source::tos::TosLocation, String)> {
+    if !url.starts_with("tos://") && !url.starts_with("s3://") {
+        return None;
+    }
+    let (path, query) = match url.split_once('?') {
+        Some((path, query)) => (path, query),
+        None => (url, ""),
+    };
+    let location = re_data_source::tos::TosLocation::parse(path)?;
+    let region = url::form_urlencoded::parse(query.as_bytes())
+        .find(|(key, _)| key == "region")
+        .map(|(_, value)| value.into_owned())
+        .unwrap_or_default();
+    Some((location, region))
 }
 
 fn parse_webviewer_url(url: &str) -> anyhow::Result<ViewerOpenUrl> {
@@ -329,7 +367,17 @@ impl ViewerOpenUrl {
         // But since we have to handles this for `open_url` and `sharable_url` anyways,
         // we just preserve as much as possible here.
         match data_source {
-            LogSource::HttpStream { url, .. } => Ok(Self::HttpUrl(url.parse::<Url>()?)),
+            LogSource::HttpStream { url, .. } => {
+                // TOS-backed streams use their `tos://…` display URL as the source URL.
+                // The region isn't part of it, but the stream remembers it — include it so
+                // the link opens against the right endpoint, not the deployment default.
+                if let Some(location) = re_data_source::tos::TosLocation::parse(url) {
+                    let region =
+                        re_data_source::lerobot_remote::dataset_region_of(url).unwrap_or_default();
+                    return Ok(Self::TosDataset { location, region });
+                }
+                Ok(Self::HttpUrl(url.parse::<Url>()?))
+            }
 
             LogSource::File { path, .. } => {
                 cfg_select! {
@@ -460,6 +508,15 @@ impl ViewerOpenUrl {
                 vec1![proxy_uri.to_string()]
             }
 
+            Self::TosDataset { location, region } => {
+                let mut url = location.to_string();
+                if !region.is_empty() {
+                    url.push_str("?region=");
+                    url.extend(url::form_urlencoded::byte_serialize(region.as_bytes()));
+                }
+                vec1![url]
+            }
+
             Self::RedapCatalog(catalog_uri) => {
                 // The welcome page is a fake catalog right now.
                 // If we dont'have a base url we'll just roll with it. It looks ugly but it's sharable.
@@ -560,6 +617,11 @@ impl ViewerOpenUrl {
                 table_blueprint: None,
             }),
             Self::RedapProxy(uri) => Some(LogSource::MessageProxy(uri.clone())),
+            // Matches the source the TOS stream registers itself under (the region is not
+            // part of it), so the loading screen is replaced once the stream starts.
+            Self::TosDataset { location, .. } => Some(LogSource::HttpStream {
+                url: location.to_string(),
+            }),
             Self::WebEventListener => Some(LogSource::RrdWebEvent),
             Self::WebViewerUrl { url_parameters, .. } => (url_parameters.len() == 1)
                 .then(|| url_parameters.first().get_data_source())
@@ -621,6 +683,11 @@ impl ViewerOpenUrl {
                         open_behavior: options.recording_open_behavior,
                     },
                 ));
+            }
+            Self::TosDataset { location, region } => {
+                // Credentials live in the deployment/user config, whose fetch may still be
+                // in flight — the app resolves them and loads the dataset when it's there.
+                command_sender.send_system(SystemCommand::LoadTosDataset { location, region });
             }
             Self::RedapProxy(proxy_uri) => {
                 command_sender.send_system(SystemCommand::LoadDataSource(
@@ -724,6 +791,8 @@ impl ViewerOpenUrl {
             #[cfg(not(target_arch = "wasm32"))]
             Self::FilePath(..) => self,
 
+            Self::TosDataset { .. } => self,
+
             Self::ChunkStoreBrowser { .. } => self,
 
             Self::RedapDatasetSegment(uri) => Self::RedapDatasetSegment(uri.without_fragment()),
@@ -752,6 +821,7 @@ impl ViewerOpenUrl {
             Self::FilePath(..) => None,
             Self::RedapDatasetSegment(uri) => Some(&mut uri.fragment),
             Self::RedapProxy(..) => None,
+            Self::TosDataset { .. } => None,
             Self::RedapCatalog(..) => None,
             Self::RedapEntry(..) => None,
             Self::RedapFolder(..) => None,
@@ -1062,6 +1132,65 @@ mod tests {
             let result = url.parse::<ViewerOpenUrl>();
             assert!(result.is_err(), "Expected error for {url}: {result:?}");
         }
+    }
+
+    #[test]
+    fn test_viewer_open_url_tos_dataset() {
+        let location = re_data_source::tos::TosLocation::parse("tos://bucket/path/to/dataset/")
+            .expect("valid TOS location");
+
+        // Without a region.
+        let url = ViewerOpenUrl::from_str("tos://bucket/path/to/dataset/").unwrap();
+        assert_eq!(
+            url,
+            ViewerOpenUrl::TosDataset {
+                location: location.clone(),
+                region: String::new(),
+            }
+        );
+        assert_eq!(
+            url.sharable_url(None).unwrap(),
+            "tos://bucket/path/to/dataset/"
+        );
+
+        // With a region.
+        let url =
+            ViewerOpenUrl::from_str("tos://bucket/path/to/dataset/?region=cn-guangzhou").unwrap();
+        assert_eq!(
+            url,
+            ViewerOpenUrl::TosDataset {
+                location,
+                region: "cn-guangzhou".to_owned(),
+            }
+        );
+        assert_eq!(
+            url.sharable_url(None).unwrap(),
+            "tos://bucket/path/to/dataset/?region=cn-guangzhou"
+        );
+
+        // Round-trips through a web viewer share link (the `?url=` parameter).
+        let base_url = Url::parse("https://viewer.example.com/").unwrap();
+        let share_url = url.sharable_url(Some(&base_url)).unwrap();
+        assert_eq!(
+            ViewerOpenUrl::from_str(&share_url).unwrap(),
+            ViewerOpenUrl::WebViewerUrl {
+                base_url,
+                url_parameters: vec1::vec1![url],
+            }
+        );
+
+        // A single file is a valid TOS location too.
+        assert_eq!(
+            ViewerOpenUrl::from_str("tos://bucket/artifacts/episode_0.rrd?region=ap-southeast-1")
+                .unwrap(),
+            ViewerOpenUrl::TosDataset {
+                location: re_data_source::tos::TosLocation::parse(
+                    "tos://bucket/artifacts/episode_0.rrd"
+                )
+                .expect("valid TOS location"),
+                region: "ap-southeast-1".to_owned(),
+            }
+        );
     }
 
     #[test]

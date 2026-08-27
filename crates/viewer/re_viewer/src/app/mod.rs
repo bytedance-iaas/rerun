@@ -124,6 +124,13 @@ pub struct App {
     /// When session restore started waiting for the config fetch (egui time, seconds).
     session_restore_wait_since: Option<f64>,
 
+    /// `tos://` dataset opens (from `?url=` parameters or shared links) waiting for the
+    /// deployment/user config, which holds the credentials. Location + region.
+    pending_tos_opens: Vec<(re_data_source::tos::TosLocation, String)>,
+
+    /// When the pending TOS opens started waiting for the config fetch (egui time, seconds).
+    pending_tos_wait_since: Option<f64>,
+
     /// Pending background tasks, e.g. files being saved.
     pub(crate) background_tasks: BackgroundTasks,
 
@@ -503,6 +510,8 @@ impl App {
             state,
             session_restore_attempted: false,
             session_restore_wait_since: None,
+            pending_tos_opens: Vec::new(),
+            pending_tos_wait_since: None,
             background_tasks: Default::default(),
             store_hub: Some(StoreHub::new(
                 if is_test {

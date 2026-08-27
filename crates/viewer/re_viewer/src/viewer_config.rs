@@ -29,6 +29,11 @@ pub struct ViewerConfig {
     /// Where the "Diagnose" buttons send the user: the Daft curation console.
     /// Absent = same-domain `/curation` on the web, no buttons natively.
     pub daft_url: String,
+
+    /// The deployment's web viewer address, used as the base of "Web viewer" share links
+    /// in the native viewer (the web viewer uses its own page address instead).
+    /// Absent = links carry the `https://web_viewer_dns/` placeholder to fill in by hand.
+    pub web_viewer_url: String,
 }
 
 impl Default for ViewerConfig {
@@ -42,6 +47,7 @@ impl Default for ViewerConfig {
             tos_rrd_artifacts_url: String::new(),
             rrd_artifacts_prefetch: 0,
             daft_url: String::new(),
+            web_viewer_url: String::new(),
         }
     }
 }
@@ -139,6 +145,7 @@ pub fn request() {
         env_override(&mut parsed.hf_token, "HF_TOKEN");
         env_override(&mut parsed.hf_endpoint, "HF_ENDPOINT");
         env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+        env_override(&mut parsed.web_viewer_url, "WEB_VIEWER_URL");
         if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
             && let Ok(n) = value.trim().parse()
         {

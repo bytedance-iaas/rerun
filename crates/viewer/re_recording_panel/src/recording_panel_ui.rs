@@ -18,8 +18,9 @@ use re_viewer_context::{
 
 use crate::RecordingPanelCommand;
 use crate::data::{
-    AppIdData, DatasetData, EntryData, EntryTreeNode, FailedEntryData, RecordingPanelData,
-    RemoteTableData, SegmentData, ServerData, ServerEntriesData, ServerLeafEntry,
+    AppIdData, DatasetData, EntryData, EntryTreeNode, FailedEntryData, RecordingData,
+    RecordingPanelData, RemoteTableData, SegmentData, ServerData, ServerEntriesData,
+    ServerLeafEntry,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -787,8 +788,8 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
     let mut item_response = if !loaded_recordings.is_empty() {
         list_item
             .show_hierarchical_with_children(ui, id, true, list_item_content, |ui| {
-                for recording_data in loaded_recordings {
-                    let include_app_id = false; // we already show it in the parent item
+                let include_app_id = false; // we already show it in the parent item
+                let episode_row = |ui: &mut egui::Ui, recording_data: &RecordingData<'_>| {
                     let response = entity_db_button_ui(
                         ctx,
                         recording_data.entity_db,
@@ -799,6 +800,39 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                     ctx.handle_select_focus_sync(
                         &response,
                         Item::StoreId(recording_data.entity_db.store_id().clone()),
+                    );
+                };
+
+                // Hidden episodes move out of the working list into a collapsed group at
+                // the bottom — out of the way, but one eye-click away from coming back.
+                let (visible, hidden): (Vec<_>, Vec<_>) =
+                    loaded_recordings.iter().partition(|recording_data| {
+                        !re_viewer_context::hidden_recordings::is_hidden(
+                            recording_data.entity_db.store_id(),
+                        )
+                    });
+
+                for recording_data in visible {
+                    episode_row(ui, recording_data);
+                }
+
+                if !hidden.is_empty() {
+                    let hidden_id = ui.make_persistent_id(("hidden episodes", local_app_id.id()));
+                    ui.list_item().show_hierarchical_with_children(
+                        ui,
+                        hidden_id,
+                        false, // collapsed by default
+                        re_ui::list_item::LabelContent::new(format!(
+                            "Hidden episodes ({})",
+                            hidden.len()
+                        ))
+                        .with_icon(&icons::INVISIBLE)
+                        .subdued(true),
+                        |ui| {
+                            for recording_data in hidden {
+                                episode_row(ui, recording_data);
+                            }
+                        },
                     );
                 }
             })
