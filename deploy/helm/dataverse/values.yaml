@@ -237,7 +237,7 @@ vllm:
   # --tensor-parallel-size 2.
   extraArgs:
     - --gpu-memory-utilization
-    - "0.92"
+    - "0.8"
     - --max-model-len
     - "32768"
     - --trust-remote-code
