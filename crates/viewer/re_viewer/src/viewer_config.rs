@@ -23,6 +23,11 @@ pub struct ViewerConfig {
     /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     pub tos_rrd_artifacts_url: String,
 
+    /// The artifacts bucket's region. Empty = the deployment's own region (the common case);
+    /// set it when the bucket lives elsewhere — `tos://` URLs carry no region, and TOS
+    /// answers `NoSuchBucket` when a bucket is addressed through another region's endpoint.
+    pub tos_rrd_artifacts_region: String,
+
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
     pub rrd_artifacts_prefetch: usize,
 
@@ -45,6 +50,7 @@ impl Default for ViewerConfig {
             hf_token: String::new(),
             hf_endpoint: String::new(),
             tos_rrd_artifacts_url: String::new(),
+            tos_rrd_artifacts_region: String::new(),
             rrd_artifacts_prefetch: 0,
             daft_url: String::new(),
             web_viewer_url: String::new(),
@@ -70,7 +76,12 @@ impl ViewerConfig {
         Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
             location,
             credentials: re_data_source::tos::TosCredentials {
-                endpoint: self.tos_endpoint.clone(),
+                // The artifacts bucket has its own (optional) region — empty means the
+                // deployment's, in which case this returns `tos_endpoint` verbatim.
+                endpoint: re_data_source::tos::endpoint_for_region(
+                    &self.tos_rrd_artifacts_region,
+                    &self.tos_endpoint,
+                ),
                 access_key: self.tos_access_key.clone(),
                 secret_key: self.tos_secret_key.clone(),
             },
@@ -145,6 +156,10 @@ pub fn request() {
         env_override(&mut parsed.hf_token, "HF_TOKEN");
         env_override(&mut parsed.hf_endpoint, "HF_ENDPOINT");
         env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+        env_override(
+            &mut parsed.tos_rrd_artifacts_region,
+            "TOS_RRD_ARTIFACTS_REGION",
+        );
         env_override(&mut parsed.web_viewer_url, "WEB_VIEWER_URL");
         if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
             && let Ok(n) = value.trim().parse()

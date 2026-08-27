@@ -255,6 +255,9 @@ pub struct LocalConfig {
     pub hf_token: String,
     pub hf_endpoint: String,
     pub tos_rrd_artifacts_url: String,
+
+    /// The artifacts bucket's region; empty = the deployment's own region.
+    pub tos_rrd_artifacts_region: String,
 }
 
 /// Load [`LocalConfig`] from disk + environment. Missing/broken file = empty settings.
@@ -289,6 +292,10 @@ pub fn load_local_config() -> LocalConfig {
     env_override(&mut config.hf_token, "HF_TOKEN");
     env_override(&mut config.hf_endpoint, "HF_ENDPOINT");
     env_override(&mut config.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+    env_override(
+        &mut config.tos_rrd_artifacts_region,
+        "TOS_RRD_ARTIFACTS_REGION",
+    );
     crate::hf::set_configured_endpoint(&config.hf_endpoint);
     config
 }

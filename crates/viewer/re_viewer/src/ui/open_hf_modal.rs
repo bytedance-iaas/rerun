@@ -28,6 +28,9 @@ struct ServerHfConfig {
     /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     tos_rrd_artifacts_url: String,
 
+    /// The artifacts bucket's region; empty = the deployment's own region.
+    tos_rrd_artifacts_region: String,
+
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
     rrd_artifacts_prefetch: usize,
 }
@@ -41,6 +44,7 @@ impl Default for ServerHfConfig {
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
             tos_rrd_artifacts_url: String::new(),
+            tos_rrd_artifacts_region: String::new(),
             rrd_artifacts_prefetch: 0,
         }
     }
@@ -60,7 +64,11 @@ impl ServerHfConfig {
         Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
             location,
             credentials: re_data_source::tos::TosCredentials {
-                endpoint: self.tos_endpoint.clone(),
+                // Empty artifacts region = the deployment's own (returns the endpoint verbatim).
+                endpoint: re_data_source::tos::endpoint_for_region(
+                    &self.tos_rrd_artifacts_region,
+                    &self.tos_endpoint,
+                ),
                 access_key: self.tos_access_key.clone(),
                 secret_key: self.tos_secret_key.clone(),
             },
@@ -163,6 +171,10 @@ impl OpenHfModal {
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
+            env_override(
+                &mut parsed.tos_rrd_artifacts_region,
+                "TOS_RRD_ARTIFACTS_REGION",
+            );
             re_data_source::hf::set_configured_endpoint(&parsed.hf_endpoint);
             if let Ok(value) = std::env::var("RRD_ARTIFACTS_PREFETCH")
                 && let Ok(n) = value.trim().parse()

@@ -30,7 +30,9 @@
 
 - 一个火山引擎账户,已开通 TOS 服务,具备读写权限,容量足够存放数据集;
 - 该账户下一对有 TOS 读写权限的 AK/SK;
-- 一个 rrd 缓存桶(viewer 写转换产物,可与数据桶同一个);
+- 一个 rrd 缓存桶(viewer 写转换产物,可与数据桶同一个),建议建在部署所在的地域(下文 `tos.region`);
+  建在别的地域也行,但要多配一行 `tos.rrdArtifactsRegion` 告诉系统它在哪;
+  数据集桶没有任何地域要求,打开数据集时单独选;
   (质检台不需要预留专门的桶:数据集来源与交付去向都是用户在界面上运行时
   填的 tos:// 路径,AK/SK 对哪些桶有权限就能用哪些桶。)
 - rerun 镜像和 robot_curator 镜像的仓库地址。
@@ -151,8 +153,13 @@ apig:
 tos:
   # 只填 region:公网/内网 TOS endpoint 都由它推导
   # (https://tos-s3-<region>.volces.com 与 .ivolces.com),不需要手写。
+  # 部署不在北京就改成你的地域(如 cn-shanghai)。
   region: cn-beijing
+  # rrd 缓存桶。tos:// 地址本身不带地域信息,系统默认认为它和部署同地域(上面的 region);
+  # 桶建在别的地域就把下面这行注释放开填上,否则读写它会一直报 NoSuchBucket、缓存整体失效。
+  # (数据集桶没有这个问题:打开数据集时在界面上单独选它的 region。)
   rrdArtifactsUrl: tos://<rrd 缓存路径>
+  # rrdArtifactsRegion: <缓存桶所在地域,如 cn-beijing;与部署同地域则不用填>
 
 secrets:
   existingSecret: dataverse-secrets       # = 2.2 建的那个 Secret
@@ -165,7 +172,7 @@ chart 不接受明文密钥输入,也不会自己渲染 Secret:helm 的 release 
 
 集群里还没有 APIG 网关、或就是要一个独立网关,改用新建方式,见 **2.4**。
 
-区域不是 cn-beijing(改 `tos.region` 一处即可)、或要用其他开关(不部署质检台、presign 走内网等),
+区域不是 cn-beijing(改 `tos.region` 一处;rrd 缓存桶若不在该地域,再配上 `tos.rrdArtifactsRegion`)、或要用其他开关(不部署质检台、presign 走内网等),
 参数全集和默认值见 [`deploy/helm/dataverse/values.yaml`](../../deploy/helm/dataverse/values.yaml) 的注释。
 
 ### 2.4 改为新建独立 APIG 网关(可选)
