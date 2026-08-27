@@ -25,7 +25,7 @@ data:
     {{- $backends := deepCopy (.Values.curator.vlmBackends | default dict) }}
     {{- if .Values.vllm.enabled }}
     {{- $endpoint := printf "http://%s-vllm.%s.svc.cluster.local:%v/v1" (include "dataverse.fullname" .) .Release.Namespace (.Values.vllm.port | int) }}
-    {{- $auto := dict "endpoint" $endpoint "model" (.Values.vllm.servedModelName | default .Values.vllm.model) "service_type" "Self-hosted vLLM (deployed by this chart)" }}
+    {{- $auto := dict "endpoint" $endpoint "model" (.Values.vllm.servedModelName | default .Values.vllm.model) "service_type" "自托管" }}
     {{- /* curator.vlmBackends wins: a user-defined `self-hosted` entry is kept as-is */}}
     {{- $backends = merge $backends (dict "self-hosted" $auto) }}
     {{- end }}

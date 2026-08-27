@@ -118,7 +118,11 @@ kubectl -n $DATAVERSE_NS create secret generic dataverse-secrets \
 
 ### 2.3 写 values 文件
 
-创建 `deploy/secrets/values-prod.yaml`(目录不存在先 `mkdir -p deploy/secrets`;该目录已被 gitignore 挡住),按注释替换尖括号里的值:
+创建一个 values 文件,按注释替换尖括号里的值。
+放哪里、叫什么都随意 — 文件里没有任何密钥(见下),不怕落盘;
+本文档后续命令统一以 `deploy/secrets/values-prod.yaml` 为例
+(这个目录已被 gitignore 挡住,放仓库里也不会误提交;目录不存在先 `mkdir -p deploy/secrets`),
+用别的路径就把后文命令里的 `-f` 参数跟着换掉:
 
 ```yaml
 # 完整镜像地址(必须带 tag):chart 不跟踪镜像版本,tag 每次构建都不同,必须显式给。
