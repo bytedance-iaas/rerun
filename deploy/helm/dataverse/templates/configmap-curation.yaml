@@ -1,8 +1,9 @@
 {{- if .Values.curator.enabled }}
 {{/*
-Site configuration for the curation console. The only thing in it is the set of VLM backends the UI
-offers: buckets and prefixes are runtime input, so the deployment never declares "these are the
-buckets we are wired to".
+Site configuration for the curation console: the set of VLM backends the UI offers, and the public
+datasets mirror bucket. Work buckets and prefixes are runtime input, so the deployment never
+declares "these are the buckets we are wired to" — the one bucket configured here is the read-only
+public mirror, which is a deployment constant.
 
 The console has no in-cluster discovery — the only backends it offers are the ones listed here — so
 the vLLM this chart can deploy (vllm.enabled=true) has to be injected to be selectable at all. It is
@@ -32,7 +33,26 @@ data:
     {{- if $backends }}
     vlm_backends:
       {{- toYaml $backends | nindent 6 }}
-    {{- else }}
+    {{- end }}
+    {{- $pd := .Values.curator.publicDatasets | default dict }}
+    {{- if $pd.bucket }}
+    {{- /* The console reads bucket + region and registers the bucket for anonymous (unsigned)
+           access; prefix/manifest/label have console-side defaults and are only rendered when
+           overridden. */}}
+    public_datasets:
+      bucket: {{ $pd.bucket | quote }}
+      region: {{ $pd.region | default .Values.tos.region | quote }}
+      {{- with $pd.prefix }}
+      prefix: {{ . | quote }}
+      {{- end }}
+      {{- with $pd.manifest }}
+      manifest: {{ . | quote }}
+      {{- end }}
+      {{- with $pd.label }}
+      label: {{ . | quote }}
+      {{- end }}
+    {{- end }}
+    {{- if and (not $backends) (not $pd.bucket) }}
     {}
     {{- end }}
 {{- end }}

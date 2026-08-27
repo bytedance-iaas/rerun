@@ -189,6 +189,27 @@ curator:
   #       service_type: Self-hosted vLLM
   vlmBackends: {}
 
+  # The console's "public datasets" source: Volcengine's anonymous-readable TOS mirror of
+  # HuggingFace (maintained by oniond), rendered into the console's site.yaml as its
+  # `public_datasets` section. With a bucket set, the UI's data-source picker gains a public
+  # catalog entry (the console filters the mirror down to its few LeRobot-format datasets)
+  # and the CLI gains `curation public`; an empty bucket drops the feature entirely.
+  # The mirror is read anonymously — do NOT grant the deployment's AK/SK any rights on it
+  # (signing requests against it is actually refused; the console uses an unsigned client).
+  # ⚠️ The mirror is reachable from the Volcengine network only. On a cluster outside it,
+  #    set bucket to "" to switch the feature off.
+  publicDatasets:
+    # The mirror bucket. "" = feature off.
+    bucket: ai-infra
+    # The mirror bucket's region. Empty = tos.region, which is right when the mirror sits in
+    # the same region as the deployment — override only when it does not.
+    region: ""
+    # Layout details (object prefix, manifest name) and the source's display label all have
+    # matching console defaults — override only a mirror with a different layout:
+    #   prefix: dataset
+    #   manifest: dataset_files.json
+    #   label: 字节 HuggingFace 镜像
+
   # Base url of the Volcengine Ark VLM service, injected as the console's ARK_BASE_URL. Ordinary
   # configuration, not a secret — the matching key is `ark_api_key` in secrets.existingSecret.
   # Empty = not injected, which is correct when the console does not use the Ark backend.
