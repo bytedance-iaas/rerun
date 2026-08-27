@@ -512,7 +512,7 @@ impl TosClient {
         // the signature is — so before the first request of the session to this bucket, ask
         // the catalog server (same-origin, exempt from CORS) to install the rule.
         #[cfg(target_arch = "wasm32")]
-        super::cors::ensure_cors_via_server_once(&self.bucket).await;
+        super::cors::ensure_cors_via_server_once(&self.bucket, &self.credentials.region()).await;
 
         let host = self.host();
         let (amz_date, date) = amz_timestamps();
