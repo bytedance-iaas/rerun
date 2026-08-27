@@ -28,6 +28,15 @@ pub enum SystemCommand {
     /// Will not load any new data if the source is already one of the active data sources.
     LoadDataSource(LogDataSource),
 
+    /// Open a `tos://` dataset URL: resolve credentials from the deployment/user config
+    /// (waiting for its async fetch if needed), then load the dataset.
+    LoadTosDataset {
+        location: re_data_source::tos::TosLocation,
+
+        /// The bucket's region; empty = the deployment endpoint's region.
+        region: String,
+    },
+
     /// Add a new receiver for log messages.
     AddReceiver(LogReceiver),
 

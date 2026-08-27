@@ -28,6 +28,7 @@ mod drag_and_drop;
 mod file_dialog;
 mod focus_target;
 mod heuristics;
+pub mod hidden_recordings;
 mod image_info;
 mod item;
 mod item_collection;

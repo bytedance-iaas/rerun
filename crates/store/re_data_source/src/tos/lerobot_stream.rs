@@ -45,6 +45,37 @@ impl DatasetStore for TosStore {
             .collect())
     }
 
+    async fn list_dir(&self) -> anyhow::Result<Option<crate::lerobot_remote::DirListing>> {
+        let dir = self.client.list_dir(&self.location.prefix).await?;
+        Ok(Some(crate::lerobot_remote::DirListing {
+            files: dir
+                .objects
+                .into_iter()
+                .filter_map(|obj| {
+                    obj.key
+                        .strip_prefix(&self.location.prefix)
+                        // The prefix itself may be listed as a zero-byte directory marker.
+                        .filter(|rel| !rel.is_empty())
+                        .map(|rel| ListedFile {
+                            rel_path: rel.to_owned(),
+                            size: obj.size,
+                            content_id: obj.etag.clone(),
+                        })
+                })
+                .collect(),
+            subdirs: dir
+                .subdirs
+                .into_iter()
+                .filter_map(|key| {
+                    key.strip_prefix(&self.location.prefix)
+                        .filter(|rel| !rel.is_empty())
+                        .map(ToOwned::to_owned)
+                })
+                .collect(),
+            truncated: dir.truncated,
+        }))
+    }
+
     async fn file_size(&self, rel_path: &str) -> anyhow::Result<u64> {
         let key = format!("{}{rel_path}", self.location.prefix);
         let objects = self.client.list_objects(&key).await?;

@@ -56,6 +56,9 @@ impl App {
 
         self.run_pending_system_commands(&mut store_hub, egui_ctx);
 
+        // `tos://` URL opens queued above, once the config (credentials) has resolved.
+        self.process_pending_tos_opens(egui_ctx);
+
         {
             // We also need to check for Ui commands, especially `UiCommand::Quit`.
 
@@ -176,6 +179,16 @@ impl App {
                         if let Some(re_uri::RedapUri::DatasetData(uri)) = channel_source.redap_uri()
                         {
                             self.connection_registry.set_uri_error(uri, err.to_string());
+                        }
+
+                        // A remote dataset location that never produced anything doesn't belong
+                        // in "recently opened" (a bad path or region would keep failing on every
+                        // click). Entries that worked before have an item count and are kept —
+                        // a transient failure must not evict them.
+                        if let LogSource::HttpStream { url } = channel_source.as_ref() {
+                            self.state
+                                .recent_datasets
+                                .retain(|recent| recent.url != *url || recent.item_count.is_some());
                         }
                     } else {
                         re_log::debug!("Data source {} has finished", msg.source);

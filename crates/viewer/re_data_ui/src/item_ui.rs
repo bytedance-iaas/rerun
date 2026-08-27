@@ -721,6 +721,10 @@ pub fn entity_db_button_ui(
         }
     }
 
+    // Hidden episodes live in the panel's collapsed "Hidden episodes" group; the row itself
+    // is subdued and its buttons reduce to show + close (see below).
+    let is_hidden = re_viewer_context::hidden_recordings::is_hidden(&store_id);
+
     let mut item_content = if episode_failure.is_some() {
         // Upstream convention for failed entries: red text, reason on hover
         // (see `failed_entry_ui` in the recording panel).
@@ -748,7 +752,7 @@ pub fn entity_db_button_ui(
     } else {
         list_item::LabelContent::new(title)
             .with_icon(icon)
-            .subdued(episode_queued)
+            .subdued(episode_queued || is_hidden)
     };
 
     if ui_layout.is_selection_panel() {
@@ -768,6 +772,15 @@ pub fn entity_db_button_ui(
         // so "has downloaded data" needs a threshold, not just > 0.
         let has_data = entity_db.byte_size_of_physical_chunks() > 16 * 1024;
 
+        // The "…and N more" placeholder row is not an episode; it cannot be hidden.
+        let can_hide = streaming && !re_data_source::lerobot_remote::is_more_placeholder(&store_id);
+
+        if is_hidden {
+            // The show-button is the whole point of a row in the "Hidden episodes" group —
+            // it must be visible without discovering the hover behavior first.
+            item_content = item_content.with_always_show_buttons(true);
+        }
+
         let store_id = store_id.clone();
         item_content = item_content.with_buttons(move |ui| {
             // Close-button:
@@ -786,48 +799,75 @@ pub fn entity_db_button_ui(
                     ));
             }
 
-            if streaming {
+            // Hide/show — the eye, like the blueprint tree's visibility toggle. The episode
+            // keeps its data and moves into the collapsed "Hidden episodes" group at the
+            // bottom of the dataset; closing (×) is what frees memory.
+            if can_hide {
+                if is_hidden {
+                    if ui
+                        .small_icon_button(&icons::VISIBLE, "Display the episode")
+                        .on_hover_text("Display the episode")
+                        .clicked()
+                    {
+                        re_viewer_context::hidden_recordings::unhide(&store_id);
+                    }
+                } else if ui
+                    .small_icon_button(&icons::INVISIBLE, "Hide the episode")
+                    .on_hover_text("Hide the episode")
+                    .clicked()
+                {
+                    re_viewer_context::hidden_recordings::hide(store_id.clone());
+                    // A hidden episode must not hold up the download queue: stop its
+                    // download (if running) and keep it out of the auto-download order.
+                    // Un-hiding brings it back parked; clicking it downloads it again.
+                    if episode_loading || episode_queued {
+                        re_data_source::lerobot_remote::park_episode_for_store(&store_id);
+                    }
+                }
+            }
+
+            if streaming && !is_hidden {
                 // While the whole dataset is paused, the stream is parked and cannot react
                 // to per-episode requests — a re-download would drop the old data and then
                 // sit in the queue until resume, looking like the episode was deleted.
                 // Keep the state simple: gray the per-episode download controls out.
                 ui.add_enabled_ui(!dataset_paused, |ui| {
                     if episode_loading {
-                    if ui
-                        .small_icon_button(&icons::PAUSE, "Pause downloading this episode")
-                        .on_hover_text(
-                            "Pause downloading this episode. \
+                        if ui
+                            .small_icon_button(&icons::PAUSE, "Pause downloading this episode")
+                            .on_hover_text(
+                                "Pause downloading this episode. \
                              Click the episode (or its resume button) to restart it.",
-                        )
-                        .clicked()
+                            )
+                            .clicked()
+                        {
+                            re_data_source::lerobot_remote::pause_current_item(
+                                store_id.application_id().as_str(),
+                            );
+                        }
+                    } else if episode_parked {
+                        if ui
+                            .small_icon_button(&icons::PLAY, "Resume downloading this episode")
+                            .on_hover_text("Resume downloading this episode")
+                            .clicked()
+                        {
+                            re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);
+                        }
+                    } else if (has_data || episode_failed)
+                        && ui
+                            .small_icon_button(&icons::RESET, "Re-download this episode")
+                            .on_hover_text("Re-download this episode")
+                            .clicked()
                     {
-                        re_data_source::lerobot_remote::pause_current_item(
-                            store_id.application_id().as_str(),
-                        );
+                        // Arm the re-download marker, then close the recording to drop the old
+                        // data; the close hook completes the hand-off once the store is gone
+                        // (fetching before the close is processed would lose the race).
+                        re_data_source::lerobot_remote::redownload_episode_for_store(&store_id);
+                        ctx.command_sender
+                            .send_system(SystemCommand::CloseRecordingOrTable(
+                                store_id.clone().into(),
+                            ));
                     }
-                } else if episode_parked {
-                    if ui
-                        .small_icon_button(&icons::PLAY, "Resume downloading this episode")
-                        .on_hover_text("Resume downloading this episode")
-                        .clicked()
-                    {
-                        re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);
-                    }
-                } else if (has_data || episode_failed)
-                    && ui
-                        .small_icon_button(&icons::RESET, "Re-download this episode")
-                        .on_hover_text("Re-download this episode")
-                        .clicked()
-                {
-                    // Arm the re-download marker, then close the recording to drop the old
-                    // data; the close hook completes the hand-off once the store is gone
-                    // (fetching before the close is processed would lose the race).
-                    re_data_source::lerobot_remote::redownload_episode_for_store(&store_id);
-                    ctx.command_sender
-                        .send_system(SystemCommand::CloseRecordingOrTable(
-                            store_id.clone().into(),
-                        ));
-                }
                 });
             }
         });

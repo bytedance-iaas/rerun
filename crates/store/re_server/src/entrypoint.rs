@@ -566,28 +566,60 @@ impl Args {
                                 );
                             }
 
+                            // The bucket's region — buckets outside the deployment's own
+                            // region need their endpoint rebuilt, or `PutBucketCors` never
+                            // reaches them. Strictly validated: the value ends up in a
+                            // hostname we send credentials-signed requests to.
+                            let Some(region) = query.get("region").map(|r| r.trim().to_owned())
+                            else {
+                                return json(
+                                    StatusCode::BAD_REQUEST,
+                                    serde_json::json!({"error": "missing ?region="}),
+                                );
+                            };
+                            let valid_region = (1..=32).contains(&region.len())
+                                && region
+                                    .bytes()
+                                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+                            if !valid_region {
+                                return json(
+                                    StatusCode::BAD_REQUEST,
+                                    serde_json::json!({"error": format!("not a region name: {region:?}")}),
+                                );
+                            }
+
                             // Success is remembered for 10 min, failure for 30 s — the
                             // browser retries per page load, this keeps TOS calls rare.
-                            let cached = cache.lock().get(&bucket).and_then(|(at, result)| {
+                            let cache_key = format!("{region}/{bucket}");
+                            let cached = cache.lock().get(&cache_key).and_then(|(at, result)| {
                                 let ttl = if result.is_ok() { 600 } else { 30 };
                                 (at.elapsed().as_secs() < ttl).then(|| result.clone())
                             });
                             let result = if let Some(cached) = cached {
                                 cached
                             } else {
-                                let endpoint = std::env::var("TOS_ENDPOINT").unwrap_or_default();
+                                let deployment_endpoint = std::env::var("TOS_ENDPOINT").unwrap_or_default();
                                 let access_key =
                                     std::env::var("TOS_ACCESS_KEY").unwrap_or_default();
                                 let secret_key =
                                     std::env::var("TOS_SECRET_KEY").unwrap_or_default();
-                                if endpoint.is_empty() || access_key.is_empty() || secret_key.is_empty() {
+                                if deployment_endpoint.is_empty() || access_key.is_empty() || secret_key.is_empty() {
                                     return json(
                                         StatusCode::SERVICE_UNAVAILABLE,
                                         serde_json::json!({"error": "server has no TOS credentials (TOS_ENDPOINT/TOS_ACCESS_KEY/TOS_SECRET_KEY)"}),
                                     );
                                 }
+                                // The allowed origins follow the *deployment's* region
+                                // (that is where the gateway domain lives), while the
+                                // endpoint follows the *bucket's* region.
+                                let deployment_region = re_data_source::tos::region_from_endpoint(
+                                    &deployment_endpoint,
+                                );
                                 let credentials = re_data_source::tos::TosCredentials {
-                                    endpoint,
+                                    endpoint: re_data_source::tos::endpoint_for_region(
+                                        &region,
+                                        &deployment_endpoint,
+                                    ),
                                     access_key,
                                     secret_key,
                                 };
@@ -602,7 +634,7 @@ impl Args {
                                     })
                                     .unwrap_or_else(|| {
                                         re_data_source::tos::cors::default_origins(
-                                            &credentials.region(),
+                                            &deployment_region,
                                         )
                                     });
                                 let client =
@@ -617,7 +649,7 @@ impl Args {
                                 {
                                     Ok(Ok(changed)) => {
                                         if changed {
-                                            info!("auto-CORS: installed viewer rule on bucket {bucket}");
+                                            info!("auto-CORS: installed viewer rule on bucket {bucket} ({region})");
                                         }
                                         Ok(changed)
                                     }
@@ -626,7 +658,7 @@ impl Args {
                                 };
                                 cache
                                     .lock()
-                                    .insert(bucket.clone(), (std::time::Instant::now(), result.clone()));
+                                    .insert(cache_key, (std::time::Instant::now(), result.clone()));
                                 result
                             };
 
@@ -636,7 +668,7 @@ impl Args {
                                     serde_json::json!({"status": "ok", "bucket": bucket, "changed": changed}),
                                 ),
                                 Err(err) => {
-                                    warn!("auto-CORS failed: {err}\nBucket: {bucket}");
+                                    warn!("auto-CORS failed: {err}\nBucket: {bucket} ({region})");
                                     json(
                                         StatusCode::BAD_GATEWAY,
                                         serde_json::json!({"error": err, "bucket": bucket}),

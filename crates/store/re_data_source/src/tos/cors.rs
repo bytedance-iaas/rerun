@@ -122,29 +122,34 @@ fn config_after_ensure(
     Ok(Some(new_config))
 }
 
-/// Browser side: before the first request to `bucket`, ask the same-origin
-/// `/api/ensure-cors` endpoint to install our CORS rule on it. Once per bucket per page
-/// load; concurrent callers of the same bucket skip instead of piling up (the server call
-/// is idempotent, and in practice the dataset listing is the single first request anyway).
+/// Browser side: before the first request to `bucket` (living in `region`), ask the
+/// same-origin `/api/ensure-cors` endpoint to install our CORS rule on it. Once per
+/// bucket+region per page load; concurrent callers of the same bucket skip instead of
+/// piling up (the server call is idempotent, and in practice the dataset listing is the
+/// single first request anyway).
+///
+/// The region must travel along: the server only knows its own deployment endpoint, and
+/// a `PutBucketCors` sent to the wrong region's endpoint cannot reach the bucket.
 ///
 /// Best-effort by design: on any failure (endpoint absent — e.g. local docker without the
 /// gateway —, auto-CORS disabled server-side, no permission) we log and move on; the read
 /// then either works (bucket was already configured) or fails with the usual CORS guidance.
 #[cfg(target_arch = "wasm32")]
-pub async fn ensure_cors_via_server_once(bucket: &str) {
+pub async fn ensure_cors_via_server_once(bucket: &str, region: &str) {
     use std::collections::HashSet;
     use std::sync::{Mutex, OnceLock};
 
     static STARTED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
     let started = STARTED.get_or_init(|| Mutex::new(HashSet::new()));
     #[expect(clippy::unwrap_used)] // no poisoning: the guarded section cannot panic
-    if !started.lock().unwrap().insert(bucket.to_owned()) {
+    if !started.lock().unwrap().insert(format!("{region}/{bucket}")) {
         return; // Already ensured (or in flight) this session.
     }
 
     let url = format!(
-        "/api/ensure-cors?bucket={}",
-        super::client::uri_encode(bucket, true)
+        "/api/ensure-cors?bucket={}&region={}",
+        super::client::uri_encode(bucket, true),
+        super::client::uri_encode(region, true)
     );
     let request = ehttp::Request::post(&url, Vec::new());
     match crate::http_client::fetch_async_with_timeout(request, std::time::Duration::from_secs(10))

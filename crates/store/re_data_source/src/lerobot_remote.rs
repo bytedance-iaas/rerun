@@ -63,6 +63,18 @@ pub struct ListedFile {
     pub content_id: Option<String>,
 }
 
+/// One-level listing of a dataset root: the files directly there plus the names of the
+/// immediate subdirectories. See [`DatasetStore::list_dir`].
+pub struct DirListing {
+    pub files: Vec<ListedFile>,
+
+    /// Immediate subdirectory names relative to the root, with trailing `/`.
+    pub subdirs: Vec<String>,
+
+    /// More entries exist than fit one listing page; `files`/`subdirs` are incomplete.
+    pub truncated: bool,
+}
+
 /// Read access to the files of one remote `LeRobot` dataset.
 ///
 /// Implementations only need a listing, a size lookup, and a single-attempt ranged read;
@@ -80,6 +92,16 @@ pub trait DatasetStore: Send + Sync {
     /// Potentially expensive for huge datasets — only used for v3 layouts (few files) and
     /// file-repo mode.
     fn list(&self) -> impl std::future::Future<Output = anyhow::Result<Vec<ListedFile>>> + Send;
+
+    /// One-level listing of the root, if the backend supports it (`None` = use [`Self::list`]).
+    ///
+    /// Used to probe a location that turned out not to be a `LeRobot` dataset: one bounded
+    /// request instead of crawling a potentially huge bucket.
+    fn list_dir(
+        &self,
+    ) -> impl std::future::Future<Output = anyhow::Result<Option<DirListing>>> + Send {
+        async { Ok(None) }
+    }
 
     /// The size of a single file.
     fn file_size(
@@ -107,6 +129,11 @@ pub trait DatasetStore {
 
     /// List all files of the dataset.
     async fn list(&self) -> anyhow::Result<Vec<ListedFile>>;
+
+    /// One-level listing of the root, if the backend supports it (`None` = use [`Self::list`]).
+    async fn list_dir(&self) -> anyhow::Result<Option<DirListing>> {
+        Ok(None)
+    }
 
     /// The size of a single file.
     async fn file_size(&self, rel_path: &str) -> anyhow::Result<u64>;
@@ -643,6 +670,28 @@ pub fn cancel_episode_for_store(store_id: &StoreId) {
 pub fn pause_current_item(application_id: &str) {
     if let Some(state) = ACTIVE_STREAMS.lock().get(application_id) {
         state.pause.request_skip();
+    }
+}
+
+/// Park an item: keep it out of the auto-download queue until the user asks for it again
+/// (clicking it or its resume button un-parks it). If it is the item currently being
+/// fetched, its download is aborted (the partial download is discarded) and the abort
+/// path parks it.
+///
+/// Used when an episode is hidden — a hidden episode must not occupy the download slot
+/// that the episodes the user actually wants to see are waiting for.
+pub fn park_episode_for_store(store_id: &StoreId) {
+    let Some(index) = queue_index_from_recording_id(store_id.recording_id().as_str()) else {
+        return;
+    };
+
+    let app_id = store_id.application_id().as_str();
+    if let Some(state) = ACTIVE_STREAMS.lock().get(app_id) {
+        if CURRENTLY_LOADING.lock().get(app_id) == Some(&index) {
+            state.pause.request_skip();
+        } else {
+            state.parked.lock().insert(index);
+        }
     }
 }
 
@@ -1318,9 +1367,62 @@ async fn run_stream_files<S: DatasetStore>(
     dataset_url: &str,
     tx: &LogSender,
 ) -> anyhow::Result<()> {
-    let all_files = store.list().await.map_err(|err| {
-        anyhow::anyhow!("This does not look like a LeRobot dataset, and listing it failed: {err:#}")
-    })?;
+    let listing_err = |err: anyhow::Error| {
+        anyhow::anyhow!(
+            "This does not look like a LeRobot dataset (no meta/info.json), and listing the \
+             location failed: {err:#}\n\
+             Check the URL — and for TOS, that the region matches the bucket."
+        )
+    };
+
+    // Object-store backends (TOS): only LeRobot datasets are supported as directory opens —
+    // buckets can be huge, and browsing one as loose files is slow and unpredictable.
+    // A one-level probe (single request, no bucket crawl) tells the user what's there.
+    if let Some(dir) = store.list_dir().await.map_err(listing_err)? {
+        if dir.files.is_empty() && dir.subdirs.is_empty() {
+            anyhow::bail!(
+                "Nothing found at this location — it does not exist or is empty.\n\
+                 Check the URL — and for TOS, that the region matches the bucket."
+            );
+        }
+
+        let mut message = "This location is not a LeRobot dataset (no meta/info.json) — \
+                           only LeRobot v2/v3 datasets can be opened."
+            .to_owned();
+        if !dir.subdirs.is_empty() {
+            // One-level probe: we only know the subdirectory names, not what's in them.
+            let base = dataset_url.trim_end_matches('/');
+            const MAX_LISTED: usize = 10;
+            let mut listed = dir
+                .subdirs
+                .iter()
+                .take(MAX_LISTED)
+                .map(|subdir| format!("  {base}/{subdir}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            if dir.subdirs.len() > MAX_LISTED {
+                listed.push_str(&format!(
+                    "\n  … and {} more",
+                    dir.subdirs.len() - MAX_LISTED
+                ));
+            }
+            message.push_str(&format!(
+                "\nIt holds subdirectories — if one of them is the dataset, open it directly:\n\
+                 {listed}"
+            ));
+        }
+        anyhow::bail!(message);
+    }
+
+    // Recursive-listing backends (Hugging Face): a repo of loose data files stays browsable.
+    let all_files = store.list().await.map_err(listing_err)?;
+
+    if all_files.is_empty() {
+        anyhow::bail!(
+            "Nothing found at this location — it does not exist or is empty.\n\
+             Check the URL."
+        );
+    }
 
     // This location may contain whole LeRobot datasets in subdirectories. Their internal
     // chunk files (per-camera mp4s, data parquets) are meaningless to open standalone, so
@@ -1393,6 +1495,15 @@ async fn run_stream_files<S: DatasetStore>(
              Supported: LeRobot v2/v3 datasets, or files like .rrd, .mcap, images, meshes."
         );
     }
+
+    // Falling back to loose-files mode must be loud: without this, opening a location that
+    // merely *contains* importable files looks exactly like a successfully opened dataset,
+    // with no hint that it isn't one.
+    re_log::warn!(
+        "Not a LeRobot dataset (no meta/info.json) — showing the {} supported data file(s) \
+         found at this location instead. Click a file to load it.\nLocation: {dataset_url}",
+        files.len()
+    );
 
     let indices: Vec<usize> = (0..files.len()).collect();
     let names: ahash::HashMap<usize, String> = files
