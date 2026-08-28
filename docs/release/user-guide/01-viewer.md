@@ -65,8 +65,9 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 
 本地 native viewer 随 Python SDK 一起分发,装好 SDK 后 `rerun` 命令即可用,无需另外下载。
 
-SDK 就放在 web viewer 那个域名下的 `/downloads/sdk/`,即 `https://<你的网关域名>/downloads/sdk/`(用登录账号访问)。
-浏览器打开这个页面能看到可下载的 wheel 文件,目前提供四种:Linux x86_64、Linux arm64、macOS(Apple Silicon)、Windows x86_64。
+下载入口就在欢迎页上:点 **Volcengine enhancements** 一排里的 **Get the SDK** 卡片(见 2.1 节),即可打开 SDK 下载页。
+(下载页的地址是 `https://<你的网关域名>/downloads/sdk/`,用登录账号访问 —— 下面 pip 安装命令里用的就是它。)
+页面上能看到可下载的 wheel 文件,目前提供四种:Linux x86_64、Linux arm64、macOS(Apple Silicon)、Windows x86_64。
 按你的机器选对应的那个 wheel,在 Python(3.10 及以上)环境里安装(URL 末尾换成你选的 wheel 文件名):
 
 ```sh
