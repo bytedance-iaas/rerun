@@ -805,8 +805,8 @@ pub fn entity_db_button_ui(
             if can_hide {
                 if is_hidden {
                     if ui
-                        .small_icon_button(&icons::VISIBLE, "Display the episode")
-                        .on_hover_text("Display the episode")
+                        .small_icon_button(&icons::VISIBLE, "Move the episode back to the list")
+                        .on_hover_text("Move the episode back to the list")
                         .clicked()
                     {
                         re_viewer_context::hidden_recordings::unhide(&store_id);

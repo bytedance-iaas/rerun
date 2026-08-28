@@ -65,8 +65,9 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 
 本地 native viewer 随 Python SDK 一起分发,装好 SDK 后 `rerun` 命令即可用,无需另外下载。
 
-SDK 就放在 web viewer 那个域名下的 `/downloads/sdk/`,即 `https://<你的网关域名>/downloads/sdk/`(用登录账号访问)。
-浏览器打开这个页面能看到可下载的 wheel 文件,目前提供四种:Linux x86_64、Linux arm64、macOS(Apple Silicon)、Windows x86_64。
+下载入口就在欢迎页上:点 **Volcengine enhancements** 一排里的 **Get the SDK** 卡片(见 2.1 节),即可打开 SDK 下载页。
+(下载页的地址是 `https://<你的网关域名>/downloads/sdk/`,用登录账号访问 —— 下面 pip 安装命令里用的就是它。)
+页面上能看到可下载的 wheel 文件,目前提供四种:Linux x86_64、Linux arm64、macOS(Apple Silicon)、Windows x86_64。
 按你的机器选对应的那个 wheel,在 Python(3.10 及以上)环境里安装(URL 末尾换成你选的 wheel 文件名):
 
 ```sh
@@ -178,8 +179,14 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 | **暂停 `‖`** | 数据集行 | 停止继续流式加载(episode 是逐个流式载入的,暂停后不再往下载) |
 | **去除 `×`** | 数据集行 | 把该数据集从 viewer 移除 |
 | **重载 `↻`** | episode 行 | 重新加载这一段(例如加载中断后重试) |
-| **显示/隐藏(眼睛)** | episode 行 | 临时隐藏或恢复这一段的显示(数据仍在内存,不用重新加载) |
+| **隐藏(闭眼)** | episode 行 | 把这一段收进数据集下方的 **Hidden episodes** 列表(见下) |
 | **去除 `×`** | episode 行 | 关闭这一段 |
+
+episode 多的时候,**闭眼**图标很好用:暂时不关注的片段点一下闭眼,它就收进数据集最下方一个折叠的 **Hidden episodes** 列表,不再占正文列表的位置;要是它还在下载,下载也会自动停下,把队列让给你关注的片段。
+收起来的片段数据仍留在内存,随时反悔 —— 展开 Hidden episodes 列表,点片段行上的**睁眼**图标,它就回到原来的列表里(之前没下载完的,再点一下该片段会继续下载)。
+真想释放内存,用 `×` 关闭才行。
+
+![Hidden episodes 列表](images/viewer-hidden-episodes-annotated.png)
 
 ### 3.4 打开 HuggingFace 数据集
 
