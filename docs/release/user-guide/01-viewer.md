@@ -15,10 +15,12 @@ rerun 是开源的时序多模态数据可视化工具(官网 [rerun.io](https:/
 |---|---|---|---|
 | 运行在 | 你的浏览器 | 你自己的机器 | 云端节点上的原生程序 |
 | 打开方式 | 浏览器打开服务地址 | 装 SDK 后运行 `rerun` 命令 | 自助拉起,浏览器里经远程桌面(VNC)操作 |
-| 内存上限 | 约 1.4 GB,较大的数据集可能打不开 | 取决于本机内存 | 取决于云节点,通常很大 |
+| 内存上限 | 预算 2.5 GB,超限后自动丢弃最旧数据 | 取决于本机内存 | 取决于云节点,通常很大 |
 | 适合 | 日常查看,随开随用 | 本机资源足、要看大数据集 | 看超大数据集、要内网速度 |
 
-Web viewer 的最大限制来自 WASM:它在浏览器里以 WebAssembly 运行,受 32 位地址空间约束,实际可用内存只有约 1.4 GB,所以较大的数据集可能打不开或加载中崩溃。
+Web viewer 的最大限制来自 WASM:它在浏览器里以 WebAssembly 运行,受 32 位地址空间约束,内存预算固定为 2.5 GB(界面提示中显示为 2.3 GiB,是同一数值的不同单位)。
+达到预算后它不会崩溃,而是自动丢弃最旧的数据保持运行(时间轴上较早的部分会缺失,并弹出提示)。
+注意实际能用到的内存往往比预算还少 —— 浏览器里大块内存分配容易提前失败,实测 1.4 GB 上下就可能出现打不开或加载中断;所以较大的数据集仍建议换 native viewer。
 两种 native viewer 是原生程序,没有这个限制,可用内存只取决于所在机器。
 
 反过来,web viewer 能更好地与火山引擎的其他云服务联动 —— 例如一键跳转质检台对数据集做质检(Diagnose,见第 6 节),这是 native viewer 不具备的。
@@ -35,7 +37,7 @@ Web viewer 的最大限制来自 WASM:它在浏览器里以 WebAssembly 运行,�
 ### 2.1 Web viewer:用域名打开
 
 Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的网关域名>/`。
-本文示例用 `https://scjo9th1m255uu5mjsa40.apigateway-cn-beijing.volceapi.com/`,请替换成你自己的。
+本文示例用 `https://s4r06sminb5etcslnt4ta.apigateway-cn-beijing.volceapi.com/`,请替换成你自己的。
 
 在浏览器地址栏输入这个地址,回车,浏览器会弹出登录框,填入管理员给你的用户名和密码即可进入。
 
@@ -57,7 +59,7 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
   - **Get the SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
   - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/01-viewer.html` 和 `…/docs/02-catalog.html`(注意要带页面文件名,只开 `/docs/` 目录会报 403)。
 
-  下方 **About the original Rerun** 一排卡片和黑色的 **Rerun Hub** 横幅是开源 rerun 的通用文档和官方服务入口,与本服务无关,一般用不到。
+  下方 **About the original Rerun** 一排卡片(含黑色的 **Rerun Hub** 卡片)和 **View example recordings** 的示例数据,是开源 rerun 的通用文档、官方服务和示例入口,与本服务无关,一般用不到。
 
 ### 2.2 本地 native viewer:下载安装到本机
 
@@ -176,6 +178,7 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 | **暂停 `‖`** | 数据集行 | 停止继续流式加载(episode 是逐个流式载入的,暂停后不再往下载) |
 | **去除 `×`** | 数据集行 | 把该数据集从 viewer 移除 |
 | **重载 `↻`** | episode 行 | 重新加载这一段(例如加载中断后重试) |
+| **显示/隐藏(眼睛)** | episode 行 | 临时隐藏或恢复这一段的显示(数据仍在内存,不用重新加载) |
 | **去除 `×`** | episode 行 | 关闭这一段 |
 
 ### 3.4 打开 HuggingFace 数据集
@@ -232,7 +235,10 @@ rerun rrd-convert tos://<桶>/<路径>/<数据集名>/
 
 ### 5.2 从 viewer 里删除缓存
 
-如果某个数据集的缓存需要清理(例如源数据更新了、想强制重新转换),可以直接在 viewer 里删,不用去 TOS 控制台翻:
+如果某个数据集的缓存需要清理(例如源数据更新了、想强制重新转换),可以直接在 viewer 里删,不用去 TOS 控制台翻。
+在 episode 行上右键,菜单最下面两项就是本服务新增的 rrd 缓存操作:
+
+![右键 episode 行的 rrd 缓存菜单](images/viewer-rrd-menu-annotated.png)
 
 - 在 episode 行右键 →「Delete rrd artifact…」删这一段的缓存;在数据集行右键 →「Delete all rrd artifacts…」删整个数据集的缓存。
 - 删除前会弹确认框显示具体删哪个对象/目录,确认后才在后台执行。

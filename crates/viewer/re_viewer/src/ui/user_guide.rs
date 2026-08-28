@@ -56,6 +56,12 @@ const IMAGES: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "viewer-rrd-menu-annotated.png",
+        include_bytes!(
+            "../../../../../docs/release/user-guide/images/viewer-rrd-menu-annotated.png"
+        ),
+    ),
+    (
         "viewer-tos-dialog-annotated.png",
         include_bytes!(
             "../../../../../docs/release/user-guide/images/viewer-tos-dialog-annotated.png"
