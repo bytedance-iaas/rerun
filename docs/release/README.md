@@ -5,7 +5,7 @@
 - **TOS 和 HuggingFace 数据集直读**:viewer 直接打开火山引擎 TOS 或 HuggingFace 上的 LeRobot 数据集,在线转换为 rrd,无需下载到本地。
 - **rrd 自动缓存**:转换产物自动写回 TOS 缓存桶,同一数据集第二次打开直接加载现成 rrd,无须再次转换。
 - **桶 CORS 自助配置**:web viewer 打开新桶时自动补配桶的跨域放行规则,运行时换桶、新建桶都无需预先配置。
-- **SDK 随部署分发,viewer 内置其中**:`/downloads/sdk/` 提供 Linux 与 macOS 两种 wheel,与镜像同源构建;viewer 打包在 wheel 内,`pip install` 后 `rerun` 命令即可用,版本与在跑的服务天然一致,无需发布到任何包仓库。
+- **SDK 随部署分发,viewer 内置其中**:`/downloads/sdk/` 提供四个平台的 wheel(Linux x86_64 / arm64、macOS Apple Silicon、Windows x64),与镜像同源构建;viewer 打包在 wheel 内,`pip install` 后 `rerun` 命令即可用,版本与在跑的服务天然一致,无需发布到任何包仓库。
 - **数据集管理**:catalog server 提供数据集注册、查询和 token 认证。
 - **catalog server 持久化**:注册记录和缓存落在云盘上,服务器重启后数据不丢、无须重新注册。
 - **训练直读**:训练侧凭 catalog server 签发的预签名 URL 从 TOS 直读数据,不经服务器中转,也无需持有 TOS 密钥。
