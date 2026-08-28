@@ -74,6 +74,10 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 pip install "https://<用户名>:<密码>@<网关域名>/downloads/sdk/<wheel 文件名>"
 ```
 
+另外要预装 **FFmpeg(5.1 及以上版本)**,并保证 `ffmpeg` 命令在 PATH 里能找到:数据集里 H.264/H.265 等常见编码的视频,本地 viewer 是调用系统里的 ffmpeg 解码的,缺了它视频画面出不来(曲线等其他数据不受影响;AV1 编码的视频用 viewer 内置解码器,不需要 ffmpeg)。
+macOS 用 `brew install ffmpeg`;Ubuntu 24.04 及以上用 `sudo apt install ffmpeg`(22.04 仓库里的 4.4 版本太旧,需另装新版);Windows 下载后把 `ffmpeg.exe` 所在目录加进 PATH。
+装漏了也不用慌:播放视频时 viewer 会明确报错,并附上当前平台的 ffmpeg 下载链接,装好重启即可;ffmpeg 不在 PATH 里的话,也可以在 viewer 的设置里手动指定它的路径。
+
 装好后打开:
 
 ```sh

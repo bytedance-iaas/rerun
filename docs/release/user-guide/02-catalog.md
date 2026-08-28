@@ -40,7 +40,7 @@ pip install "https://<用户名>:<密码>@<网关域名>/downloads/sdk/<wheel �
   两个 Linux wheel 的文件名较长,页面上显示为截断(`…aarc..>`),悬停或点开链接可见全名,拼 URL 时要用全名。
 - 升级:部署更新后,重新 `pip install` 同一个 URL 即可拿到新版。
 - 训练直读(第 5 节)用到 PyTorch dataloader,还需 `pip install torch`。
-- viewer 已随 wheel 一起分发,装完 SDK 后 `rerun` 命令直接可用(见 [01-viewer.md](01-viewer.md) 第 7 节),无需单独下载。
+- viewer 已随 wheel 一起分发,装完 SDK 后 `rerun` 命令直接可用(见 [01-viewer.md](01-viewer.md) 2.2 节),无需单独下载;本地看带视频的数据集还需预装 FFmpeg(5.1 及以上),同见该节。
 - Intel 芯片的 Mac 暂无预编译 wheel(苹果已停产该硬件);其余主流平台已全覆盖。
 
 ## 2. 拿到并使用 token
