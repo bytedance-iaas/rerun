@@ -28,9 +28,9 @@ pip install "https://<用户名>:<密码>@<网关域名>/downloads/sdk/<wheel �
 # 3) 跑训练直读(3.5)的 dataloader 用例还需:pip install torch
 ```
 
-说明:`/downloads/sdk/` 下同时提供 **Linux x86_64** 和 **macOS(Apple Silicon)** 两种 wheel,`pip install` 会按你的机器自动挑对应那颗;升级部署后重装同一 URL 即拿到新版。
+说明:`/downloads/sdk/` 下提供四个平台的 wheel(Linux x86_64 / arm64、macOS Apple Silicon、Windows x64),按你的机器选对应那颗、把文件名填进 URL;升级部署后重装同一 URL 即拿到新版。
 viewer 已随 wheel 一起分发——装完 SDK 后 `rerun` 命令直接可用(见 3.7),无需单独下载。
-其他平台(Windows、Intel Mac、arm64 Linux)暂不提供预编译 wheel,本地开发可源码构建(`pixi run py-build`,之后用 `pixi run uvpy <脚本.py>` 跑;代理做 TLS 中间人的网络先 `export SSL_CERT_FILE=<CA 证书包.pem>`)。
+Intel 芯片的 Mac 暂无预编译 wheel(苹果已停产该硬件),本地开发可源码构建(`pixi run py-build`,之后用 `pixi run uvpy <脚本.py>` 跑;代理做 TLS 中间人的网络先 `export SSL_CERT_FILE=<CA 证书包.pem>`)。
 
 ### 1.3 签测试 token
 

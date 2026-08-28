@@ -26,7 +26,7 @@ v1 是首个正式版本,面向在火山引擎上浏览、管理、训练机器�
 
 ### 分发与部署
 
-- **SDK 随部署分发**:`/downloads/sdk/` 提供 Linux 与 macOS 两种 wheel,与服务同源构建,版本天然一致;viewer 内置在 wheel 里,`pip install` 后 `rerun` 命令即可用,无需发布到公共包仓库。
+- **SDK 随部署分发**:`/downloads/sdk/` 提供四个平台的 wheel(Linux x86_64 / arm64、macOS Apple Silicon、Windows x64),与服务同源构建,版本天然一致;viewer 内置在 wheel 里,`pip install` 后 `rerun` 命令即可用,无需发布到公共包仓库。
 - **云上部署形态**:面向火山引擎 VKE 的完整部署,统一 HTTPS 网关入口(APIG),含按需拉起的云上 native viewer 会话。
 - **国内网络适配**:HuggingFace 访问走镜像站,云内组件访问 TOS 走内网 endpoint。
 
@@ -34,7 +34,7 @@ v1 是首个正式版本,面向在火山引擎上浏览、管理、训练机器�
 
 - 目前主要支持机器人 **LeRobot 数据集(v2 / v3)**。
 - Web viewer 运行在浏览器 WASM 环境中,实际可用内存约 1.4 GB,较大的数据集需改用 native viewer。
-- 预编译 wheel 仅提供 **Linux x86_64** 和 **macOS(Apple Silicon)**;其他平台(Windows、Intel Mac、arm64 Linux)需源码构建。
+- 预编译 wheel 覆盖 **Linux x86_64 / arm64、macOS(Apple Silicon)、Windows x64** 四个平台;Intel 芯片的 Mac 暂无预编译 wheel(苹果已停产该硬件),需源码构建。
 - Diagnose 仅在 web viewer 中提供;native viewer 无此按钮。
 
 ## 文档
