@@ -60,6 +60,9 @@ const TOS_REGIONS: &[&str] = &[
     "cn-shanghai",
 ];
 
+/// How long after the last keystroke the malformed-URL error may turn red.
+const URL_ERROR_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// Dialog for opening a `LeRobot` dataset stored in Volcengine TOS.
 #[derive(Default)]
 pub struct OpenTosModal {
@@ -81,6 +84,11 @@ pub struct OpenTosModal {
 
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
+
+    /// When the URL field was last edited (`ui.input(|i| i.time)`). The malformed-URL
+    /// error stays a neutral hint until the user pauses or leaves the field — flashing
+    /// red at the first typed character punishes typing that isn't finished yet (#48).
+    url_last_edited: Option<f64>,
 
     /// Filled asynchronously from the server's `/config.json` (web only).
     /// `Err` holds why the fetch failed — shown in the dialog, because a silently missing
@@ -192,7 +200,7 @@ impl OpenTosModal {
                 ui.strong("Stream a LeRobot dataset from a TOS bucket.");
                 ui.add_space(4.0);
 
-                egui::Grid::new("tos_fields")
+                let url_response = egui::Grid::new("tos_fields")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
@@ -228,7 +236,15 @@ impl OpenTosModal {
                             });
                         });
                         ui.end_row();
-                    });
+
+                        url_edit.response
+                    })
+                    .inner;
+
+                let now = ui.input(|i| i.time);
+                if url_response.changed() {
+                    self.url_last_edited = Some(now);
+                }
 
                 // Credentials: the deployment's (docker secrets on the web, config.json
                 // natively) are used unless the user opts into entering their own.
@@ -298,7 +314,20 @@ impl OpenTosModal {
                 let can_open = location.is_some() && connection_ok;
 
                 if !self.url.is_empty() && location.is_none() {
-                    ui.error_label("The dataset URL should look like tos://bucket/prefix/");
+                    // Only turn red once the user pauses or leaves the field; mid-typing,
+                    // a neutral hint carries the same information without the reprimand.
+                    let still_typing = url_response.has_focus()
+                        && self
+                            .url_last_edited
+                            .is_some_and(|t| now - t < URL_ERROR_DELAY.as_secs_f64());
+                    if still_typing {
+                        ui.label("The dataset URL should look like tos://bucket/prefix/");
+                        // Wake up when the pause elapses, so the error can appear
+                        // without waiting for the next keystroke or mouse move.
+                        ui.ctx().request_repaint_after(URL_ERROR_DELAY);
+                    } else {
+                        ui.error_label("The dataset URL should look like tos://bucket/prefix/");
+                    }
                 } else if !connection_ok {
                     ui.label(if !config_resolved {
                         "Loading the deployment's TOS settings…"
