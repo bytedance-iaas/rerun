@@ -226,9 +226,11 @@ curator:
   #    live in an emptyDir, which counts against this limit, and the console reads the limit through
   #    the downward API to work out how much it can still write — without it, a large dataset can
   #    write the pod into a kubelet eviction. Tune it to the node's disk.
+  #    The request is kept well below the limit on purpose: it only gates scheduling, so a small
+  #    request keeps mid-sized nodes eligible while the limit still allows large datasets.
   resources:
-    requests: { cpu: "2", memory: 4Gi }
-    limits:   { cpu: "8", memory: 16Gi, ephemeral-storage: 50Gi }
+    requests: { cpu: "16", memory: 128Gi, ephemeral-storage: 50Gi }
+    limits:   { cpu: "32", memory: 256Gi, ephemeral-storage: 200Gi }
 
 # An optional self-hosted vLLM for the console's model-based checks, as a separate Deployment in
 # the same namespace. OFF by default: it needs a GPU, and the console works without it.
