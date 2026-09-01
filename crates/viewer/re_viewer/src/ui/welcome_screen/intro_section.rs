@@ -345,8 +345,7 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
         if row.is_empty() {
             continue;
         }
-        ui.strong(RichText::new(header).size(15.0));
-        ui.add_space(8.0);
+        super::section_heading_ui(ui, header);
         // Cards stretch to fill the row, which looks silly when there are only one or
         // two (natively only the User guide card shows) — cap the row width per card.
         let max_row_width = row.len() as f32 * 450.0;

@@ -162,6 +162,14 @@ pub async fn ensure_cors_via_server_once(bucket: &str, region: &str) {
         Ok(response) if response.ok => {
             re_log::debug!("auto-CORS ensured for bucket {bucket}");
         }
+        // 404 just means this deployment (or a local dev server) has no self-service
+        // endpoint — nothing the user should act on, and the bucket is usually fine.
+        Ok(response) if response.status == 404 => {
+            re_log::debug_once!(
+                "Bucket CORS self-service endpoint not available (404) — assuming the bucket is \
+                 already configured\nBucket: {bucket}"
+            );
+        }
         Ok(response) => {
             re_log::warn_once!(
                 "{}",

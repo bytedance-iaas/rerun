@@ -1,12 +1,28 @@
+use re_i18n::tr;
 use re_ui::DesignTokens;
 
 pub(super) const DOCS_URL: &str = "https://www.rerun.io/docs";
-pub(super) const WELCOME_SCREEN_TITLE: &str = "VePAI之数据底座";
-pub(super) const WELCOME_SCREEN_BULLET_TEXT: &[&str] = &[
-    "用 C++、Python 或 Rust 的 Rerun SDK 记录多频率、多模态数据",
-    "可视化并探索管线各环节的实时或已录制数据",
-    "用 dataframe 或 SQL 查询，并直接流式接入训练",
-];
+
+pub(super) fn welcome_screen_title() -> &'static str {
+    tr("Rerun: The data layer for VePAI", "Rerun: VePAI的数据底座")
+}
+
+pub(super) fn welcome_screen_bullet_text() -> [&'static str; 3] {
+    [
+        tr(
+            "Log multi-rate, multimodal data with the Rerun SDK in C++, Python, or Rust",
+            "用 C++、Python 或 Rust 的 Rerun SDK 记录多频率、多模态数据",
+        ),
+        tr(
+            "Visualize and explore live or recorded data across the pipeline",
+            "可视化并探索管线各环节的实时或已录制数据",
+        ),
+        tr(
+            "Query with dataframes or SQL, and stream directly to training",
+            "用 dataframe 或 SQL 查询，并直接流式接入训练",
+        ),
+    ]
+}
 
 /// Show the welcome section.
 pub(super) fn welcome_section_ui(ui: &mut egui::Ui) {

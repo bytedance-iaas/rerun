@@ -15,6 +15,15 @@ use re_log_channel::LogSource;
 use crate::app_state::WelcomeScreenState;
 
 pub use intro_section::{CloudState, LoginState};
+
+/// The uniform section heading of the welcome screen ("Volcengine enhancements",
+/// "About the original Rerun", "Recently opened datasets"): same size, underlined.
+pub(super) fn section_heading_ui(ui: &mut egui::Ui, text: &str) {
+    ui.add(egui::Label::new(
+        egui::RichText::new(text).strong().size(18.0).underline(),
+    ));
+    ui.add_space(10.0);
+}
 use re_viewer_context::AppContext;
 
 #[derive(Default)]

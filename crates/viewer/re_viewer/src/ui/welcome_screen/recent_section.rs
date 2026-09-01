@@ -27,13 +27,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
     let mut action = None;
     let now = now_unix();
 
-    ui.add(egui::Label::new(
-        egui::RichText::new(tr("Recently opened", "最近打开"))
-            .strong()
-            .line_height(Some(32.0))
-            .text_style(DesignTokens::welcome_screen_example_title()),
-    ));
-    ui.add_space(8.0);
+    super::section_heading_ui(ui, tr("Recently opened datasets", "最近打开的数据集"));
 
     for (index, recent) in recents.iter().enumerate() {
         let source_label = match recent.kind {
