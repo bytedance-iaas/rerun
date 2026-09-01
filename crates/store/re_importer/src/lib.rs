@@ -7,6 +7,7 @@ use std::sync::{Arc, LazyLock};
 
 use itertools::chain;
 use re_chunk::{Chunk, ChunkResult};
+use re_i18n::trf;
 use re_log_types::{ArrowMsg, EntityPath, LogMsg, RecordingId, StoreId, TimePoint};
 
 // ----------------------------------------------------------------------------
@@ -398,13 +399,13 @@ pub enum ImporterError {
     #[error(transparent)]
     Decode(#[from] re_log_encoding::DecodeError),
 
-    #[error("没有支持 {0:?} 的导入器")]
+    #[error("{}", trf!("No importer support for {0:?}", "没有支持 {0:?} 的导入器", .0))]
     Incompatible(std::path::PathBuf),
 
     #[error(transparent)]
     Mcap(#[from] ::mcap::McapError),
 
-    #[error("导入 mp4 视频失败：{source}\n文件路径：{path:?}")]
+    #[error("{}", trf!("Failed to import mp4 video: {source}\nFile path: {path:?}", "导入 mp4 视频失败：{source}\n文件路径：{path:?}", source = .source, path = .path))]
     Mp4 {
         path: std::path::PathBuf,
         source: re_mp4_reader::Mp4Error,
@@ -413,7 +414,7 @@ pub enum ImporterError {
     #[error("{}", re_error::format(.0))]
     Other(#[from] anyhow::Error),
 
-    #[error("{source}\n文件路径：{path}")]
+    #[error("{}", trf!("{source}\nFile path: {path}", "{source}\n文件路径：{path}", source = .source, path = .path))]
     File {
         path: String,
         #[source]

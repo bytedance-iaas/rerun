@@ -1,7 +1,7 @@
-use re_i18n::tr;
 use egui::{Response, Ui};
 use itertools::Itertools as _;
 use nohash_hasher::IntSet;
+use re_i18n::tr;
 use re_log_types::{EntityPath, EntityPathFilter, EntityPathRule, RuleEffect};
 use re_sdk_types::ViewClassIdentifier;
 use re_ui::UiExt as _;

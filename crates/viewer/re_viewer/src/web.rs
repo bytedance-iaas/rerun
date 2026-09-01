@@ -213,7 +213,7 @@ impl WebHandle {
                 );
             }
             Err(err) => {
-                re_log::warn!(?url, "打开 URL 失败：{err}");
+                re_log::warn!(?url, "{}", trf!("Failed to open URL: {err}", "打开 URL 失败：{err}"));
             }
         }
     }
@@ -242,7 +242,7 @@ impl WebHandle {
         };
 
         if self.log_senders.contains_key(id) {
-            re_log::warn!("ID 为 '{}' 的通道已存在。", id);
+            re_log::warn!("{}", trf!("Channel with id '{}' already exists.", "ID 为 '{}' 的通道已存在。", id));
             return;
         }
 
@@ -798,7 +798,11 @@ fn create_app(
                 .options_mut(|o| o.theme_preference = egui::ThemePreference::System),
             _ => {
                 re_log::warn!(
-                    "忽略未知的 `theme` 值 {theme:?}；应为 `dark`、`light` 或 `system`。"
+                    "{}",
+                    trf!(
+                        "Ignoring unknown `theme` value {theme:?}; expected `dark`, `light`, or `system`.",
+                        "忽略未知的 `theme` 值 {theme:?}；应为 `dark`、`light` 或 `system`。"
+                    )
                 );
             }
         }
@@ -836,7 +840,7 @@ fn create_app(
                     );
                 }
                 Err(err) => {
-                    re_log::warn!(?url, "打开 URL 失败：{err}");
+                    re_log::warn!(?url, "{}", trf!("Failed to open URL: {err}", "打开 URL 失败：{err}"));
                 }
             }
         }

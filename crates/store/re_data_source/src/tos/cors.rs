@@ -17,6 +17,8 @@
 //! the endpoint can be tokenless: the worst an abuser can do is add our read-permit rule
 //! to a bucket our own credentials already manage.
 
+use re_i18n::{tr, trf};
+
 use super::client::TosClient;
 
 /// Marker header that only our rule exposes.
@@ -83,7 +85,7 @@ pub async fn ensure_bucket_cors(client: &TosClient, origins: &[String]) -> anyho
             client.put_bucket_cors(&new_config).await?;
             Ok(true)
         }
-        Err(err) => Err(err.context(format!("桶：{}", client.bucket()))),
+        Err(err) => Err(err.context(trf!("Bucket: {}", "桶：{}", client.bucket()))),
     }
 }
 
@@ -110,10 +112,12 @@ fn config_after_ensure(
                 .rfind(CLOSING)
                 .map(|index| current[..index].to_owned())
             else {
-                anyhow::bail!(
+                anyhow::bail!(tr(
+                    "bucket has a CORS config this code does not understand (no closing \
+                     </CORSConfiguration> tag) — configure CORS manually",
                     "桶上已有一份无法识别的 CORS 配置（缺少闭合的 \
                      </CORSConfiguration> 标签）— 请手动配置 CORS"
-                );
+                ));
             };
             format!("{head}{rule}{CLOSING}")
         }
@@ -160,11 +164,17 @@ pub async fn ensure_cors_via_server_once(bucket: &str, region: &str) {
         }
         Ok(response) => {
             re_log::warn_once!(
-                "自动配置桶 CORS 失败（HTTP {}）：{} — 如果数据集加载失败，\
-                 请手动配置桶的 CORS（参见部署文档）\n\
-                 桶：{bucket}",
-                response.status,
-                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(200)]),
+                "{}",
+                trf!(
+                    "Bucket CORS self-service failed (HTTP {}): {} — if the dataset fails to \
+                     load, configure the bucket's CORS manually (see the deployment docs)\n\
+                     Bucket: {bucket}",
+                    "自动配置桶 CORS 失败（HTTP {}）：{} — 如果数据集加载失败，\
+                     请手动配置桶的 CORS（参见部署文档）\n\
+                     桶：{bucket}",
+                    response.status,
+                    String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(200)]),
+                )
             );
         }
         Err(err) => {

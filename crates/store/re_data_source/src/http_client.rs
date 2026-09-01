@@ -49,8 +49,10 @@ pub async fn fetch_async_with_timeout(
     // `ureq` is blocking; run it on the blocking pool so we don't stall the async executor.
     let task = tokio::task::spawn_blocking(move || fetch_blocking(&request));
     match tokio::time::timeout(hard_timeout, task).await {
-        Ok(result) => result.map_err(|err| trf!("HTTP task failed to run: {err}", "HTTP 任务未能运行：{err}"))?,
-        Err(_elapsed) => Err(format!(
+        Ok(result) => result
+            .map_err(|err| trf!("HTTP task failed to run: {err}", "HTTP 任务未能运行：{err}"))?,
+        Err(_elapsed) => Err(trf!(
+            "Request did not finish within {}s (stalled connection?)\nUrl: {url}",
             "请求在 {} 秒内未完成（连接可能已停滞？）\nURL：{url}",
             hard_timeout.as_secs()
         )),
@@ -99,7 +101,12 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
             }
             builder.send(&request.body[..])
         }
-        other => return Err(trf!("Unsupported HTTP method: {other:?}", "不支持的 HTTP 方法：{other:?}")),
+        other => {
+            return Err(trf!(
+                "Unsupported HTTP method: {other:?}",
+                "不支持的 HTTP 方法：{other:?}"
+            ));
+        }
     }
     .map_err(|err| err.to_string())?;
 
@@ -136,7 +143,12 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
             .with_config()
             .limit(u64::MAX)
             .read_to_vec()
-            .map_err(|err| trf!("Failed to read response body: {err}", "读取响应体失败：{err}"))?
+            .map_err(|err| {
+                trf!(
+                    "Failed to read response body: {err}",
+                    "读取响应体失败：{err}"
+                )
+            })?
     };
 
     Ok(ehttp::Response {

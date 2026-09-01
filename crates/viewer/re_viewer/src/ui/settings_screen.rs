@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::str::FromStr as _;
 
 use egui::{NumExt as _, Ui};
@@ -252,7 +252,7 @@ fn origin_private_filesystem_section_ui(ui: &mut Ui) {
                 Ok(true) => re_log::info!("浏览器已授予持久化存储"),
                 Ok(false) => re_log::warn!("浏览器拒绝了持久化存储请求"),
                 Err(err) => {
-                    re_log::error!("申请浏览器持久化存储失败：{err}");
+                    re_log::error!("{}", trf!("Failed to request persistent browser storage: {err}", "申请浏览器持久化存储失败：{err}"));
                 }
             }
         });
@@ -511,15 +511,16 @@ fn ffmpeg_path_status_ui(ui: &mut Ui, options: &VideoOptions) {
 
         Poll::Ready(Ok(version)) => {
             if version.is_compatible() {
-                ui.success_label(format!("已找到 FFmpeg（版本 {version}）"));
+                ui.success_label(trf!("FFmpeg found (version {version})", "已找到 FFmpeg（版本 {version}）"));
             } else {
-                ui.error_label(format!("FFmpeg 版本不兼容：{version}"));
+                ui.error_label(trf!("Incompatible FFmpeg version: {version}", "FFmpeg 版本不兼容：{version}"));
             }
         }
         Poll::Ready(Err(FFmpegVersionParseError::ParseVersion { raw_version })) => {
             // We make this one a warning instead of an error because version parsing is flaky, and
             // it might end up still working.
-            ui.warning_label(format!(
+            ui.warning_label(trf!(
+                "FFmpeg binary found but unable to parse version: {raw_version}",
                 "找到了 FFmpeg 程序，但无法解析其版本：{raw_version}"
             ));
         }

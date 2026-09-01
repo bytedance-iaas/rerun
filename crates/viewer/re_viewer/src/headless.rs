@@ -61,7 +61,7 @@ pub fn run_headless_app(
 
     init_result.map_err(|err| eframe::Error::AppCreation(Box::new(err)))?;
 
-    re_log::info!("无界面 Viewer 正在以 {}x{} 运行。", size.x, size.y);
+    re_log::info!("{}", trf!("Headless viewer running at {}x{}.", "无界面 Viewer 正在以 {}x{} 运行。", size.x, size.y));
 
     let idle_timeout = Duration::from_secs(1);
     loop {

@@ -1,6 +1,6 @@
 //! An in-memory channel of Rerun data messages
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::sync::Arc;
 
 pub use crossbeam::channel::{RecvError, RecvTimeoutError, SendError, TryRecvError};
@@ -208,23 +208,34 @@ impl LogSource {
     pub fn status_string(&self) -> String {
         match self {
             Self::File { path } => {
-                format!("正在加载 {}…", path.display())
+                trf!("Loading {}…", "正在加载 {}…", path.display())
             }
             Self::Stdin => tr("Loading stdin…", "正在加载标准输入…").to_owned(),
             Self::HttpStream { url } => {
-                format!("正在等待 {} 的数据…", url_display_name(url))
+                trf!(
+                    "Waiting for data on {}…",
+                    "正在等待 {} 的数据…",
+                    url_display_name(url)
+                )
             }
             Self::MessageProxy(uri) => {
-                format!("正在等待 {uri} 的数据…")
+                trf!("Waiting for data on {uri}…", "正在等待 {uri} 的数据…")
             }
             Self::RedapGrpcStream { uri, .. } => {
-                format!(
+                trf!(
+                    "Waiting for data on {}…",
                     "正在等待 {} 的数据…",
                     uri.clone().without_query_and_fragment()
                 )
             }
-            Self::RrdWebEvent | Self::JsChannel { .. } => tr("Waiting for logging data…", "正在等待日志数据…").to_owned(),
-            Self::Sdk => tr("Waiting for logging data from SDK", "正在等待来自 SDK 的日志数据").to_owned(),
+            Self::RrdWebEvent | Self::JsChannel { .. } => {
+                tr("Waiting for logging data…", "正在等待日志数据…").to_owned()
+            }
+            Self::Sdk => tr(
+                "Waiting for logging data from SDK",
+                "正在等待来自 SDK 的日志数据",
+            )
+            .to_owned(),
         }
     }
 

@@ -105,7 +105,8 @@ pub mod internal {
                     && *joint_type == JointType::Revolute
                     && !(limit.lower <= value && value <= limit.upper)
                 {
-                    warning = Some(format!(
+                    warning = Some(re_i18n::trf!(
+                        "Joint '{}' angle {:.4} rad is outside limits [{:.4}, {:.4}] rad. Clamping.",
                         "关节 '{}' 的角度 {:.4} rad 超出限位 [{:.4}, {:.4}] rad，已截断到限位内。",
                         name, value, limit.lower, limit.upper
                     ));
@@ -132,7 +133,8 @@ pub mod internal {
                 let mut value = value;
 
                 if clamp && !(limit.lower <= value && value <= limit.upper) {
-                    warning = Some(format!(
+                    warning = Some(re_i18n::trf!(
+                        "Joint '{}' distance {:.4} m is outside limits [{:.4}, {:.4}] m. Clamping.",
                         "关节 '{}' 的位移 {:.4} m 超出限位 [{:.4}, {:.4}] m，已截断到限位内。",
                         name, value, limit.lower, limit.upper
                     ));

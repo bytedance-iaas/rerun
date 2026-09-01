@@ -1,7 +1,7 @@
 //! The [`LinkButton`] "smart link" button widget.
 
-use re_i18n::tr;
 use egui::IntoAtoms;
+use re_i18n::tr;
 
 use crate::button::ReButton;
 use crate::{UiExt as _, icons};

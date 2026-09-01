@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use re_data_source::rrd_artifacts::ArtifactDeletionRequest;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 
@@ -35,7 +35,9 @@ impl DeleteArtifactsModal {
                     let count = re_data_source::lerobot_remote::dataset_artifact_count(
                         &request.application_id,
                     );
-                    ui.label(format!(
+                    ui.label(trf!(
+                        "This deletes ALL converted rrds of this dataset ({count} known) \
+                         from the artifacts store:",
                         "这会从制品库中删除这个数据集转换出的全部 rrd（已知 {count} 个）：",
                     ));
                 }
@@ -64,8 +66,13 @@ impl DeleteArtifactsModal {
                             }
                             None => {
                                 re_log::warn!(
-                                    "无法删除 rrd 制品：这个数据集的流式读取已不再活跃\n数据集：{}",
-                                    request.dataset_url
+                                    "{}",
+                                    trf!(
+                                        "Cannot delete rrd artifacts: the dataset's stream is no \
+                                         longer active\nDataset: {}",
+                                        "无法删除 rrd 制品：这个数据集的流式读取已不再活跃\n数据集：{}",
+                                        request.dataset_url
+                                    )
                                 );
                             }
                         }

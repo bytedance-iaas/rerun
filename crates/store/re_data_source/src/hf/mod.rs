@@ -144,17 +144,34 @@ async fn hf_fetch(request: ehttp::Request) -> anyhow::Result<ehttp::Response> {
     let url = request.url.clone();
     crate::http_client::fetch_async(request)
         .await
-        .map_err(|err| anyhow::anyhow!("请求失败：{err}\nURL：{url}"))
+        .map_err(|err| {
+            anyhow::anyhow!(trf!(
+                "Request failed: {err}\nUrl: {url}",
+                "请求失败：{err}\nURL：{url}"
+            ))
+        })
 }
 
 /// A human hint for HTTP statuses users actually hit against Hugging Face hosts.
 fn status_hint(status: u16) -> &'static str {
     match status {
-        401 => tr(" (Unauthorized — an access token is required or the given one is invalid)", "（Unauthorized — 需要访问令牌，或提供的令牌无效）"),
-        403 => tr(" (Forbidden — no access with these credentials; gated dataset?)", "（Forbidden — 这组凭证无权访问；可能是受限数据集？）"),
+        401 => tr(
+            " (Unauthorized — an access token is required or the given one is invalid)",
+            "（Unauthorized — 需要访问令牌，或提供的令牌无效）",
+        ),
+        403 => tr(
+            " (Forbidden — no access with these credentials; gated dataset?)",
+            "（Forbidden — 这组凭证无权访问；可能是受限数据集？）",
+        ),
         404 => tr(" (Not Found)", "（Not Found — 不存在）"),
-        429 => tr(" (Too Many Requests — the host is rate-limiting this address; try again later)", "（Too Many Requests — 服务器正在对该地址限流；请稍后再试）"),
-        503 => tr(" (Service Unavailable — the host is overloaded or throttling; try again later)", "（Service Unavailable — 服务器过载或限流中；请稍后再试）"),
+        429 => tr(
+            " (Too Many Requests — the host is rate-limiting this address; try again later)",
+            "（Too Many Requests — 服务器正在对该地址限流；请稍后再试）",
+        ),
+        503 => tr(
+            " (Service Unavailable — the host is overloaded or throttling; try again later)",
+            "（Service Unavailable — 服务器过载或限流中；请稍后再试）",
+        ),
         _ => "",
     }
 }
@@ -172,7 +189,8 @@ fn http_error(response: &ehttp::Response, what: &str, context: &str) -> anyhow::
     } else {
         trf!("\nServer response: {body}", "\n服务器返回：{body}")
     };
-    anyhow::Error::new(HttpStatusError(status)).context(format!(
+    anyhow::Error::new(HttpStatusError(status)).context(trf!(
+        "{what} failed with HTTP {status}{}{server_says}\n{context}",
         "{what}失败，HTTP {status}{}{server_says}\n{context}",
         status_hint(status),
     ))
@@ -213,13 +231,21 @@ impl DatasetStore for HfStore {
             if response.status != 200 {
                 return Err(http_error(
                     &response,
-                    tr("Listing the Hugging Face dataset", "列出 Hugging Face 数据集"),
-                    &format!("数据集：{}", self.source.repo),
+                    tr(
+                        "Listing the Hugging Face dataset",
+                        "列出 Hugging Face 数据集",
+                    ),
+                    &trf!("Dataset: {}", "数据集：{}", self.source.repo),
                 ));
             }
 
-            let entries: Vec<TreeEntry> = serde_json::from_slice(&response.bytes)
-                .map_err(|err| anyhow::anyhow!("意外的文件树响应：{err}"))?;
+            let entries: Vec<TreeEntry> =
+                serde_json::from_slice(&response.bytes).map_err(|err| {
+                    anyhow::anyhow!(trf!(
+                        "Unexpected tree response: {err}",
+                        "意外的文件树响应：{err}"
+                    ))
+                })?;
 
             files.extend(
                 entries
@@ -259,7 +285,11 @@ impl DatasetStore for HfStore {
         let response = hf_fetch(request).await?;
 
         if !response.ok {
-            return Err(http_error(&response, "HEAD 请求", &trf!("File: {rel_path}", "文件：{rel_path}")));
+            return Err(http_error(
+                &response,
+                tr("HEAD", "HEAD 请求"),
+                &trf!("File: {rel_path}", "文件：{rel_path}"),
+            ));
         }
 
         if let Some(size) = response
@@ -289,7 +319,10 @@ impl DatasetStore for HfStore {
             return Ok(total);
         }
 
-        anyhow::bail!("服务器未返回文件大小：{rel_path}")
+        anyhow::bail!(trf!(
+            "No size reported for file: {rel_path}",
+            "服务器未返回文件大小：{rel_path}"
+        ))
     }
 
     async fn get_range_once(&self, rel_path: &str, range: Range<u64>) -> anyhow::Result<Vec<u8>> {
@@ -314,7 +347,11 @@ impl DatasetStore for HfStore {
         let response = hf_fetch(request).await?;
 
         if !(response.status == 200 || response.status == 206) {
-            return Err(http_error(&response, "GET 请求", &trf!("File: {rel_path}", "文件：{rel_path}")));
+            return Err(http_error(
+                &response,
+                tr("GET", "GET 请求"),
+                &trf!("File: {rel_path}", "文件：{rel_path}"),
+            ));
         }
 
         Ok(response.bytes)

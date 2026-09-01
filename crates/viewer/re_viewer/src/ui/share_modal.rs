@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use egui::{AtomExt as _, IntoAtoms, NumExt as _};
 use re_ui::list_item::PropertyContent;
 use re_ui::modal::{ModalHandler, ModalWrapper};
@@ -85,7 +85,7 @@ impl ShareModal {
 
         match url_for_current_screen {
             Err(err) => {
-                share_button_resp.on_disabled_hover_text(format!("无法生成分享链接：{err}"));
+                share_button_resp.on_disabled_hover_text(trf!("Cannot create share URL: {err}", "无法生成分享链接：{err}"));
             }
             Ok(url) => {
                 if share_button_resp.clicked() {

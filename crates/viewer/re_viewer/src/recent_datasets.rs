@@ -5,7 +5,7 @@
 //! welcome screen show what was opened before and re-open it with one click. Only non-secret
 //! metadata is stored: never access keys or tokens.
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 /// Which remote backend a recent dataset lives on.
 #[derive(Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RecentKind {
@@ -72,13 +72,13 @@ pub fn relative_time_label(last_opened_unix: i64, now_unix: i64) -> String {
     if secs < 60 {
         tr("just now", "刚刚").to_owned()
     } else if secs < 60 * 60 {
-        format!("{} 分钟前", secs / 60)
+        trf!("{} min ago", "{} 分钟前", secs / 60)
     } else if secs < 24 * 60 * 60 {
-        format!("{} 小时前", secs / (60 * 60))
+        trf!("{} h ago", "{} 小时前", secs / (60 * 60))
     } else if secs < 2 * 24 * 60 * 60 {
         tr("yesterday", "昨天").to_owned()
     } else {
-        format!("{} 天前", secs / (24 * 60 * 60))
+        trf!("{} days ago", "{} 天前", secs / (24 * 60 * 60))
     }
 }
 

@@ -58,10 +58,17 @@ impl DataUi for LatestAllInstanceResult<'_> {
                     .num_physical_static_events_for_component(&entity_path, component);
 
                 if static_message_count > 1 {
-                    ui.warning_label(format!(
-                        "已作为静态数据记录 {} 次",
-                        re_format::format_uint(static_message_count)
-                    ))
+                    ui.warning_label(if re_i18n::is_chinese() {
+                        format!(
+                            "已作为静态数据记录 {} 次",
+                            re_format::format_uint(static_message_count)
+                        )
+                    } else {
+                        format!(
+                            "Logged {} as static",
+                            re_format::format_plural_s(static_message_count, "time")
+                        )
+                    })
                     .on_hover_text(
                         "静态组件被多次记录时，只会保存最后一次的值。\
                             之前记录的值会被覆盖，无法恢复。",
@@ -75,10 +82,17 @@ impl DataUi for LatestAllInstanceResult<'_> {
                         component,
                     );
                 if temporal_message_count > 0 {
-                    ui.error_label(format!(
-                        "该静态组件还有 {} 个时间轴上的事件",
-                        re_format::format_uint(temporal_message_count)
-                    ))
+                    ui.error_label(if re_i18n::is_chinese() {
+                        format!(
+                            "该静态组件还有 {} 个时间轴上的事件",
+                            re_format::format_uint(temporal_message_count)
+                        )
+                    } else {
+                        format!(
+                            "Static component also has {}",
+                            re_format::format_plural_s(temporal_message_count, "temporal event")
+                        )
+                    })
                     .on_hover_text(
                         "组件要么记录为静态数据，要么记录在时间轴上，不能两者都用。\
                         静态组件在时间轴上记录的值无法显示。",
@@ -89,10 +103,17 @@ impl DataUi for LatestAllInstanceResult<'_> {
                 if 1 < hits.num_rows() {
                     ui.horizontal(|ui| {
                         ui.add(re_ui::icons::COMPONENT_TEMPORAL.as_image());
-                        ui.label(format!(
-                            "在 {timeline_name}={formatted_time} 处记录了 {} 次",
-                            re_format::format_uint(hits.num_rows())
-                        ));
+                        ui.label(if re_i18n::is_chinese() {
+                            format!(
+                                "在 {timeline_name}={formatted_time} 处记录了 {} 次",
+                                re_format::format_uint(hits.num_rows())
+                            )
+                        } else {
+                            format!(
+                                "Logged {} at {timeline_name}={formatted_time}",
+                                re_format::format_plural_s(hits.num_rows(), "time")
+                            )
+                        });
                     });
                 }
             }
@@ -113,15 +134,29 @@ impl DataUi for LatestAllInstanceResult<'_> {
 
             if ui_layout.is_single_line() {
                 if time.is_static() {
-                    ui.label(format!(
-                        "已作为静态数据记录 {} 次",
-                        re_format::format_uint(hits.num_rows())
-                    ));
+                    ui.label(if re_i18n::is_chinese() {
+                        format!(
+                            "已作为静态数据记录 {} 次",
+                            re_format::format_uint(hits.num_rows())
+                        )
+                    } else {
+                        format!(
+                            "Logged {} as static",
+                            re_format::format_plural_s(hits.num_rows(), "time")
+                        )
+                    });
                 } else {
-                    ui.label(format!(
-                        "在 {timeline_name}={formatted_time} 处记录了 {} 次",
-                        re_format::format_uint(hits.num_rows())
-                    ));
+                    ui.label(if re_i18n::is_chinese() {
+                        format!(
+                            "在 {timeline_name}={formatted_time} 处记录了 {} 次",
+                            re_format::format_uint(hits.num_rows())
+                        )
+                    } else {
+                        format!(
+                            "Logged {} at {timeline_name}={formatted_time}",
+                            re_format::format_plural_s(hits.num_rows(), "time")
+                        )
+                    });
                 }
             } else {
                 // TODO(#8214): full nested timeline support

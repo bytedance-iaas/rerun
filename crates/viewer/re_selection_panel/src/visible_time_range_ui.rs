@@ -1,5 +1,7 @@
 use std::fmt::Write as _;
 
+use re_i18n::trf;
+
 use egui::{NumExt as _, Ui};
 use re_chunk::Timeline;
 use re_log_types::{AbsoluteTimeRange, EntityPath, TimeType, TimelineName};
@@ -244,7 +246,7 @@ fn query_range_ui(
                     QueryRange::LatestAt => {
                         let current_time =
                             time_type.format(current_time, ctx.app_options().timestamp_format);
-                        ui.label(format!("Latest-at 查询时间点：{current_time}"))
+                        ui.label(trf!("Latest-at query at: {current_time}", "Latest-at 查询时间点：{current_time}"))
                             .on_hover_text("对每个组件使用最近一次已知的值。");
                     }
                 }
@@ -313,7 +315,7 @@ fn show_visual_time_range(
         ui.label("整条时间轴").on_hover_text("录制文件的完整时间轴，它可能比这张图的数据范围更大");
     } else if resolved_range == &TimeRange::AT_CURSOR {
         let current_time = time_type.format(current_time, ctx.app_options().timestamp_format);
-        ui.label(format!("在 {} = {current_time}", timeline.name())).on_hover_text("不做 latest-at 查询，只显示恰好记录在当前时间标记位置的数据。");
+        ui.label(trf!("At {} = {current_time}", "在 {} = {current_time}", timeline.name())).on_hover_text("不做 latest-at 查询，只显示恰好记录在当前时间标记位置的数据。");
     } else {
         egui::Grid::new("from_to_labels").show(ui, |ui| {
             ui.grid_left_hand_label("从");
@@ -390,13 +392,17 @@ fn resolved_visible_history_boundary_ui(
                             ("ns", 1.)
                         };
 
-                        write!(label, "，偏移 {} {}", offset as f64 / factor, unit).ok();
+                        write!(label, "{}", trf!(" with {} {} offset", "，偏移 {} {}", offset as f64 / factor, unit)).ok();
                     }
                     TimeType::Sequence => {
                         write!(
                             label,
-                            "，偏移 {}",
-                            re_format::format_plural_signed_s(offset, "frame")
+                            "{}",
+                            trf!(
+                                " with {} offset",
+                                "，偏移 {}",
+                                re_format::format_plural_signed_s(offset, "frame")
+                            )
                         )
                         .ok();
                     }

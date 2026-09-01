@@ -1,8 +1,8 @@
-use re_i18n::tr;
 use egui::{Response, Ui, WidgetInfo, WidgetType};
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item_with_context};
 use re_data_ui::item_ui::guess_instance_path_icon;
 use re_entity_db::InstancePath;
+use re_i18n::{tr, trf};
 use re_log_types::{ApplicationId, EntityPath, EntityPathHash};
 use re_ui::drag_and_drop::DropTarget;
 use re_ui::filter_widget::format_matching_text;
@@ -96,9 +96,10 @@ impl BlueprintTree {
                             .section_title_ui(ui, egui::RichText::new("Blueprint").strong());
 
                         if let Some(title_response) = title_response {
-                            title_response.on_hover_text(
-                                tr("The blueprint is where you can configure the Rerun Viewer", "Blueprint 面板用于配置 Rerun Viewer"),
-                            );
+                            title_response.on_hover_text(tr(
+                                "The blueprint is where you can configure the Rerun Viewer",
+                                "Blueprint 面板用于配置 Rerun Viewer",
+                            ));
                         }
                     })
                     .menu_button(
@@ -224,7 +225,8 @@ impl BlueprintTree {
             .drop_target_style(self.is_candidate_drop_parent_container(&container_data.id))
             .show_flat(
                 ui,
-                list_item::LabelContent::new(format!(
+                list_item::LabelContent::new(trf!(
+                    "Viewport ({})",
                     "视口（{}）",
                     container_data.name.as_ref()
                 ))
@@ -386,7 +388,11 @@ impl BlueprintTree {
             egui_tiles::ContainerKind::Vertical => "垂直排列",
             egui_tiles::ContainerKind::Grid => "网格",
         };
-        let response = response.on_hover_text(format!("{kind_name}容器"));
+        let response = response.on_hover_text(if re_i18n::is_chinese() {
+            format!("{kind_name}容器")
+        } else {
+            format!("{:?} container", container_data.kind)
+        });
 
         self.handle_interactions_for_item(
             ctx,
@@ -484,7 +490,8 @@ impl BlueprintTree {
                         .interactive(false)
                         .show_flat(
                             ui,
-                            list_item::LabelContent::new(tr("Projections:", "投影：")).italics(true),
+                            list_item::LabelContent::new(tr("Projections:", "投影："))
+                                .italics(true),
                         );
 
                     for projection in &view_data.projection_trees {
@@ -501,7 +508,7 @@ impl BlueprintTree {
                 }
             });
 
-        let response = response.on_hover_text(format!("{} 视图", class.display_name()));
+        let response = response.on_hover_text(trf!("{} view", "{} 视图", class.display_name()));
 
         if response.clicked() {
             viewport_blueprint.focus_tab(view_data.id);
@@ -597,7 +604,10 @@ impl BlueprintTree {
 
                             if remove_button_ui(
                                 ui,
-                                tr("Remove this entity and all its children from the view", "从视图中移除该实体及其所有子实体"),
+                                tr(
+                                    "Remove this entity and all its children from the view",
+                                    "从视图中移除该实体及其所有子实体",
+                                ),
                             )
                             .clicked()
                             {
@@ -619,9 +629,7 @@ impl BlueprintTree {
                             .italics(true)
                             .with_icon(&re_ui::icons::INTERNAL_LINK),
                     )
-                    .on_hover_text(
-                        "该子树对应视图的原点，显示在\"投影\"部分上方。点击可选中它。",
-                    )
+                    .on_hover_text("该子树对应视图的原点，显示在\"投影\"部分上方。点击可选中它。")
                     .clicked()
                 {
                     ctx.command_sender()
@@ -691,9 +699,7 @@ impl BlueprintTree {
                 data_result_data.kind,
                 DataResultKind::EmptyOriginPlaceholder
             ) {
-                ui.label(ui.warning_text(
-                    "该视图的查询在空间原点下没有匹配到任何数据",
-                ));
+                ui.label(ui.warning_text("该视图的查询在空间原点下没有匹配到任何数据"));
             }
         });
 

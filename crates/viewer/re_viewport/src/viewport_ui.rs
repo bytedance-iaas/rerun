@@ -8,6 +8,7 @@ use ahash::HashMap;
 use egui::{Key, KeyboardShortcut, Modifiers, remap_clamp};
 use egui_tiles::{Behavior as _, EditAction};
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item};
+use re_i18n::trf;
 use re_log_types::{EntityPath, ResolvedEntityPathRule, RuleEffect};
 use re_ui::{
     ContextExt as _, Help, Icon, IconText, UICommandSender as _, UiExt as _,
@@ -430,9 +431,13 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
                 )
                 .unwrap_or_else(|err| {
                     re_log::error!(
-                        "视图 UI 出错（类别：{}，显示名称：{}）：{err}",
-                        view_blueprint.class_identifier(),
-                        class.display_name(),
+                        "{}",
+                        trf!(
+                            "Error in view UI (class: {}, display name: {}): {err}",
+                            "视图 UI 出错（类别：{}，显示名称：{}）：{err}",
+                            view_blueprint.class_identifier(),
+                            class.display_name(),
+                        )
                     );
                     Default::default()
                 });
@@ -674,9 +679,13 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
             )
             .unwrap_or_else(|err| {
                 re_log::error!(
-                    "视图标题栏 UI 出错（类别：{}，显示名称：{}）：{err}",
-                    view_blueprint.class_identifier(),
-                    view_class.display_name(),
+                    "{}",
+                    trf!(
+                        "Error in view title bar UI (class: {}, display name: {}): {err}",
+                        "视图标题栏 UI 出错（类别：{}，显示名称：{}）：{err}",
+                        view_blueprint.class_identifier(),
+                        view_class.display_name(),
+                    )
                 );
             });
 
@@ -830,7 +839,8 @@ impl TilesDelegate<'_, '_> {
 
             let response = ui
                 .add(egui::Button::image(report_image))
-                .on_hover_text(format!(
+                .on_hover_text(trf!(
+                    "Show {}",
                     "显示 {}",
                     re_format::format_plural_s(report_count, "report")
                 ));
@@ -965,7 +975,10 @@ impl TabWidget {
                         label: Some(view.display_name_or_default().into()),
                     }
                 } else {
-                    re_log::warn_once!("找不到视图 {view_id}");
+                    re_log::warn_once!(
+                        "{}",
+                        trf!("View {view_id} not found", "找不到视图 {view_id}")
+                    );
 
                     TabDesc {
                         widget_text: tab_viewer.ctx.egui_ctx().error_text("未知视图").into(),
@@ -991,13 +1004,15 @@ impl TabWidget {
                             container_blueprint.display_name.is_some(),
                         )
                     } else {
-                        re_log::warn_once!("在 egui_tiles 中找不到容器 {container_id}");
+                        re_log::warn_once!(
+                            "{}",
+                            trf!(
+                                "Container {container_id} missing during egui_tiles",
+                                "在 egui_tiles 中找不到容器 {container_id}"
+                            )
+                        );
                         (
-                            tab_viewer
-                                .ctx
-                                .egui_ctx()
-                                .error_text("内部错误")
-                                .into(),
+                            tab_viewer.ctx.egui_ctx().error_text("内部错误").into(),
                             false,
                         )
                     };
@@ -1019,14 +1034,16 @@ impl TabWidget {
                         return Self::new(tab_viewer, ui, tiles, tile_id, tab_state, alpha);
                     }
 
-                    re_log::warn_once!("找不到 tile ID {tile_id:?} 对应的容器");
+                    re_log::warn_once!(
+                        "{}",
+                        trf!(
+                            "Container for tile ID {tile_id:?} not found",
+                            "找不到 tile ID {tile_id:?} 对应的容器"
+                        )
+                    );
 
                     TabDesc {
-                        widget_text: tab_viewer
-                            .ctx
-                            .egui_ctx()
-                            .error_text("未知容器")
-                            .into(),
+                        widget_text: tab_viewer.ctx.egui_ctx().error_text("未知容器").into(),
                         icon: &re_ui::icons::VIEW_GENERIC,
                         user_named: false,
                         item: None,
@@ -1035,14 +1052,13 @@ impl TabWidget {
                 }
             }
             None => {
-                re_log::warn_once!("找不到 tile {tile_id:?}");
+                re_log::warn_once!(
+                    "{}",
+                    trf!("Tile {tile_id:?} not found", "找不到 tile {tile_id:?}")
+                );
 
                 TabDesc {
-                    widget_text: tab_viewer
-                        .ctx
-                        .egui_ctx()
-                        .error_text("内部错误")
-                        .into(),
+                    widget_text: tab_viewer.ctx.egui_ctx().error_text("内部错误").into(),
                     icon: &re_ui::icons::VIEW_UNKNOWN,
                     user_named: false,
                     item: None,

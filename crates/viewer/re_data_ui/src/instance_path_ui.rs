@@ -1,7 +1,8 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use egui::RichText;
 use itertools::Itertools as _;
 use re_capabilities::MainThreadToken;
+use re_format::format_plural_s;
 use re_chunk_store::{ChunkTrackingMode, UnitChunkShared};
 use re_entity_db::InstancePath;
 use re_log_types::ComponentPath;
@@ -40,7 +41,8 @@ impl DataUi for InstancePath {
             // This is fine - e.g. we're looking at `/world` and the user has only logged to `/world/car`.
             ui_layout.label(
                 ui,
-                format!(
+                trf!(
+                    "{self} has no own components on timeline {}, but its children do",
                     "{self} 在时间轴 {} 上没有自己的组件，但它的子级有",
                     ctx.timeline_name()
                 ),
@@ -129,11 +131,19 @@ fn instance_path_ui(
         UiLayout::List | UiLayout::Inline => {
             ui_layout.label(
                 ui,
-                format!(
-                    "{} 个 archetype，共 {} 个组件",
-                    re_format::format_uint(components_by_archetype.len()),
-                    re_format::format_uint(num_components)
-                ),
+                if re_i18n::is_chinese() {
+                    format!(
+                        "{} 个 archetype，共 {} 个组件",
+                        re_format::format_uint(components_by_archetype.len()),
+                        re_format::format_uint(num_components)
+                    )
+                } else {
+                    format!(
+                        "{} with {}",
+                        format_plural_s(components_by_archetype.len(), "archetype"),
+                        format_plural_s(num_components, "total component")
+                    )
+                },
             );
         }
         UiLayout::Tooltip => {
@@ -161,26 +171,36 @@ fn instance_path_ui(
                 if !showed_short_summary {
                     // Show just a very short summary:
                     ui.list_item_scope(instance_path, |ui| {
-                        ui.list_item_label(format!(
-                            "{} 个组件",
-                            re_format::format_uint(num_components)
-                        ));
+                        ui.list_item_label(if re_i18n::is_chinese() {
+                            format!("{} 个组件", re_format::format_uint(num_components))
+                        } else {
+                            format_plural_s(num_components, "component")
+                        });
 
                         let archetype_count = components_by_archetype.len();
-                        ui.list_item_label(format!(
-                            "{} 个 archetype：{}",
-                            re_format::format_uint(archetype_count),
-                            components_by_archetype
-                                .keys()
-                                .map(|archetype| {
-                                    if let Some(archetype) = archetype {
-                                        archetype.short_name()
-                                    } else {
-                                        "<无 archetype>"
-                                    }
-                                })
-                                .join(", ")
-                        ));
+                        let archetype_names = components_by_archetype
+                            .keys()
+                            .map(|archetype| {
+                                if let Some(archetype) = archetype {
+                                    archetype.short_name()
+                                } else {
+                                    tr("<Without archetype>", "<无 archetype>")
+                                }
+                            })
+                            .join(", ");
+                        ui.list_item_label(if re_i18n::is_chinese() {
+                            format!(
+                                "{} 个 archetype：{}",
+                                re_format::format_uint(archetype_count),
+                                archetype_names
+                            )
+                        } else {
+                            format!(
+                                "{}: {}",
+                                format_plural_s(archetype_count, "archetype"),
+                                archetype_names
+                            )
+                        });
                     });
                 }
             }
@@ -259,7 +279,18 @@ fn try_summary_ui_for_tooltip(
     );
 
     let num_skipped = num_components - num_instanced_components;
-    ui.label(format!("…另有 {num_skipped} 个组件"));
+    ui.label(if re_i18n::is_chinese() {
+        format!("…另有 {num_skipped} 个组件")
+    } else {
+        format!(
+            "…plus {num_skipped} more {}",
+            if num_skipped == 1 {
+                "component"
+            } else {
+                "components"
+            }
+        )
+    });
 
     Ok(())
 }

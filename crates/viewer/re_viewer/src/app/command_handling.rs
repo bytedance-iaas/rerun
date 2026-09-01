@@ -118,7 +118,11 @@ impl App {
                                 "No active blueprint found for recording {store_id:?} when handling time control commands sent from {sent_from}. This should never happen for local recording routes.",
                             );
                             re_log::error_once!(
-                                "无法改变录制文件 {store_id:?} 的时间：它不是活动状态。"
+                                "{}",
+                                trf!(
+                                    "Can't change time for recording {store_id:?} because it is not active.",
+                                    "无法改变录制文件 {store_id:?} 的时间：它不是活动状态。"
+                                )
                             );
                             return;
                         };
@@ -137,7 +141,11 @@ impl App {
 
                         let Some(recording) = store_hub.entity_db(&store_id) else {
                             re_log::error_once!(
-                                "无法改变录制文件 {store_id:?} 的时间：它尚未加载。"
+                                "{}",
+                                trf!(
+                                    "Can't change time for recording {store_id:?} because it is not loaded.",
+                                    "无法改变录制文件 {store_id:?} 的时间：它尚未加载。"
+                                )
                             );
                             return;
                         };
@@ -206,7 +214,7 @@ impl App {
                         .replace(Route::LocalRecording { recording_id });
                 } else {
                     // TODO(RR-3713): show a blueprint for it anyway
-                    re_log::warn_once!(tr("Can't switch app-id - we have no recording for it", "无法切换应用 ID — 没有对应的录制文件"));
+                    re_log::warn_once!("{}", tr("Can't switch app-id - we have no recording for it", "无法切换应用 ID — 没有对应的录制文件"));
                     // If we can't go where we want to go, then go nowhere.
                 }
             }
@@ -1122,6 +1130,7 @@ impl App {
                             }
                         } else {
                             re_log::warn!(
+                                "{}",
                                 tr("The current recording doesn't support sharing a time range", "当前录制文件不支持分享时间范围")
                             );
                         }
@@ -1138,7 +1147,11 @@ impl App {
                     re_web::browser::set_url_parameter_and_refresh("renderer", "webgl")
                 {
                     re_log::error!(
-                        "设置 URL 参数 `renderer=webgl` 并刷新页面失败：{err}"
+                        "{}",
+                        trf!(
+                            "Failed to set URL parameter `renderer=webgl` and refresh page: {err}",
+                            "设置 URL 参数 `renderer=webgl` 并刷新页面失败：{err}"
+                        )
                     );
                 }
             }
@@ -1149,7 +1162,11 @@ impl App {
                     re_web::browser::set_url_parameter_and_refresh("renderer", "webgpu")
                 {
                     re_log::error!(
-                        "设置 URL 参数 `renderer=webgpu` 并刷新页面失败：{err}"
+                        "{}",
+                        trf!(
+                            "Failed to set URL parameter `renderer=webgpu` and refresh page: {err}",
+                            "设置 URL 参数 `renderer=webgpu` 并刷新页面失败：{err}"
+                        )
                     );
                 }
             }
@@ -1256,13 +1273,13 @@ impl App {
             }
             RecordingCommandKind::SaveTimeSelection => {
                 if let Err(err) = save_active_recording(self, store_context) {
-                    re_log::error!("保存录制文件失败：{err}");
+                    re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
                 }
             }
 
             RecordingCommandKind::SaveBlueprint => {
                 if let Err(err) = save_blueprint(self, store_context) {
-                    re_log::error!("保存 blueprint 失败：{err}");
+                    re_log::error!("{}", trf!("Failed to save blueprint: {err}", "保存 blueprint 失败：{err}"));
                 }
             }
 
@@ -1405,7 +1422,7 @@ impl App {
         let any_error = Arc::new(AtomicBool::new(false));
         let num_remaining = Arc::new(AtomicUsize::new(stores.len()));
 
-        re_log::info!("正在保存 {num_stores} 个录制文件到 {}…", folder.display());
+        re_log::info!("{}", trf!("Saving {num_stores} recordings to {}…", "正在保存 {num_stores} 个录制文件到 {}…", folder.display()));
 
         for store in stores {
             let messages = store.to_messages(None).collect_vec();
@@ -1521,7 +1538,7 @@ impl App {
         re_ui::apply_style_and_install_loaders(egui_ctx);
 
         if let Err(err) = crate::reset_viewer_persistence() {
-            re_log::warn!("重置 Viewer 失败：{err}");
+            re_log::warn!("{}", trf!("Failed to reset viewer: {err}", "重置 Viewer 失败：{err}"));
         }
     }
 

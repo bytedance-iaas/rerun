@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use ahash::HashMap;
 use arrow::array::{ArrayRef, NullArray};
 use nohash_hasher::IntMap;
+use re_i18n::trf;
 use re_sdk_types::{Component, ComponentType, SerializationError, ViewClassIdentifier};
 use re_types_core::ComponentIdentifier;
 
@@ -91,7 +92,11 @@ impl FallbackProviderRegistry {
             .is_some()
         {
             re_log::warn!(
-                "组件 {component} 已经注册过 fallback provider"
+                "{}",
+                trf!(
+                    "There was already a component fallback provider registered for {component}",
+                    "组件 {component} 已经注册过 fallback provider"
+                )
             );
         }
     }
@@ -123,7 +128,11 @@ impl FallbackProviderRegistry {
             .is_some()
         {
             re_log::warn!(
-                "组件 {component} 已经注册过 fallback provider"
+                "{}",
+                trf!(
+                    "There was already a component fallback provider registered for {component}",
+                    "组件 {component} 已经注册过 fallback provider"
+                )
             );
         }
     }
@@ -158,7 +167,11 @@ impl FallbackProviderRegistry {
             .is_some()
         {
             re_log::warn!(
-                "视图 {view} 中的组件 {component} 已经注册过 fallback provider"
+                "{}",
+                trf!(
+                    "There was already a view component fallback provider registered for {component} in {view}",
+                    "视图 {view} 中的组件 {component} 已经注册过 fallback provider"
+                )
             );
         }
     }

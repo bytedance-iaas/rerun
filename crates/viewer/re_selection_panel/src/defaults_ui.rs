@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::collections::BTreeMap;
 
 use arrow::array::ArrayRef;
@@ -207,9 +207,13 @@ fn visualized_components_by_archetype(
                 // TODO(andreas): In theory this is perfectly valid: A visualizer may be interested in an untagged component!
                 // Practically this never happens and we don't handle this in the ui here yet.
                 re_log::warn_once!(
-                    "可视化器 {} 查询了未打标签的组件 {}，它不会显示在默认值界面里。",
-                    id,
-                    descr
+                    "{}",
+                    trf!(
+                        "Visualizer {} queried untagged component {}. It won't show in the defaults ui.",
+                        "可视化器 {} 查询了未打标签的组件 {}，它不会显示在默认值界面里。",
+                        id,
+                        descr
+                    )
                 );
                 continue;
             };
@@ -302,7 +306,8 @@ fn components_to_show_in_add_menu(
         components_to_show_in_add_menu.retain(|_, components| !components.is_empty());
 
         if components_to_show_in_add_menu.is_empty() {
-            return Err(format!(
+            return Err(trf!(
+                "Rerun lacks edit UI for: {}",
                 "Rerun 没有以下组件的编辑界面：{}",
                 missing_editors.iter().map(|c| c.display_name()).join(", ")
             ));
@@ -391,7 +396,7 @@ fn add_new_default(
                 ));
         }
         Err(err) => {
-            re_log::warn!("创建 blueprint 组件的 Chunk 失败：{err}");
+            re_log::warn!("{}", trf!("Failed to create Chunk for blueprint component: {err}", "创建 blueprint 组件的 Chunk 失败：{err}"));
         }
     }
 }

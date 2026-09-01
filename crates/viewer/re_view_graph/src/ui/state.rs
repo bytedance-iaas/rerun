@@ -1,6 +1,6 @@
-use re_i18n::tr;
 use egui::Rect;
 use re_format::format_f32;
+use re_i18n::tr;
 use re_sdk_types::blueprint::components::VisualBounds2D;
 use re_ui::UiExt as _;
 use re_viewer_context::ViewState;
@@ -22,7 +22,10 @@ impl GraphViewState {
             return;
         };
         ui.grid_left_hand_label(tr("Bounding box", "包围盒"))
-            .on_hover_text(tr("The bounding box encompassing all entities in the view right now", "当前视图中包含所有实体的包围盒"));
+            .on_hover_text(tr(
+                "The bounding box encompassing all entities in the view right now",
+                "当前视图中包含所有实体的包围盒",
+            ));
         ui.vertical(|ui| {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
             let egui::Rect { min, max } = rect;

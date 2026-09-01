@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use re_viewer_context::open_url::ViewerOpenUrl;
 
 /// A description of what happens when opening a [`ViewerOpenUrl`].
@@ -93,7 +93,7 @@ impl ViewerOpenUrlDescription {
                 } else {
                     Self {
                         category: tr("Several URLs", "多个 URL"),
-                        target_short: Some(format!("{} 个 URL", url_parameters.len())),
+                        target_short: Some(trf!("{} URLs", "{} 个 URL", url_parameters.len())),
                     }
                 }
             }

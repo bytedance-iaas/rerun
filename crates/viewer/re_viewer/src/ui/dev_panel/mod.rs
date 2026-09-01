@@ -252,7 +252,8 @@ impl DevPanel {
 
                     ui.separator();
                     ui.collapsing(tr("Viewer Caches", "Viewer 缓存"), |ui| {
-                        ui.label(format!(
+                        ui.label(trf!(
+                            "GPU Memory: {}",
                             "GPU 内存：{}",
                             format_bytes(store_stats.cache_vram_usage.size_bytes() as f64)
                         ));
@@ -281,7 +282,8 @@ impl DevPanel {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
             Self::tracking_stats(ui, tracking_stats);
         } else if !cfg!(target_arch = "wasm32") {
-            ui.label(format!(
+            ui.label(trf!(
+                "Set {RERUN_TRACK_ALLOCATIONS}=1 for detailed allocation tracking from startup.",
                 "设置 {RERUN_TRACK_ALLOCATIONS}=1 可从启动起就进行详细的内存分配追踪。"
             ));
         }
@@ -477,23 +479,27 @@ impl DevPanel {
         tracking_stats: re_memory::accounting_allocator::TrackingStatistics,
     ) {
         ui.label("counted = fully_tracked + stochastically_tracked + untracked + overhead");
-        ui.label(format!(
+        ui.label(trf!(
+            "fully_tracked: {} in {} allocs",
             "fully_tracked（完整追踪）：{}，共 {} 次分配",
             format_bytes(tracking_stats.fully_tracked.size as _),
             format_uint(tracking_stats.fully_tracked.count),
         ));
-        ui.label(format!(
+        ui.label(trf!(
+            "stochastically_tracked: {} in {} allocs",
             "stochastically_tracked（随机采样追踪）：{}，共 {} 次分配",
             format_bytes(tracking_stats.stochastically_tracked.size as _),
             format_uint(tracking_stats.stochastically_tracked.count),
         ));
-        ui.label(format!(
+        ui.label(trf!(
+            "untracked: {} in {} allocs (all smaller than {})",
             "untracked（未追踪）：{}，共 {} 次分配（均小于 {}）",
             format_bytes(tracking_stats.untracked.size as _),
             format_uint(tracking_stats.untracked.count),
             format_bytes(tracking_stats.track_size_threshold as _),
         ));
-        ui.label(format!(
+        ui.label(trf!(
+            "overhead: {} in {} allocs",
             "overhead（开销）：{}，共 {} 次分配",
             format_bytes(tracking_stats.overhead.size as _),
             format_uint(tracking_stats.overhead.count),
@@ -511,7 +517,8 @@ impl DevPanel {
                             let stochastic_rate = callstack.stochastic_rate;
                             let is_stochastic = stochastic_rate > 1;
 
-                            let text = format!(
+                            let text = trf!(
+                                "{}{} in {} allocs (≈{} / alloc){} - {}",
                                 "{}{}，共 {} 次分配（每次约 {}）{} - {}",
                                 if is_stochastic { "≈" } else { "" },
                                 format_bytes((callstack.extant.size * stochastic_rate) as _),
@@ -522,7 +529,7 @@ impl DevPanel {
                                 if stochastic_rate <= 1 {
                                     String::new()
                                 } else {
-                                    format!("（{} 个随机采样）", callstack.extant.count)
+                                    trf!(" ({} stochastic samples)", "（{} 个随机采样）", callstack.extant.count)
                                 },
                                 summarize_callstack(&callstack.readable_backtrace.to_string())
                             );

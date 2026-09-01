@@ -311,7 +311,7 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
                 let analytics = std::fs::read(&analytics_file_path);
 
                 if let Err(err) = std::fs::remove_dir_all(&data_dir) {
-                    anyhow::bail!("删除失败：{err}\n目录：{data_dir:?}");
+                    anyhow::bail!(trf!("Failed to remove {data_dir:?}: {err}", "删除失败：{err}\n目录：{data_dir:?}"));
                 } else {
                     re_log::info!("{}", trf!("Cleared {data_dir:?}.", "已清除 {data_dir:?}。"));
                 }
@@ -330,7 +330,7 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
             if let Some(cache_dir) = re_viewer_context::AppOptions::default_cache_directory() {
                 if let Err(err) = std::fs::remove_dir_all(&cache_dir) {
                     if err.kind() != std::io::ErrorKind::NotFound {
-                        anyhow::bail!("删除失败：{err}\n目录：{cache_dir:?}");
+                        anyhow::bail!(trf!("Failed to remove {cache_dir:?}: {err}", "删除失败：{err}\n目录：{cache_dir:?}"));
                     }
                 } else {
                     re_log::info!("{}", trf!("Cleared {cache_dir:?}.", "已清除 {cache_dir:?}。"));

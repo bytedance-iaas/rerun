@@ -71,7 +71,7 @@ impl Importer for UrdfImporter {
         re_tracing::profile_function!(filepath.display().to_string());
 
         let robot = urdf_rs::read_file(&filepath)
-            .with_context(|| format!("路径：{}", filepath.display()))?;
+            .with_context(|| trf!("Path: {}", "路径：{}", filepath.display()))?;
 
         let store_id = settings.opened_store_id_or_recommended();
         let mut send_error = None;
@@ -116,7 +116,7 @@ impl Importer for UrdfImporter {
         re_tracing::profile_function!(filepath.display().to_string());
 
         let robot = urdf_rs::read_from_string(&String::from_utf8_lossy(&contents))
-            .with_context(|| format!("路径：{}", filepath.display()))?;
+            .with_context(|| trf!("Path: {}", "路径：{}", filepath.display()))?;
 
         let store_id = settings.opened_store_id_or_recommended();
         let mut send_error = None;
@@ -456,7 +456,7 @@ fn load_ros_resource(
         if let Some(root_dir) = &root_dir {
             let full_path = root_dir.join(resource_path);
             std::fs::read(&full_path)
-                .with_context(|| format!("读取文件失败：{}", full_path.display()))
+                .with_context(|| trf!("Failed to read file: {}", "读取文件失败：{}", full_path.display()))
         } else {
             bail!(trf!("No root directory set for URDF, cannot load resource: {resource_path}", "未设置 URDF 根目录，无法加载资源：{resource_path}"));
         }
@@ -646,7 +646,7 @@ fn read_ros_package_resource(
         // If the path is relative, resolve it relative to the `root_dir`.
         let full_path = root_dir.join(resolved_path);
         std::fs::read(&full_path)
-            .with_context(|| format!("读取文件失败：{}", full_path.display()))
+            .with_context(|| trf!("Failed to read file: {}", "读取文件失败：{}", full_path.display()))
     } else {
         // If no `root_dir` is provided, we cannot resolve the relative path.
         bail!(trf!("No root directory set for URDF, cannot load resource: {resource_path}", "未设置 URDF 根目录，无法加载资源：{resource_path}"));
@@ -661,7 +661,7 @@ fn resolve_package_uri(uri: &str) -> anyhow::Result<PathBuf> {
 
     let mut parts = uri.splitn(2, '/');
     let (pkg, rel) = Option::zip(parts.next(), parts.next())
-        .ok_or_else(|| anyhow::anyhow!("无效的 package URI：{uri}"))?;
+        .ok_or_else(|| anyhow::anyhow!(trf!("Invalid package URI: {uri}", "无效的 package URI：{uri}")))?;
 
     let rel = PathBuf::from(rel);
 

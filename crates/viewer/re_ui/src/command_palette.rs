@@ -17,7 +17,7 @@
 //! /car/open_door/
 //! ```
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::collections::BTreeSet;
 
 use egui::text::LayoutJob;
@@ -418,7 +418,8 @@ impl CommandPalette {
                 };
                 let row = CmdRow {
                     job: LayoutJob::simple(
-                        format!(
+                        trf!(
+                            "+ {} more",
                             "+ 还有 {} 条",
                             re_format::format_uint(num_truncated[group_idx])
                         ),
@@ -427,7 +428,9 @@ impl CommandPalette {
                         f32::INFINITY,
                     ),
                     kb_shortcut: String::new(),
-                    tooltip: Some(tr("Show all matches in this group", "显示这一组的全部匹配项").to_owned()),
+                    tooltip: Some(
+                        tr("Show all matches in this group", "显示这一组的全部匹配项").to_owned(),
+                    ),
                 };
 
                 let state = if selected {

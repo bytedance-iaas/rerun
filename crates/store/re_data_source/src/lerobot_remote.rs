@@ -26,6 +26,7 @@ use std::task::{Poll, Waker};
 use anyhow::Context as _;
 use bytes::Bytes;
 use parking_lot::Mutex;
+use re_i18n::{tr, trf};
 use re_log_channel::{LogReceiver, LogSender, LogSource};
 use re_log_types::{ApplicationId, StoreId};
 
@@ -193,7 +194,10 @@ async fn fetch_range<S: DatasetStore>(
     while pos < range.end {
         pause.wait_while_paused().await;
         if pause.interrupted() {
-            anyhow::bail!("下载中断\n文件：{rel_path}");
+            anyhow::bail!(trf!(
+                "Download interrupted\nFile: {rel_path}",
+                "下载中断\n文件：{rel_path}"
+            ));
         }
 
         let chunk_end = range.end.min(pos + MAX_RANGE_REQUEST);
@@ -227,10 +231,11 @@ async fn fetch_range<S: DatasetStore>(
         if bytes.is_empty() {
             empty_responses += 1;
             if empty_responses > 3 {
-                anyhow::bail!(
+                anyhow::bail!(trf!(
+                    "Empty byte-range response at offset {pos} (wanted {pos}..{})\nFile: {rel_path}",
                     "偏移 {pos} 处的字节范围响应为空（期望 {pos}..{}）\n文件：{rel_path}",
                     range.end
-                );
+                ));
             }
             continue;
         }
@@ -267,11 +272,12 @@ const MAX_BROWSER_FILE_BYTES: u64 = 1_500_000_000;
 fn check_browser_file_size(size: u64, what: &str) -> anyhow::Result<()> {
     #[cfg(target_arch = "wasm32")]
     if size > MAX_BROWSER_FILE_BYTES {
-        anyhow::bail!(
+        anyhow::bail!(trf!(
+            "{what} is {} — too large to load in the browser (limit ~{}).              Use the native Rerun viewer for files this big.",
             "{what} 大小为 {} — 太大，无法在浏览器中加载（上限约 {}）。这么大的文件请使用本地原生 Rerun Viewer 打开。",
             re_format::format_bytes(size as _),
             re_format::format_bytes(MAX_BROWSER_FILE_BYTES as _),
-        );
+        ));
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1039,7 +1045,11 @@ pub fn stream_remote_file<S: DatasetStore + 'static>(
         let bytes = match fetch_full(&store, &pause, &rel_path).await {
             Ok(bytes) => bytes,
             Err(err) => {
-                re_log::error!(?url, "获取文件失败：{err:#}");
+                re_log::error!(
+                    ?url,
+                    "{}",
+                    trf!("Failed to fetch file: {err:#}", "获取文件失败：{err:#}")
+                );
                 tx.quit(Some(err.into())).ok();
                 return;
             }
@@ -1062,7 +1072,11 @@ pub fn stream_remote_file<S: DatasetStore + 'static>(
             std::borrow::Cow::Owned(bytes),
             &tx,
         ) {
-            re_log::error!(?url, "加载文件失败：{err}");
+            re_log::error!(
+                ?url,
+                "{}",
+                trf!("Failed to load file: {err}", "加载文件失败：{err}")
+            );
             tx.quit(Some(Box::new(err))).ok();
         }
         // On success the importers call `tx.quit(None)` themselves once done.
@@ -1102,7 +1116,14 @@ pub fn stream_lerobot_dataset<S: DatasetStore + 'static>(
 
     crate::data_source::spawn_future(async move {
         if let Err(err) = run_stream(&store, &tx, rrd_artifacts, mode).await {
-            re_log::error!(?url, "流式读取数据集失败：{err:#}");
+            re_log::error!(
+                ?url,
+                "{}",
+                trf!(
+                    "Failed to stream dataset: {err:#}",
+                    "流式读取数据集失败：{err:#}"
+                )
+            );
             tx.quit(Some(err.into())).ok();
         } else {
             tx.quit(None).ok();
@@ -1140,15 +1161,18 @@ async fn run_stream<S: DatasetStore>(
             // loose-files mode and die there without a visible error.
             let definitively_absent = http_status_of(&err) == Some(404);
             if !definitively_absent {
-                anyhow::bail!(
+                anyhow::bail!(trf!(
+                    "Could not fetch the dataset's meta/info.json: {err:#}\nDataset: {dataset_url}",
                     "无法获取数据集的 meta/info.json：{err:#}\n数据集：{dataset_url}"
-                );
+                ));
             }
             if mode == StreamMode::ConvertOnly {
-                anyhow::bail!(
+                anyhow::bail!(trf!(
+                    "Not a LeRobot dataset (no meta/info.json) — \
+                     only LeRobot v2/v3 episodes are converted to artifacts\nDataset: {dataset_url}",
                     "不是 LeRobot 数据集（缺少 meta/info.json）— \
                      只支持转换 LeRobot v2/v3 的 episode\n数据集：{dataset_url}"
-                );
+                ));
             }
             re_log::debug!(
                 "No meta/info.json (HTTP 404); checking for loose data files…\nDataset: {dataset_url}"
@@ -1157,8 +1181,12 @@ async fn run_stream<S: DatasetStore>(
         }
     };
 
-    let info: MinimalInfo = serde_json::from_slice(&info_bytes)
-        .map_err(|err| anyhow::anyhow!("解析 meta/info.json 失败：{err}"))?;
+    let info: MinimalInfo = serde_json::from_slice(&info_bytes).map_err(|err| {
+        anyhow::anyhow!(trf!(
+            "Failed to parse meta/info.json: {err}",
+            "解析 meta/info.json 失败：{err}"
+        ))
+    })?;
 
     let version = info.codebase_version.trim_start_matches('v');
     let major = version.split('.').next().unwrap_or_default();
@@ -1169,14 +1197,17 @@ async fn run_stream<S: DatasetStore>(
     match major {
         "2" => run_stream_v2(store, &memfs, &dataset_url, tx, rrd_artifacts, mode).await,
         "3" => run_stream_v3(store, &memfs, &dataset_url, tx, rrd_artifacts, mode).await,
-        "1" => anyhow::bail!(
+        "1" => anyhow::bail!(trf!(
+            "This is a LeRobot v1 dataset ({}), which is not supported. \
+             Supported versions: v2 and v3.",
             "这是 LeRobot v1 数据集（{}），暂不支持。支持的版本：v2 和 v3。",
             info.codebase_version
-        ),
-        _ => anyhow::bail!(
+        )),
+        _ => anyhow::bail!(trf!(
+            "Unsupported LeRobot dataset version {:?}. Supported versions: v2 and v3.",
             "不支持的 LeRobot 数据集版本 {:?}。支持的版本：v2 和 v3。",
             info.codebase_version
-        ),
+        )),
     }
 }
 
@@ -1214,8 +1245,8 @@ impl RemoteDataset {
 
     fn item_noun(&self) -> &'static str {
         match self {
-            Self::V2 { .. } | Self::V3 { .. } => "个 episode",
-            Self::Files { .. } => "个文件",
+            Self::V2 { .. } | Self::V3 { .. } => tr("episodes", "个 episode"),
+            Self::Files { .. } => tr("files", "个文件"),
         }
     }
 
@@ -1247,8 +1278,13 @@ async fn run_stream_v2<S: DatasetStore>(
         memfs.insert(rel, Blob::Full(Bytes::from(bytes)));
     }
 
-    let dataset = LeRobotDatasetV2::from_fs(memfs.clone() as Arc<dyn LeRobotFs>)
-        .map_err(|err| anyhow::anyhow!("无法读取的 LeRobot v2 数据集：{err}"))?;
+    let dataset =
+        LeRobotDatasetV2::from_fs(memfs.clone() as Arc<dyn LeRobotFs>).map_err(|err| {
+            anyhow::anyhow!(trf!(
+                "Not a readable LeRobot v2 dataset: {err}",
+                "无法读取的 LeRobot v2 数据集：{err}"
+            ))
+        })?;
 
     let mut indices: Vec<usize> = dataset
         .metadata
@@ -1321,8 +1357,13 @@ async fn run_stream_v3<S: DatasetStore>(
         }
     }
 
-    let dataset = LeRobotDatasetV3::from_fs(memfs.clone() as Arc<dyn LeRobotFs>)
-        .map_err(|err| anyhow::anyhow!("无法读取的 LeRobot v3 数据集：{err}"))?;
+    let dataset =
+        LeRobotDatasetV3::from_fs(memfs.clone() as Arc<dyn LeRobotFs>).map_err(|err| {
+            anyhow::anyhow!(trf!(
+                "Not a readable LeRobot v3 dataset: {err}",
+                "无法读取的 LeRobot v3 数据集：{err}"
+            ))
+        })?;
 
     let mut indices: Vec<usize> = dataset
         .metadata
@@ -1367,10 +1408,13 @@ async fn run_stream_files<S: DatasetStore>(
     tx: &LogSender,
 ) -> anyhow::Result<()> {
     let listing_err = |err: anyhow::Error| {
-        anyhow::anyhow!(
+        anyhow::anyhow!(trf!(
+            "This does not look like a LeRobot dataset (no meta/info.json), and listing the \
+             location failed: {err:#}\n\
+             Check the URL — and for TOS, that the region matches the bucket.",
             "这里看起来不是 LeRobot 数据集（缺少 meta/info.json），而且列出该位置的内容也失败了：{err:#}\n\
              请检查 URL — 若是 TOS，还请确认 region 与桶匹配。"
-        )
+        ))
     };
 
     // Object-store backends (TOS): only LeRobot datasets are supported as directory opens —
@@ -1378,15 +1422,21 @@ async fn run_stream_files<S: DatasetStore>(
     // A one-level probe (single request, no bucket crawl) tells the user what's there.
     if let Some(dir) = store.list_dir().await.map_err(listing_err)? {
         if dir.files.is_empty() && dir.subdirs.is_empty() {
-            anyhow::bail!(
+            anyhow::bail!(tr(
+                "Nothing found at this location — it does not exist or is empty.\n\
+                 Check the URL — and for TOS, that the region matches the bucket.",
                 "该位置下没有任何内容 — 它不存在或为空。\n\
                  请检查 URL — 若是 TOS，还请确认 region 与桶匹配。"
-            );
+            ));
         }
 
-        let mut message = "该位置不是 LeRobot 数据集（缺少 meta/info.json）— \
-                           只能打开 LeRobot v2/v3 数据集。"
-            .to_owned();
+        let mut message = tr(
+            "This location is not a LeRobot dataset (no meta/info.json) — \
+             only LeRobot v2/v3 datasets can be opened.",
+            "该位置不是 LeRobot 数据集（缺少 meta/info.json）— \
+             只能打开 LeRobot v2/v3 数据集。",
+        )
+        .to_owned();
         if !dir.subdirs.is_empty() {
             // One-level probe: we only know the subdirectory names, not what's in them.
             let base = dataset_url.trim_end_matches('/');
@@ -1399,12 +1449,15 @@ async fn run_stream_files<S: DatasetStore>(
                 .collect::<Vec<_>>()
                 .join("\n");
             if dir.subdirs.len() > MAX_LISTED {
-                listed.push_str(&format!(
+                listed.push_str(&trf!(
+                    "\n  … and {} more",
                     "\n  … 还有 {} 个",
                     dir.subdirs.len() - MAX_LISTED
                 ));
             }
-            message.push_str(&format!(
+            message.push_str(&trf!(
+                "\nIt holds subdirectories — if one of them is the dataset, open it directly:\n\
+                 {listed}",
                 "\n它包含子目录 — 如果其中某个是数据集，请直接打开它：\n\
                  {listed}"
             ));
@@ -1416,10 +1469,12 @@ async fn run_stream_files<S: DatasetStore>(
     let all_files = store.list().await.map_err(listing_err)?;
 
     if all_files.is_empty() {
-        anyhow::bail!(
+        anyhow::bail!(tr(
+            "Nothing found at this location — it does not exist or is empty.\n\
+             Check the URL.",
             "该位置下没有任何内容 — 它不存在或为空。\n\
              请检查 URL。"
-        );
+        ));
     }
 
     // This location may contain whole LeRobot datasets in subdirectories. Their internal
@@ -1468,9 +1523,14 @@ async fn run_stream_files<S: DatasetStore>(
             .collect::<Vec<_>>()
             .join("\n");
         re_log::warn!(
-            "该位置的子目录中包含 {} 个 LeRobot 数据集 — \
-             请直接打开它们以流式读取 episode：\n{listed}",
-            nested_dataset_roots.len(),
+            "{}",
+            trf!(
+                "This location contains {} LeRobot dataset(s) in subdirectories — open them \
+                 directly for streaming episodes:\n{listed}",
+                "该位置的子目录中包含 {} 个 LeRobot 数据集 — \
+                 请直接打开它们以流式读取 episode：\n{listed}",
+                nested_dataset_roots.len(),
+            )
         );
     }
 
@@ -1482,24 +1542,34 @@ async fn run_stream_files<S: DatasetStore>(
                 .map(|root| format!("  {base}/{root}"))
                 .collect::<Vec<_>>()
                 .join("\n");
-            anyhow::bail!(
+            anyhow::bail!(trf!(
+                "This location is not a dataset itself, but it contains LeRobot dataset(s) — \
+                 open one of these instead:\n{listed}",
                 "该位置本身不是数据集，但其中包含 LeRobot 数据集 — \
                  请改为打开其中一个：\n{listed}"
-            );
+            ));
         }
-        anyhow::bail!(
+        anyhow::bail!(tr(
+            "This does not look like a LeRobot dataset (no meta/info.json), and it contains no \
+             supported data files either.\n\
+             Supported: LeRobot v2/v3 datasets, or files like .rrd, .mcap, images, meshes.",
             "这里看起来不是 LeRobot 数据集（缺少 meta/info.json），也没有任何支持的数据文件。\n\
              支持的内容：LeRobot v2/v3 数据集，或 .rrd、.mcap、图片、网格模型等文件。"
-        );
+        ));
     }
 
     // Falling back to loose-files mode must be loud: without this, opening a location that
     // merely *contains* importable files looks exactly like a successfully opened dataset,
     // with no hint that it isn't one.
     re_log::warn!(
-        "不是 LeRobot 数据集（缺少 meta/info.json）— 改为显示该位置下找到的 {} 个支持的数据文件。\
-         点击文件即可加载。\n位置：{dataset_url}",
-        files.len()
+        "{}",
+        trf!(
+            "Not a LeRobot dataset (no meta/info.json) — showing the {} supported data file(s) \
+             found at this location instead. Click a file to load it.\nLocation: {dataset_url}",
+            "不是 LeRobot 数据集（缺少 meta/info.json）— 改为显示该位置下找到的 {} 个支持的数据文件。\
+             点击文件即可加载。\n位置：{dataset_url}",
+            files.len()
+        )
     );
 
     let indices: Vec<usize> = (0..files.len()).collect();
@@ -1555,7 +1625,13 @@ async fn stream_items<S: DatasetStore>(
     let auto_advance = !matches!(remote, RemoteDataset::Files { .. });
 
     let total = indices.len();
-    re_log::info!("数据集元数据已加载：共 {total} {noun}\n数据集：{dataset_url}");
+    re_log::info!(
+        "{}",
+        trf!(
+            "Loaded dataset metadata: {total} {noun}\nDataset: {dataset_url}",
+            "数据集元数据已加载：共 {total} {noun}\n数据集：{dataset_url}"
+        )
+    );
 
     let guard = StreamGuard::new(&application_id, dataset_url);
     guard.state.n_items.store(total, Ordering::SeqCst);
@@ -1634,7 +1710,13 @@ async fn stream_items<S: DatasetStore>(
                         }
                     }
                     Err(err) => {
-                        re_log::warn!("生成录制文件属性失败：{err}");
+                        re_log::warn!(
+                            "{}",
+                            trf!(
+                                "Failed to build recording properties: {err}",
+                                "生成录制文件属性失败：{err}"
+                            )
+                        );
                     }
                 }
                 pending.insert(index);
@@ -1644,12 +1726,13 @@ async fn stream_items<S: DatasetStore>(
             if has_more_entry {
                 let remaining = total - *announced;
                 let more_name = if remaining > 0 {
-                    format!(
+                    trf!(
+                        "⋯ {remaining} more {noun} · click to show the next {}",
                         "⋯ 还有 {remaining} {noun} · 点击显示接下来的 {} 个",
                         ANNOUNCE_BATCH.min(remaining)
                     )
                 } else {
-                    format!("✓ 已显示全部 {total} {noun}")
+                    trf!("✓ all {total} {noun} shown", "✓ 已显示全部 {total} {noun}")
                 };
                 if let Ok(msg) =
                     recording_properties_msg(&application_id, MORE_RECORDING_ID, &more_name)
@@ -1761,12 +1844,17 @@ async fn stream_items<S: DatasetStore>(
             if mode == StreamMode::ConvertOnly {
                 let failed = guard.state.failed.lock().len();
                 if failed > 0 {
-                    anyhow::bail!(
+                    anyhow::bail!(trf!(
+                        "Conversion finished with {failed} of {total} items failed\nDataset: {dataset_url}",
                         "转换完成，{total} 项中有 {failed} 项失败\n数据集：{dataset_url}"
-                    );
+                    ));
                 }
                 re_log::info!(
-                    "转换完成：全部 {total} 项已完成\n数据集：{dataset_url}"
+                    "{}",
+                    trf!(
+                        "Conversion finished: all {total} items done\nDataset: {dataset_url}",
+                        "转换完成：全部 {total} 项已完成\n数据集：{dataset_url}"
+                    )
                 );
                 return Ok(());
             }
@@ -1888,21 +1976,34 @@ async fn stream_items<S: DatasetStore>(
 
                 if *attempt < MAX_ATTEMPTS {
                     re_log::warn!(
-                        "加载第 {next} 项失败（第 {attempt}/{MAX_ATTEMPTS} 次尝试，将重试）：{err:#}\n数据集：{dataset_url}"
+                        "{}",
+                        trf!(
+                            "Failed to load item {next} (attempt {attempt}/{MAX_ATTEMPTS}, will retry): {err:#}\nDataset: {dataset_url}",
+                            "加载第 {next} 项失败（第 {attempt}/{MAX_ATTEMPTS} 次尝试，将重试）：{err:#}\n数据集：{dataset_url}"
+                        )
                     );
                     deferred.push(next);
                 } else {
                     re_log::warn!(
-                        "第 {next} 项已尝试 {MAX_ATTEMPTS} 次，放弃加载：{err:#}\n数据集：{dataset_url}"
+                        "{}",
+                        trf!(
+                            "Giving up on item {next} after {MAX_ATTEMPTS} attempts: {err:#}\nDataset: {dataset_url}",
+                            "第 {next} 项已尝试 {MAX_ATTEMPTS} 次，放弃加载：{err:#}\n数据集：{dataset_url}"
+                        )
                     );
                     // Make the failure visible in the recording panel; the item's
                     // re-download button can revive it. The browser size limit gets its
                     // own wording — "load failed" would read as a transient error.
                     let err_text = format!("{err:#}");
-                    let suffix = if err_text.contains("无法在浏览器中加载") {
-                        "⚠ 文件过大，浏览器无法加载 — 请使用本地原生 Viewer"
+                    let suffix = if err_text.contains("too large to load in the browser")
+                        || err_text.contains("无法在浏览器中加载")
+                    {
+                        tr(
+                            "⚠ too large for browser — use the native viewer",
+                            "⚠ 文件过大，浏览器无法加载 — 请使用本地原生 Viewer",
+                        )
                     } else {
-                        "⚠ 加载失败"
+                        tr("⚠ load failed", "⚠ 加载失败")
                     };
                     guard.state.failed.lock().insert(next, err_text);
                     let failed_name = format!("{recording_name} · {suffix}");
@@ -2084,8 +2185,12 @@ async fn load_one_item<S: DatasetStore>(
                 match stored {
                     Some(stored) if stored == expected => {
                         re_log::info!(
-                            "{}{index}：rrd 工件已是最新 — 跳过转换",
-                            remote.recording_id_prefix()
+                            "{}",
+                            trf!(
+                                "{}{index}: artifact up to date — skipped",
+                                "{}{index}：rrd 工件已是最新 — 跳过转换",
+                                remote.recording_id_prefix()
+                            )
                         );
                         return Ok(true);
                     }
@@ -2164,17 +2269,19 @@ async fn load_one_item<S: DatasetStore>(
             let episode_data = dataset
                 .metadata
                 .get_episode_data(episode)
-                .with_context(|| format!("未知的 episode {index}"))?
+                .with_context(|| trf!("Unknown episode {index}", "未知的 episode {index}"))?
                 .clone();
 
             // Episode data parquet (shared by all episodes in the same chunk file; fetched once
             // and kept, since siblings need it too).
             let data_rel = dataset.metadata.info.episode_data_path(&episode_data);
             if !memfs.exists(&data_rel) {
-                let size = sizes
-                    .get(&data_rel)
-                    .copied()
-                    .with_context(|| format!("文件列表中没有该数据文件：{data_rel}"))?;
+                let size = sizes.get(&data_rel).copied().with_context(|| {
+                    trf!(
+                        "Data file not present in listing: {data_rel}",
+                        "文件列表中没有该数据文件：{data_rel}"
+                    )
+                })?;
                 let bytes = fetch_range(store, pause, &data_rel, 0..size).await?;
                 memfs.insert(data_rel.clone(), Blob::Full(Bytes::from(bytes)));
             }
@@ -2209,7 +2316,7 @@ async fn load_one_item<S: DatasetStore>(
                     .unwrap_or((0.0, 0.0));
 
                 let sample_range = episode_sample_range(&video_index.video, from_ts, to_ts)
-                    .with_context(|| format!("视频：{video_rel}"))?;
+                    .with_context(|| trf!("Video: {video_rel}", "视频：{video_rel}"))?;
 
                 let mut sparse = SparseBlob::new(video_index.total_len);
                 for (offset, segment) in &video_index.header_segments {
@@ -2236,7 +2343,7 @@ async fn load_one_item<S: DatasetStore>(
         RemoteDataset::Files { files } => {
             let file = files
                 .get(index)
-                .with_context(|| format!("未知的文件序号 {index}"))?;
+                .with_context(|| trf!("Unknown file index {index}", "未知的文件序号 {index}"))?;
 
             check_browser_file_size(file.size, &file.rel_path)?;
             let bytes = fetch_range(store, pause, &file.rel_path, 0..file.size).await?;
@@ -2274,7 +2381,7 @@ async fn load_one_item<S: DatasetStore>(
     // An interruption that raced with the end of the download must still not send: the
     // recording may just have been closed, and sending would resurrect it.
     if pause.interrupted() {
-        anyhow::bail!("下载中断");
+        anyhow::bail!(tr("Download interrupted", "下载中断"));
     }
 
     let msgs = msgs?;
@@ -2300,8 +2407,12 @@ async fn load_one_item<S: DatasetStore>(
                 );
             }
             StreamMode::ConvertOnly => {
-                let encoded = encode_artifact(&msgs)
-                    .ok_or_else(|| anyhow::anyhow!("编码转换后的 episode 失败"))?;
+                let encoded = encode_artifact(&msgs).ok_or_else(|| {
+                    anyhow::anyhow!(tr(
+                        "Failed to encode the converted episode",
+                        "编码转换后的 episode 失败"
+                    ))
+                })?;
                 let size = encoded.len();
                 upload_artifact(
                     artifacts,
@@ -2314,9 +2425,13 @@ async fn load_one_item<S: DatasetStore>(
                 )
                 .await?;
                 re_log::info!(
-                    "{}{index}：已转换并上传（{}）",
-                    remote.recording_id_prefix(),
-                    re_format::format_bytes(size as _)
+                    "{}",
+                    trf!(
+                        "{}{index}: converted and uploaded ({})",
+                        "{}{index}：已转换并上传（{}）",
+                        remote.recording_id_prefix(),
+                        re_format::format_bytes(size as _)
+                    )
                 );
             }
         }
@@ -2462,9 +2577,15 @@ async fn try_load_rrd_artifact(
             }
             None => {
                 re_log::warn_once!(
-                    "rrd 工件已存在，但无法读取其指纹元数据\
-                     （当前网络的代理或网关可能剥掉了 x-amz-meta-* 响应头）\
-                     — 改为从源数据重新转换\n对象：{key}"
+                    "{}",
+                    trf!(
+                        "An rrd artifact exists but its fingerprint metadata is unreadable \
+                         (a proxy or gateway on this network may be stripping x-amz-meta-* \
+                         headers) — re-converting from source instead\nObject: {key}",
+                        "rrd 工件已存在，但无法读取其指纹元数据\
+                         （当前网络的代理或网关可能剥掉了 x-amz-meta-* 响应头）\
+                         — 改为从源数据重新转换\n对象：{key}"
+                    )
                 );
                 return Ok(None);
             }
@@ -2526,7 +2647,10 @@ async fn fetch_and_replay_artifact(
         for attempt in 1..=MAX_ATTEMPTS {
             pause.wait_while_paused().await;
             if pause.interrupted() || item_cancelled(state, index) {
-                anyhow::bail!("下载中断\n对象：{key}");
+                anyhow::bail!(trf!(
+                    "Download interrupted\nObject: {key}",
+                    "下载中断\n对象：{key}"
+                ));
             }
             // `get_object` re-requests short (proxy-truncated) responses, so the
             // slice comes back complete or errors.
@@ -2556,9 +2680,13 @@ async fn fetch_and_replay_artifact(
         let start = i * usize::try_from(CHUNK).unwrap_or_default();
         anyhow::ensure!(
             start + slice.len() <= bytes.len(),
-            "字节范围响应超出对象大小（{} > {}）\n对象：{key}",
-            start + slice.len(),
-            bytes.len()
+            "{}",
+            trf!(
+                "Byte-range response overruns the object size ({} > {})\nObject: {key}",
+                "字节范围响应超出对象大小（{} > {}）\n对象：{key}",
+                start + slice.len(),
+                bytes.len()
+            )
         );
         bytes[start..start + slice.len()].copy_from_slice(&slice);
     }
@@ -2572,7 +2700,7 @@ async fn fetch_and_replay_artifact(
     // A close that raced with the end of the download must not send: sending would
     // resurrect the closed recording.
     if pause.interrupted() || item_cancelled(state, index) {
-        anyhow::bail!("下载中断");
+        anyhow::bail!(tr("Download interrupted", "下载中断"));
     }
     for msg in re_log_encoding::Decoder::decode_lazy(std::io::Cursor::new(bytes)) {
         let msg: re_log_types::LogMsg = msg?;
@@ -2591,7 +2719,13 @@ fn encode_artifact(msgs: &[re_log_types::LogMsg]) -> Option<Vec<u8>> {
     match re_log_encoding::Encoder::encode(msgs.iter().map(Ok)) {
         Ok(bytes) => Some(bytes),
         Err(err) => {
-            re_log::warn_once!("为 rrd 工件存储编码 episode 失败：{err}");
+            re_log::warn_once!(
+                "{}",
+                trf!(
+                    "Failed to encode an episode for the rrd artifacts store: {err}",
+                    "为 rrd 工件存储编码 episode 失败：{err}"
+                )
+            );
             None
         }
     }
@@ -2667,7 +2801,11 @@ fn spawn_artifact_write_back(
         .await
         {
             re_log::warn_once!(
-                "上传转换好的 rrd 到工件存储失败（不影响查看）：{err:#}"
+                "{}",
+                trf!(
+                    "Failed to upload a converted rrd to the artifacts store (viewing is unaffected): {err:#}",
+                    "上传转换好的 rrd 到工件存储失败（不影响查看）：{err:#}"
+                )
             );
         }
     });
@@ -2805,9 +2943,12 @@ async fn fetch_video_index<S: DatasetStore>(
     sizes: &ahash::HashMap<String, u64>,
     video_rel: &str,
 ) -> anyhow::Result<VideoIndex> {
-    let total_len = *sizes
-        .get(video_rel)
-        .with_context(|| format!("文件列表中没有该视频文件：{video_rel}"))?;
+    let total_len = *sizes.get(video_rel).with_context(|| {
+        trf!(
+            "Video file not present in listing: {video_rel}",
+            "文件列表中没有该视频文件：{video_rel}"
+        )
+    })?;
 
     let mut sparse = SparseBlob::new(total_len);
 
@@ -2827,7 +2968,12 @@ async fn fetch_video_index<S: DatasetStore>(
 
         let header = sparse
             .get(pos, 16.min(total_len - pos))
-            .with_context(|| format!("读取偏移 {pos} 处的 mp4 box 头失败：{video_rel}"))?
+            .with_context(|| {
+                trf!(
+                    "Failed to read mp4 box header at {pos}: {video_rel}",
+                    "读取偏移 {pos} 处的 mp4 box 头失败：{video_rel}"
+                )
+            })?
             .to_vec();
 
         let size32 = u32::from_be_bytes([header[0], header[1], header[2], header[3]]);
@@ -2836,7 +2982,10 @@ async fn fetch_video_index<S: DatasetStore>(
             0 => total_len - pos, // box extends to end of file
             1 => {
                 if header.len() < 16 {
-                    anyhow::bail!("偏移 {pos} 处的 64 位 mp4 box 头不完整：{video_rel}");
+                    anyhow::bail!(trf!(
+                        "Truncated 64-bit mp4 box header at {pos}: {video_rel}",
+                        "偏移 {pos} 处的 64 位 mp4 box 头不完整：{video_rel}"
+                    ));
                 }
                 u64::from_be_bytes([
                     header[8], header[9], header[10], header[11], header[12], header[13],
@@ -2846,7 +2995,10 @@ async fn fetch_video_index<S: DatasetStore>(
             s => u64::from(s),
         };
         if box_size < 8 || pos + box_size > total_len {
-            anyhow::bail!("偏移 {pos} 处的 mp4 box 损坏（大小 {box_size}）：{video_rel}");
+            anyhow::bail!(trf!(
+                "Corrupt mp4 box (size {box_size}) at {pos}: {video_rel}",
+                "偏移 {pos} 处的 mp4 box 损坏（大小 {box_size}）：{video_rel}"
+            ));
         }
 
         if box_type != b"mdat" && !sparse.contains(pos, box_size) {
@@ -2863,7 +3015,12 @@ async fn fetch_video_index<S: DatasetStore>(
     let mut reader = blob.reader();
     let video =
         re_video::VideoDataDescription::load_mp4_from_reader(&mut reader, total_len, video_rel)
-            .with_context(|| format!("解析 mp4 索引失败：{video_rel}"))?;
+            .with_context(|| {
+                trf!(
+                    "Failed to parse mp4 index: {video_rel}",
+                    "解析 mp4 索引失败：{video_rel}"
+                )
+            })?;
 
     Ok(VideoIndex {
         total_len,

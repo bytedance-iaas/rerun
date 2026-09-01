@@ -589,7 +589,7 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
     };
 
     let item_response = item_response.on_hover_ui(|ui| {
-        ui.label(format!("数据集：{name}"));
+        ui.label(trf!("Dataset: {name}", "数据集：{name}"));
     });
 
     let new_route = Route::from(re_uri::EntryUri::new(origin.clone(), *entry_id));
@@ -608,13 +608,13 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
         }
 
         if ui.button(tr("Copy dataset name", "复制数据集名称")).clicked() {
-            re_log::info!("已把 {name:?} 复制到剪贴板");
+            re_log::info!("{}", trf!("Copied {name:?} to clipboard", "已把 {name:?} 复制到剪贴板"));
             ui.copy_text(name.to_string());
         }
 
         if ui.button(tr("Copy dataset id", "复制数据集 ID")).clicked() {
             let id = entry_id.id.to_string();
-            re_log::info!("已把 {id:?} 复制到剪贴板");
+            re_log::info!("{}", trf!("Copied {id:?} to clipboard", "已把 {id:?} 复制到剪贴板"));
             ui.copy_text(id);
         }
     });
@@ -721,7 +721,7 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
     // alone only shows on hover, which reads as "downloads just stopped"). Prefixed, because
     // dataset names are long URLs and the panel truncates the tail.
     let name_text = if paused {
-        format!("⏸ 已暂停 · {}", local_app_id.name())
+        trf!("⏸ paused · {}", "⏸ 已暂停 · {}", local_app_id.name())
     } else {
         local_app_id.name().to_owned()
     };
@@ -823,7 +823,8 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                         ui,
                         hidden_id,
                         false, // collapsed by default
-                        re_ui::list_item::LabelContent::new(format!(
+                        re_ui::list_item::LabelContent::new(trf!(
+                            "Hidden episodes ({})",
                             "已隐藏的 episode（{}）",
                             hidden.len()
                         ))
@@ -969,7 +970,7 @@ fn receiver_ui(
         if ui
             .add_enabled(url.is_ok(), egui::Button::new(tr("Copy link to segment", "复制分段链接")))
             .on_disabled_hover_text(if let Err(err) = url.as_ref() {
-                format!("无法复制该分段的链接：{err}")
+                trf!("Can't copy a link to this segment: {err}", "无法复制该分段的链接：{err}")
             } else {
                 tr("Can't copy a link to this segment", "无法复制该分段的链接").to_owned()
             })
@@ -981,7 +982,7 @@ fn receiver_ui(
         }
 
         if ui.button(tr("Copy segment name", "复制分段名称")).clicked() {
-            re_log::info!("已把 {name:?} 复制到剪贴板");
+            re_log::info!("{}", trf!("Copied {name:?} to clipboard", "已把 {name:?} 复制到剪贴板"));
             ui.copy_text(name);
         }
     });

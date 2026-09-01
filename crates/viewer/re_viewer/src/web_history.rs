@@ -14,6 +14,7 @@
 use std::sync::{Arc, OnceLock};
 
 use js_sys::wasm_bindgen;
+use re_i18n::trf;
 use re_log::ResultExt as _;
 use re_log_channel::RecordingOpenBehavior;
 use re_mutex::Mutex;
@@ -175,7 +176,7 @@ fn handle_popstate(
             );
         }
         Err(err) => {
-            re_log::warn!("打开 URL 失败：{err}\nURL：{:?}", entry.url);
+            re_log::warn!("{}", trf!("Failed to open URL {:?}: {err}", "打开 URL 失败：{err}\nURL：{:?}", entry.url));
         }
     }
     re_log::debug!("popstate: add receiver {}", entry.url);

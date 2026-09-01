@@ -1,4 +1,4 @@
-use re_i18n::{tr, trf};
+use re_i18n::tr;
 use std::ops::Sub as _;
 
 use re_format::format_plural_s;

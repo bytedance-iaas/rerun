@@ -542,7 +542,13 @@ fn error_ui(
                                                 Some((origin.clone(), Box::new(flow)));
                                         }
                                         Err(err) => {
-                                            re_log::error!("{}", trf!("Failed to start login: {err}", "启动登录失败：{err}"));
+                                            re_log::error!(
+                                                "{}",
+                                                trf!(
+                                                    "Failed to start login: {err}",
+                                                    "启动登录失败：{err}"
+                                                )
+                                            );
                                         }
                                     }
                                 }

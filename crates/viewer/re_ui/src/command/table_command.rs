@@ -1,6 +1,6 @@
-use re_i18n::tr;
 use egui::KeyboardShortcut;
 use egui::os::OperatingSystem;
+use re_i18n::tr;
 use smallvec::SmallVec;
 
 use super::CommandEnvironment;
@@ -57,7 +57,10 @@ impl TableCommandKind {
         match self {
             Self::Refresh => (
                 tr("Refresh table", "刷新表"),
-                tr("Refresh the contents of the current dataset or table", "刷新当前数据集或表的内容"),
+                tr(
+                    "Refresh the contents of the current dataset or table",
+                    "刷新当前数据集或表的内容",
+                ),
             ),
         }
     }

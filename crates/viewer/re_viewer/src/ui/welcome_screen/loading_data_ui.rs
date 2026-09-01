@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::sync::Arc;
 
 use re_log_channel::LogSource;
@@ -27,7 +27,7 @@ pub fn loading_text_for_data_sources(log_sources: &[Arc<LogSource>]) -> Option<S
     // If there's several data sources that should show a loading text, pick the first one.
     for source in log_sources {
         if let Some(loading_name) = source.loading_name() {
-            return Some(format!("正在加载 {loading_name}"));
+            return Some(trf!("Loading {loading_name}", "正在加载 {loading_name}"));
         }
     }
 

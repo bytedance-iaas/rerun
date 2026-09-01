@@ -46,7 +46,7 @@ pub fn video_asset_result_ui(
             }
         }
         Err(err) => {
-            let error_message = format!("播放失败：{err}");
+            let error_message = trf!("Failed to play: {err}", "播放失败：{err}");
             if ui_layout.is_single_line() {
                 ui.error_with_details_on_hover(error_message);
             } else {
@@ -71,7 +71,7 @@ pub fn video_stream_result_ui(
                 // Extra scope needed to ensure right spacing.
                 ui.list_item_scope(format!("{stream_kind}_stream"), |ui| {
                     ui.list_item_collapsible_noninteractive_label(
-                        format!("{}流", stream_kind.capitalized()),
+                        trf!("{} Stream", "{}流", stream_kind.capitalized()),
                         default_open,
                         |ui| {
                             video_data_ui(ui, ui_layout, stream_kind, video.read().video_descr());
@@ -81,7 +81,11 @@ pub fn video_stream_result_ui(
             }
         }
         Err(err) => {
-            let error_message = format!("处理{}流失败：{err}", stream_kind.capitalized());
+            let error_message = if re_i18n::is_chinese() {
+                format!("处理{}流失败：{err}", stream_kind.capitalized())
+            } else {
+                format!("Failed to process {stream_kind} stream: {err}")
+            };
             if ui_layout.is_single_line() {
                 ui.error_with_details_on_hover(error_message);
             } else {
@@ -115,10 +119,16 @@ fn video_data_ui(
                     if 8 < bit_depth && !is_image_sequence {
                         // TODO(#7594): HDR videos
                         ui.warning_label("HDR").on_hover_ui(|ui| {
-                            ui.label(format!(
-                                "Rerun 尚不支持高动态范围（HDR）{}",
-                                stream_kind.capitalized()
-                            ));
+                            ui.label(if re_i18n::is_chinese() {
+                                format!(
+                                    "Rerun 尚不支持高动态范围（HDR）{}",
+                                    stream_kind.capitalized()
+                                )
+                            } else {
+                                format!(
+                                    "High-dynamic-range {stream_kind}s not yet supported by Rerun"
+                                )
+                            });
                             ui.hyperlink("https://github.com/rerun-io/rerun/issues/7594");
                         });
                     }
@@ -148,7 +158,7 @@ fn video_data_ui(
     }
 
     ui.list_item_flat_noninteractive(
-        PropertyContent::new(format!("{}数", stream_kind.capitalized_frame_word()))
+        PropertyContent::new(trf!("{} count", "{}数", stream_kind.capitalized_frame_word()))
             .value_uint(video_descr.num_samples()),
     );
 
@@ -156,7 +166,8 @@ fn video_data_ui(
         ui.list_item_flat_noninteractive(
             PropertyContent::new("平均帧率").value_text(format!("{fps:.2}")),
         )
-        .on_hover_text(format!(
+        .on_hover_text(trf!(
+            "Average frames per second (FPS) of the {}",
             "{}的平均每秒帧数（FPS）",
             match stream_kind {
                 StreamKind::Video => tr("video", "视频"),
@@ -178,7 +189,8 @@ fn video_data_ui(
                 .value_text(re_format::format_bits_per_second(bitrate_bps)),
         )
         .on_hover_text(if fully_loaded {
-            format!(
+            trf!(
+                "Average bitrate of the {}",
                 "{}的平均码率",
                 match stream_kind {
                     StreamKind::Video => tr("video", "视频"),
@@ -205,7 +217,7 @@ fn video_data_ui(
                     None => tr("unknown", "未知"),
                 };
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new(format!("轨道 {track_id}")).value_text(track_kind_string),
+                    PropertyContent::new(trf!("Track {track_id}", "轨道 {track_id}")).value_text(track_kind_string),
                 );
             }
         });
@@ -424,13 +436,23 @@ fn decoded_frame_ui(
                         .with(format!("decoded_{}_collapsible", stream_kind.frame_word()));
                     let default_open = false;
                     let label = if let Some(frame_nr) = frame_info.frame_nr {
-                        format!(
-                            "解码后的{} #{}",
-                            stream_kind.capitalized_frame_word(),
-                            re_format::format_uint(frame_nr)
-                        )
-                    } else {
+                        if re_i18n::is_chinese() {
+                            format!(
+                                "解码后的{} #{}",
+                                stream_kind.capitalized_frame_word(),
+                                re_format::format_uint(frame_nr)
+                            )
+                        } else {
+                            format!(
+                                "Decoded {} #{}",
+                                stream_kind.frame_word(),
+                                re_format::format_uint(frame_nr)
+                            )
+                        }
+                    } else if re_i18n::is_chinese() {
                         format!("当前解码的{}", stream_kind.capitalized_frame_word())
+                    } else {
+                        format!("Current decoded {}", stream_kind.frame_word())
                     };
                     ui.list_item()
                         .interactive(false)
@@ -485,7 +507,14 @@ fn decoded_frame_ui(
                         },
                     ),
                     Err(err) => {
-                        re_log::error!("保存{}预览失败：{err}", stream_kind.capitalized());
+                        re_log::error!(
+                            "{}",
+                            if re_i18n::is_chinese() {
+                                format!("保存{}预览失败：{err}", stream_kind.capitalized())
+                            } else {
+                                format!("Failed to save {stream_kind} preview: {err}")
+                            }
+                        );
                     }
                 },
             )
@@ -512,7 +541,11 @@ fn decoded_frame_ui(
                     response.rect,
                     loading_indicator_opacity,
                     None,
-                    &format!("正在解码{}", stream_kind.capitalized_frame_word()),
+                    &if re_i18n::is_chinese() {
+                        format!("正在解码{}", stream_kind.capitalized_frame_word())
+                    } else {
+                        format!("Decoding {}", stream_kind.frame_word())
+                    },
                 );
             }
         }
@@ -578,10 +611,11 @@ fn frame_info_ui(
             presentation_time_range.start.0, presentation_time_range.end.0,
         )))
     }
-    .on_hover_text(format!(
-        "这一{}显示的时间范围。",
-        stream_kind.capitalized_frame_word()
-    ));
+    .on_hover_text(if re_i18n::is_chinese() {
+        format!("这一{}显示的时间范围。", stream_kind.capitalized_frame_word())
+    } else {
+        format!("Time range in which this {} is shown.", stream_kind.frame_word())
+    });
 
     fn value_fn_for_time(
         time: re_video::Time,
@@ -609,10 +643,11 @@ fn frame_info_ui(
                 ui.monospace(re_format::format_uint(frame_nr));
             }),
         )
-        .on_hover_text(format!(
-            "按显示时间排序的{}编号",
-            stream_kind.capitalized_frame_word()
-        ));
+        .on_hover_text(if re_i18n::is_chinese() {
+            format!("按显示时间排序的{}编号", stream_kind.capitalized_frame_word())
+        } else {
+            format!("The {} number, as ordered by presentation time", stream_kind.frame_word())
+        });
     }
 
     if let Some(dts) = latest_decode_timestamp
@@ -744,15 +779,15 @@ impl StreamKind {
 
     fn capitalized_frame_word(&self) -> &'static str {
         match self {
-            Self::Video => "帧",
-            Self::Image => "图像",
+            Self::Video => tr("Frame", "帧"),
+            Self::Image => tr("Image", "图像"),
         }
     }
 
     fn capitalized(&self) -> &'static str {
         match self {
-            Self::Video => "视频",
-            Self::Image => "图像",
+            Self::Video => tr("Video", "视频"),
+            Self::Image => tr("Image", "图像"),
         }
     }
 }

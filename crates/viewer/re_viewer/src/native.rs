@@ -79,7 +79,7 @@ fn icon_data() -> egui::IconData {
         Err(err) => {
             cfg_select! {
                 debug_assertions => {
-                    panic!("加载应用图标失败：{err}");
+                    panic!("{}", trf!("Failed to load app icon: {err}", "加载应用图标失败：{err}"));
                 }
                 _ => {
                     re_log::warn!("{}", trf!("Failed to load app icon: {err}", "加载应用图标失败：{err}"));

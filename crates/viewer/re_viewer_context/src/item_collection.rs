@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::fmt::Write as _;
 
 use indexmap::IndexMap;
@@ -293,8 +293,12 @@ impl ItemCollection {
 
         if !clipboard_text.is_empty() {
             re_log::info!(
-                "已复制 {content_description} 到剪贴板：\n{}",
-                &clipboard_text
+                "{}",
+                trf!(
+                    "Copied {content_description} to clipboard:\n{}",
+                    "已复制 {content_description} 到剪贴板：\n{}",
+                    &clipboard_text
+                )
             );
             egui_ctx.copy_text(clipboard_text);
         }

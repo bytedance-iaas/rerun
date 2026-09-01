@@ -1,6 +1,6 @@
 //! The main Rerun drop-down menu found in the top panel.
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::fmt::Write as _;
 
 use egui::ScrollArea;
@@ -122,7 +122,7 @@ impl App {
             // On the web the browser controls the zoom
             let zoom_factor = ui.zoom_factor();
             re_ui::menu::align_non_button_menu_items(ui, |ui| {
-                ui.weak(format!("当前缩放：{:.0}%", zoom_factor * 100.0))
+                ui.weak(trf!("Current zoom: {:.0}%", "当前缩放：{:.0}%", zoom_factor * 100.0))
                     .on_hover_text(
                         tr("The UI zoom level on top of the operating system's default value", "在操作系统默认值基础上的界面缩放比例"),
                     );

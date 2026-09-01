@@ -261,9 +261,10 @@ impl OpenHfModal {
                     );
                 } else if let Some((repo, file_path)) = &parsed {
                     if let Some(file_path) = file_path {
-                        ui.label(format!("将从 hf://{repo} 加载单个文件 {file_path}。"));
+                        ui.label(trf!("Loads the single file {file_path} from hf://{repo}.", "将从 hf://{repo} 加载单个文件 {file_path}。"));
                     } else {
-                        ui.label(format!(
+                        ui.label(trf!(
+                            "Streams hf://{repo}; episodes appear immediately, click one to load it first.",
                             "将流式读取 hf://{repo}；各集（episode）会立即出现，点击某一集可以优先加载它。"
                         ));
                     }

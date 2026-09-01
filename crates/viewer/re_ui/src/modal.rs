@@ -1,6 +1,6 @@
-use re_i18n::tr;
 use eframe::emath::{NumExt as _, Vec2};
 use egui::{Frame, ModalResponse};
+use re_i18n::tr;
 
 use crate::context_ext::ContextExt as _;
 use crate::{DesignTokens, UiExt as _};

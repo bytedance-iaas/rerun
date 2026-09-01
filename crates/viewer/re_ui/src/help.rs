@@ -1,5 +1,5 @@
-use re_i18n::tr;
 use egui::{AtomLayout, Atoms, IntoAtoms, OpenUrl, RichText, TextStyle, Ui};
+use re_i18n::tr;
 
 use crate::{UiExt as _, icons};
 

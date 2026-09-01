@@ -1,6 +1,6 @@
-use re_i18n::tr;
 use egui::os::OperatingSystem;
 use egui::{Id, Key, KeyboardShortcut, Modifiers};
+use re_i18n::tr;
 use re_log_types::StoreId;
 use smallvec::{SmallVec, smallvec};
 
@@ -169,97 +169,185 @@ impl RecordingCommandKind {
         match self {
             Self::Save => (
                 tr("Save recording…", "保存录制文件…"),
-                tr("Save all data to a Rerun data file (.rrd)", "把全部数据保存为 Rerun 数据文件（.rrd）"),
+                tr(
+                    "Save all data to a Rerun data file (.rrd)",
+                    "把全部数据保存为 Rerun 数据文件（.rrd）",
+                ),
             ),
 
             Self::SaveTimeSelection => (
                 tr("Save current time selection…", "保存当前选中时间段…"),
-                tr("Save data for the current loop selection to a Rerun data file (.rrd)", "把当前循环选区内的数据保存为 Rerun 数据文件（.rrd）"),
+                tr(
+                    "Save data for the current loop selection to a Rerun data file (.rrd)",
+                    "把当前循环选区内的数据保存为 Rerun 数据文件（.rrd）",
+                ),
             ),
 
             Self::SaveBlueprint => (
                 tr("Save blueprint…", "保存 blueprint…"),
-                tr("Save the current viewer setup as a Rerun blueprint file (.rbl)", "把当前的 Viewer 布局保存为 Rerun blueprint 文件（.rbl）"),
+                tr(
+                    "Save the current viewer setup as a Rerun blueprint file (.rbl)",
+                    "把当前的 Viewer 布局保存为 Rerun blueprint 文件（.rbl）",
+                ),
             ),
 
             Self::Close => (
                 tr("Close current recording", "关闭当前录制文件"),
-                tr("Close the current recording (unsaved data will be lost)", "关闭当前录制文件（未保存的数据会丢失）"),
+                tr(
+                    "Close the current recording (unsaved data will be lost)",
+                    "关闭当前录制文件（未保存的数据会丢失）",
+                ),
             ),
 
             Self::Undo => (
                 tr("Undo", "撤销"),
-                tr("Undo the last blueprint edit for the open recording", "撤销当前录制文件上最近一次 blueprint 修改"),
+                tr(
+                    "Undo the last blueprint edit for the open recording",
+                    "撤销当前录制文件上最近一次 blueprint 修改",
+                ),
             ),
-            Self::Redo => (tr("Redo", "重做"), tr("Redo the last undone thing", "重做刚撤销的操作")),
+            Self::Redo => (
+                tr("Redo", "重做"),
+                tr("Redo the last undone thing", "重做刚撤销的操作"),
+            ),
 
             Self::AddViewOrContainer => (
                 tr("Add view or container…", "添加视图或容器…"),
-                tr("Add a new view or container to the viewport", "在视口中添加一个新的视图或容器"),
+                tr(
+                    "Add a new view or container to the viewport",
+                    "在视口中添加一个新的视图或容器",
+                ),
             ),
 
             Self::ClearActiveBlueprint => (
                 tr("Reset to default blueprint", "重置为默认 blueprint"),
-                tr("Clear active blueprint and use the default blueprint instead. If no default blueprint is set, this will use a heuristic blueprint.", "清除当前 blueprint，改用默认 blueprint。如果没有设置默认 blueprint，会改用自动推断的 blueprint。"),
+                tr(
+                    "Clear active blueprint and use the default blueprint instead. If no default blueprint is set, this will use a heuristic blueprint.",
+                    "清除当前 blueprint，改用默认 blueprint。如果没有设置默认 blueprint，会改用自动推断的 blueprint。",
+                ),
             ),
 
             Self::ClearActiveBlueprintAndEnableHeuristics => (
                 tr("Reset to heuristic blueprint", "重置为自动推断的 blueprint"),
-                tr("Re-populate viewport with automatically chosen views using default visualizers", "用默认可视化器自动选择视图，重新填充视口"),
+                tr(
+                    "Re-populate viewport with automatically chosen views using default visualizers",
+                    "用默认可视化器自动选择视图，重新填充视口",
+                ),
             ),
 
-            Self::ToggleTimePanel => (tr("Toggle time panel", "显示/隐藏时间面板"), tr("Toggle the bottom panel", "显示或隐藏底部面板")),
+            Self::ToggleTimePanel => (
+                tr("Toggle time panel", "显示/隐藏时间面板"),
+                tr("Toggle the bottom panel", "显示或隐藏底部面板"),
+            ),
             Self::ToggleChunkStoreBrowser => (
                 tr("Toggle chunk store browser", "显示/隐藏 chunk 存储浏览器"),
-                tr("Toggle the chunk store browser", "显示或隐藏 chunk 存储浏览器"),
+                tr(
+                    "Toggle the chunk store browser",
+                    "显示或隐藏 chunk 存储浏览器",
+                ),
             ),
 
             #[cfg(debug_assertions)]
             Self::ToggleBlueprintInspectionPanel => (
-                tr("Toggle blueprint inspection panel", "显示/隐藏 blueprint 检查面板"),
-                tr("Inspect the timeline of the internal blueprint data.", "查看内部 blueprint 数据的时间轴。"),
+                tr(
+                    "Toggle blueprint inspection panel",
+                    "显示/隐藏 blueprint 检查面板",
+                ),
+                tr(
+                    "Inspect the timeline of the internal blueprint data.",
+                    "查看内部 blueprint 数据的时间轴。",
+                ),
             ),
 
-            Self::PlaybackTogglePlayPause => (tr("Toggle play/pause", "播放/暂停"), tr("Either play or pause the time", "播放或暂停时间")),
+            Self::PlaybackTogglePlayPause => (
+                tr("Toggle play/pause", "播放/暂停"),
+                tr("Either play or pause the time", "播放或暂停时间"),
+            ),
             Self::PlaybackStepBack => (
                 tr("Step backwards", "上一步"),
-                tr("Move the time marker back to the previous point in time with any data", "把时间标记移到上一个有数据的时间点"),
+                tr(
+                    "Move the time marker back to the previous point in time with any data",
+                    "把时间标记移到上一个有数据的时间点",
+                ),
             ),
             Self::PlaybackStepForward => (
                 tr("Step forwards", "下一步"),
-                tr("Move the time marker to the next point in time with any data", "把时间标记移到下一个有数据的时间点"),
+                tr(
+                    "Move the time marker to the next point in time with any data",
+                    "把时间标记移到下一个有数据的时间点",
+                ),
             ),
-            Self::PlaybackBack => (tr("Backward 1", "后退 1"), tr("Move the time marker backward by 1 second", "把时间标记后退 1 秒")),
-            Self::PlaybackForward => (tr("Forward 1", "前进 1"), tr("Move the time marker forward by 0.1 seconds", "把时间标记前进 0.1 秒")),
-            Self::PlaybackBackFast => (tr("Backward 10", "后退 10"), tr("Move the time marker backwards by 1 second", "把时间标记后退 1 秒")),
-            Self::PlaybackForwardFast => {
-                (tr("Forward 10", "前进 10"), tr("Move the time marker forwards by 0.1 seconds", "把时间标记前进 0.1 秒"))
-            }
-            Self::PlaybackBeginning => (tr("Start of timeline", "回到时间轴开头"), tr("Go to beginning of timeline", "跳到时间轴的起点")),
+            Self::PlaybackBack => (
+                tr("Backward 1", "后退 1"),
+                tr(
+                    "Move the time marker backward by 1 second",
+                    "把时间标记后退 1 秒",
+                ),
+            ),
+            Self::PlaybackForward => (
+                tr("Forward 1", "前进 1"),
+                tr(
+                    "Move the time marker forward by 0.1 seconds",
+                    "把时间标记前进 0.1 秒",
+                ),
+            ),
+            Self::PlaybackBackFast => (
+                tr("Backward 10", "后退 10"),
+                tr(
+                    "Move the time marker backwards by 1 second",
+                    "把时间标记后退 1 秒",
+                ),
+            ),
+            Self::PlaybackForwardFast => (
+                tr("Forward 10", "前进 10"),
+                tr(
+                    "Move the time marker forwards by 0.1 seconds",
+                    "把时间标记前进 0.1 秒",
+                ),
+            ),
+            Self::PlaybackBeginning => (
+                tr("Start of timeline", "回到时间轴开头"),
+                tr("Go to beginning of timeline", "跳到时间轴的起点"),
+            ),
             Self::PlaybackEndAndFollow => (
                 tr("End of timeline", "跳到时间轴末尾"),
-                tr("Go to end of timeline and follow the latest data as it streams in", "跳到时间轴末尾，并跟随不断流入的最新数据"),
+                tr(
+                    "Go to end of timeline and follow the latest data as it streams in",
+                    "跳到时间轴末尾，并跟随不断流入的最新数据",
+                ),
             ),
 
             Self::PlaybackSpeed(_) => (
                 tr("Set playback speed", "设置播放速度"),
-                tr("This is a chord, so you can press 5+0 to set the speed to 50x", "这是组合按键：比如依次按 5、0 就是 50 倍速"),
+                tr(
+                    "This is a chord, so you can press 5+0 to set the speed to 50x",
+                    "这是组合按键：比如依次按 5、0 就是 50 倍速",
+                ),
             ),
 
             #[cfg(not(target_arch = "wasm32"))]
             Self::PrintChunkStore => (
                 tr("Print datastore", "打印数据存储"),
-                tr("Prints the entire chunk store to the console and clipboard. WARNING: this may be A LOT of text.", "把整个 chunk 存储打印到控制台和剪贴板。注意：文本量可能非常大。"),
+                tr(
+                    "Prints the entire chunk store to the console and clipboard. WARNING: this may be A LOT of text.",
+                    "把整个 chunk 存储打印到控制台和剪贴板。注意：文本量可能非常大。",
+                ),
             ),
             #[cfg(not(target_arch = "wasm32"))]
             Self::PrintBlueprintStore => (
                 tr("Print blueprint store", "打印 blueprint 存储"),
-                tr("Prints the entire blueprint store to the console and clipboard. WARNING: this may be A LOT of text.", "把整个 blueprint 存储打印到控制台和剪贴板。注意：文本量可能非常大。"),
+                tr(
+                    "Prints the entire blueprint store to the console and clipboard. WARNING: this may be A LOT of text.",
+                    "把整个 blueprint 存储打印到控制台和剪贴板。注意：文本量可能非常大。",
+                ),
             ),
             #[cfg(not(target_arch = "wasm32"))]
             Self::PrintPrimaryCache => (
                 tr("Print primary cache", "打印主缓存"),
-                tr("Prints the state of the entire primary cache to the console and clipboard. WARNING: this may be A LOT of text.", "把整个主缓存的状态打印到控制台和剪贴板。注意：文本量可能非常大。"),
+                tr(
+                    "Prints the state of the entire primary cache to the console and clipboard. WARNING: this may be A LOT of text.",
+                    "把整个主缓存的状态打印到控制台和剪贴板。注意：文本量可能非常大。",
+                ),
             ),
         }
     }

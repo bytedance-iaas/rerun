@@ -1,5 +1,6 @@
-use re_i18n::trf;
 use crate::CommandSender;
+#[cfg(target_arch = "wasm32")]
+use re_i18n::trf;
 
 fn is_safe_filename_char(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.')
@@ -72,8 +73,5 @@ async fn async_save_dialog(file_name: &str, title: &str, data: Vec<u8>) -> anyho
         return Ok(()); // aborted
     };
 
-    file_handle
-        .write(data.as_slice())
-        .await
-        .context("保存失败")
+    file_handle.write(data.as_slice()).await.context("保存失败")
 }

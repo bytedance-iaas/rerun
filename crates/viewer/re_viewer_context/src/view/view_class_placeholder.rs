@@ -1,6 +1,6 @@
-use re_i18n::tr;
 use re_chunk::EntityPath;
 use re_chunk_store::MissingChunkReporter;
+use re_i18n::tr;
 use re_sdk_types::ViewClassIdentifier;
 use re_ui::{Help, UiExt as _};
 
@@ -28,7 +28,10 @@ impl ViewClass for ViewClassPlaceholder {
     }
 
     fn help(&self, _os: egui::os::OperatingSystem) -> Help {
-        Help::new(tr("Placeholder view", "占位视图")).markdown(tr("Placeholder view for unknown view class", "未知视图类型的占位视图"))
+        Help::new(tr("Placeholder view", "占位视图")).markdown(tr(
+            "Placeholder view for unknown view class",
+            "未知视图类型的占位视图",
+        ))
     }
 
     fn on_register(

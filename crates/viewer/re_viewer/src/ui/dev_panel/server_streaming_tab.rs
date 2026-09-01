@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use egui_plot::HoverPosition;
 use re_byte_size::SizeBytes as _;
 use re_chunk_store::Chunk;
@@ -145,7 +145,8 @@ impl Progress {
         } else {
             "—".to_owned()
         };
-        format!(
+        trf!(
+            "{} / {} ({pct}, {} / {} chunks)",
             "{} / {}（{pct}，{} / {} 个 chunk）",
             format_bytes(self.loaded_bytes as _),
             format_bytes(self.total_bytes as _),
@@ -461,7 +462,7 @@ fn in_flight_entities_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) 
             ui,
             ui.make_persistent_id(("entities", recording.store_id())),
             false,
-            list_item::LabelContent::new(format!("传输中的实体（{}）", entities.len())),
+            list_item::LabelContent::new(trf!("In-flight entities ({})", "传输中的实体（{}）", entities.len())),
             |ui| {
                 for entity in &entities {
                     ui.list_item_flat_noninteractive(list_item::LabelContent::new(

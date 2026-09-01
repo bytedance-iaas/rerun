@@ -1,5 +1,5 @@
-use re_i18n::tr;
 use re_entity_db::{EntityPath, InstancePath};
+use re_i18n::tr;
 use re_viewer_context::{Item, ViewId};
 
 use crate::visibility_actions::{

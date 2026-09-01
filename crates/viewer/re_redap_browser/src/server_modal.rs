@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::str::FromStr as _;
 
 use egui::{Direction, Layout, OpenUrl, RichText};
@@ -175,7 +175,7 @@ impl ServerModal {
                         if let Some(title) = &edit.title {
                             title.clone()
                         } else {
-                            format!("编辑服务器：{}", edit.origin.host)
+                            trf!("Edit server: {}", "编辑服务器：{}", edit.origin.host)
                         }
                     }
                 };

@@ -99,12 +99,21 @@ pub(super) fn ui(
                 if current_model.snapshot.frames.is_empty() {
                     ui.warning_label("没有符合当前筛选条件的变换坐标系。");
                 } else {
-                    ui.info_label(format!(
-                        "{} 棵树、{} 个坐标系、{} 个变换",
-                        current_model.num_trees(),
-                        current_model.snapshot.frames.len(),
-                        current_model.snapshot.edges.len()
-                    ));
+                    ui.info_label(if re_i18n::is_chinese() {
+                        format!(
+                            "{} 棵树、{} 个坐标系、{} 个变换",
+                            current_model.num_trees(),
+                            current_model.snapshot.frames.len(),
+                            current_model.snapshot.edges.len()
+                        )
+                    } else {
+                        format!(
+                            "{}, {}, {}",
+                            re_format::format_plural_s(current_model.num_trees(), "tree"),
+                            re_format::format_plural_s(current_model.snapshot.frames.len(), "frame"),
+                            re_format::format_plural_s(current_model.snapshot.edges.len(), "transform")
+                        )
+                    });
                 }
                 ui.separator();
 

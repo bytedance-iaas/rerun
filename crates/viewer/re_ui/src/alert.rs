@@ -1,5 +1,5 @@
-use re_i18n::tr;
 use egui::{InnerResponse, Response, Ui, Vec2};
+use re_i18n::tr;
 
 use crate::design_tokens::AlertVisuals;
 use crate::{Icon, UiExt as _, icons};

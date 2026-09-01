@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use ahash::HashMap;
 use poll_promise::Promise;
+use re_i18n::trf;
 
 const FILE_SAVER_PROMISE: &str = "file_saver";
 
@@ -33,7 +34,7 @@ impl BackgroundTasks {
         let name = name.into();
 
         if self.promises.contains_key(&name) {
-            anyhow::bail!("已经有一个名为 {name:?} 的任务在运行了！");
+            anyhow::bail!(trf!("there's already a promise {name:?} running!", "已经有一个名为 {name:?} 的任务在运行了！"));
         }
 
         let f = move || Box::new(f()) as Box<dyn Any + Send>; // erase it

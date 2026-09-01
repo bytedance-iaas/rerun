@@ -1,9 +1,9 @@
-use re_i18n::tr;
 use egui::{
     CollapsingResponse, Color32, IntoAtoms, Margin, NumExt as _, Rangef, Rect, StrokeKind,
     Widget as _, WidgetInfo, WidgetText, pos2,
 };
 use egui::{CornerRadius, emath::GuiRounding as _};
+use re_i18n::{tr, trf};
 
 use crate::alert::Alert;
 use crate::button::ReButton;
@@ -749,7 +749,7 @@ pub trait UiExt {
         let (response, copy_response) =
             ReButton::with_hover_icon_button(ui, ReButton::icon(icons::COPY), button);
         if copy_response.is_some_and(|resp| resp.clicked()) {
-            re_log::info!("已复制 {raw_text:?}");
+            re_log::info!("{}", trf!("Copied {raw_text:?}", "已复制 {raw_text:?}"));
             ui.copy_text(raw_text);
         }
         response.response
@@ -1072,21 +1072,48 @@ pub trait UiExt {
             response.on_hover_text_at_pointer(tooltip)
         }
 
-        if window_button(ui, WindowButtonKind::Close, tr("Close the window", "关闭窗口"), true).clicked() {
+        if window_button(
+            ui,
+            WindowButtonKind::Close,
+            tr("Close the window", "关闭窗口"),
+            true,
+        )
+        .clicked()
+        {
             ui.send_viewport_cmd(ViewportCommand::Close);
         }
 
         let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
         if maximized {
-            if window_button(ui, WindowButtonKind::Restore, tr("Restore window", "还原窗口"), false).clicked() {
+            if window_button(
+                ui,
+                WindowButtonKind::Restore,
+                tr("Restore window", "还原窗口"),
+                false,
+            )
+            .clicked()
+            {
                 ui.send_viewport_cmd(ViewportCommand::Maximized(false));
             }
-        } else if window_button(ui, WindowButtonKind::Maximize, tr("Maximize window", "最大化窗口"), false).clicked()
+        } else if window_button(
+            ui,
+            WindowButtonKind::Maximize,
+            tr("Maximize window", "最大化窗口"),
+            false,
+        )
+        .clicked()
         {
             ui.send_viewport_cmd(ViewportCommand::Maximized(true));
         }
 
-        if window_button(ui, WindowButtonKind::Minimize, tr("Minimize the window", "最小化窗口"), false).clicked() {
+        if window_button(
+            ui,
+            WindowButtonKind::Minimize,
+            tr("Minimize the window", "最小化窗口"),
+            false,
+        )
+        .clicked()
+        {
             ui.send_viewport_cmd(ViewportCommand::Minimized(true));
         }
 

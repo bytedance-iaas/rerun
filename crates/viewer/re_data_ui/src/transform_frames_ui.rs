@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use re_chunk_store::{MissingChunkReporter, UnitChunkShared};
 use re_log_types::EntityPath;
 use re_sdk_types::components::{self, TransformFrameId};
@@ -197,7 +197,8 @@ impl TransformFramesUi {
                     let id = ui.next_auto_id();
                     let rect = ui.small_icon(&icons::ARROW_UP, Some(ui.visuals().text_color()));
                     ui.interact(rect, id, egui::Sense::hover())
-                        .on_hover_text(format!(
+                        .on_hover_text(trf!(
+                            "{} is a child frame of {}",
                             "{} 是 {} 的子坐标系",
                             transform.frame_id,
                             frames

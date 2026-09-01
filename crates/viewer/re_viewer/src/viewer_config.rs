@@ -121,9 +121,13 @@ pub fn request() {
                 }
                 Ok(response) => {
                     re_log::warn!(
-                        "加载 Viewer 默认配置失败：HTTP {} {}\n文件：config.json",
-                        response.status,
-                        response.status_text
+                        "{}",
+                        trf!(
+                            "Failed to load viewer defaults: HTTP {} {}\nFile: config.json",
+                            "加载 Viewer 默认配置失败：HTTP {} {}\n文件：config.json",
+                            response.status,
+                            response.status_text
+                        )
                     );
                     ViewerConfig::default()
                 }

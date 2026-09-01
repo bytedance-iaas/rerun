@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use egui::{NumExt as _, TextBuffer, WidgetInfo, WidgetType};
 use egui_tiles::ContainerKind;
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item};
@@ -141,7 +141,8 @@ impl SelectionPanel {
                     .selected(true)
                     .show_flat(
                         ui,
-                        list_item::LabelContent::new(format!(
+                        list_item::LabelContent::new(trf!(
+                            "{} selected items",
                             "已选中 {} 项",
                             re_format::format_uint(selection.len())
                         )),
@@ -517,9 +518,13 @@ impl SelectionPanel {
                         view_class.selection_ui(ctx, ui, view_state, &view.space_origin, view.id)
                     {
                         re_log::error_once!(
-                            "视图选择界面出错（类型：{}，显示名：{}）：{err}",
-                            view.class_identifier(),
-                            view_class.display_name(),
+                            "{}",
+                            trf!(
+                                "Error in view selection UI (class: {}, display name: {}): {err}",
+                                "视图选择界面出错（类型：{}，显示名：{}）：{err}",
+                                view.class_identifier(),
+                                view_class.display_name(),
+                            )
                         );
                     }
 
@@ -828,7 +833,8 @@ fn coordinate_frame_ui(ui: &mut egui::Ui, ctx: &ViewContext<'_>, data_result: &D
         });
 
     if frame_id_before.is_empty() {
-        ui.warning_label(format!(
+        ui.warning_label(trf!(
+            "CoordinateFrame has an empty frame ID; falling back to the implicit frame {}.",
             "CoordinateFrame 的坐标系 ID 为空；回退到隐式坐标系 {}。",
             TransformFrameId::from_entity_path(&data_result.entity_path).as_str(),
         ));
@@ -1026,13 +1032,13 @@ fn entity_path_filter_ui(
     } else if query.num_matching_entities == 1 {
         ui.label("匹配到 1 个实体");
     } else {
-        ui.label(format!("匹配到 {} 个实体", query.num_matching_entities));
+        ui.label(trf!("Matches {} entities", "匹配到 {} 个实体", query.num_matching_entities));
     }
     if query.num_matching_entities != 0 && query.num_visualized_entities == 0 {
         // TODO(andreas): Talk about this root bit only if it's a spatial view.
         // `NOLINT`: `EntityPath`'s debug impl doesn't quote the result.
         ui.warning_label(
-            format!("在当前根路径 \"{origin:?}\" 下，这个视图无法可视化任何匹配到的实体。"), // NOLINT
+            trf!("This view is not able to visualize any of the matched entities using the current root \"{origin:?}\".", "在当前根路径 \"{origin:?}\" 下，这个视图无法可视化任何匹配到的实体。"), // NOLINT
         );
     }
 
@@ -1115,7 +1121,7 @@ fn view_button(
             is_selected,
             contents_name_style(&view_name),
         )
-        .on_hover_text(format!("{} 视图", class.display_name()));
+        .on_hover_text(trf!("{} view", "{} 视图", class.display_name()));
     item_ui::cursor_interact_with_selectable(&ctx.app_ctx, response, item)
 }
 

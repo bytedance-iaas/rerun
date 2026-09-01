@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use eframe::epaint::Margin;
 use egui::{Button, Frame, RichText, TextStyle, Theme, Ui};
 use re_ui::egui_ext::card_layout::{CardLayout, CardLayoutItem};
@@ -52,10 +52,12 @@ pub enum IntroItem {
 }
 
 /// The user guides for this fork's features: label and in-app guide page index.
-const GUIDE_PAGES: &[(&str, usize)] = &[
-    (tr("Viewer — open, visualize & explore datasets", "Viewer 篇 — 浏览和探索数据集"), 0),
-    (tr("Catalog server — query & train on TOS datasets", "Catalog server 篇 — 查询 TOS 数据集并用于训练"), 1),
-];
+fn guide_pages() -> [(&'static str, usize); 2] {
+    [
+        (tr("Viewer — open, visualize & explore datasets", "Viewer 篇 — 浏览和探索数据集"), 0),
+        (tr("Catalog server — query & train on TOS datasets", "Catalog server 篇 — 查询 TOS 数据集并用于训练"), 1),
+    ]
+}
 
 impl IntroItem {
     fn items(login_enabled: bool) -> Vec<Self> {
@@ -186,14 +188,14 @@ impl IntroItem {
             Self::GuideItem { title } => {
                 ui.heading(RichText::new(*title).strong());
                 ui.add_space(2.0);
-                for (label, page) in GUIDE_PAGES {
+                for (label, page) in guide_pages() {
                     ui.style_mut()
                         .text_styles
                         .get_mut(&TextStyle::Body)
                         .expect("Should always have body text style")
                         .size = label_size;
-                    if ui.link(*label).clicked() {
-                        crate::ui::user_guide::request_open(ui.ctx(), *page);
+                    if ui.link(label).clicked() {
+                        crate::ui::user_guide::request_open(ui.ctx(), page);
                         #[cfg(feature = "analytics")]
                         re_analytics::record(|| re_analytics::event::WelcomeScreenNavigation {
                             card_type: "guide".to_owned(),
@@ -301,7 +303,7 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
     ui.add_space(32.0);
 
     if let Some(auth) = ctx.auth_context {
-        ui.strong(RichText::new(format!("你好，{}！", auth.email)).size(15.0));
+        ui.strong(RichText::new(trf!("Hi, {}!", "你好，{}！", auth.email)).size(15.0));
 
         if ui.add(Button::new(tr("Log out", "退出登录")).secondary().small()).clicked() {
             ctx.command_sender.send_system(SystemCommand::Logout);

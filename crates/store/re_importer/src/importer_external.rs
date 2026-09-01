@@ -5,6 +5,7 @@ use std::sync::{Arc, LazyLock};
 
 use ahash::HashMap;
 use indexmap::IndexSet;
+use re_i18n::trf;
 
 use crate::{ImportedData, Importer as _};
 
@@ -341,7 +342,7 @@ fn decode_and_stream(
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
-                re_log::warn!(?filepath, "解码消息失败：{err}");
+                re_log::warn!(?filepath, "{}", trf!("Failed to decode message: {err}", "解码消息失败：{err}"));
                 continue;
             }
         };

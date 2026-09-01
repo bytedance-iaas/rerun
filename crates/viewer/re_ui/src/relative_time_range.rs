@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use re_log_types::external::re_types_core::datatypes::{TimeInt, TimeRange, TimeRangeBoundary};
 use re_log_types::{AbsoluteTimeRange, TimeType, TimestampFormat};
 
@@ -22,7 +22,9 @@ pub fn relative_time_range_boundary_label_text(
 ) -> &'static str {
     match boundary {
         TimeRangeBoundary::CursorRelative(_) => match time_type {
-            TimeType::DurationNs | TimeType::TimestampNs => tr("current time with offset", "当前时间加偏移"),
+            TimeType::DurationNs | TimeType::TimestampNs => {
+                tr("current time with offset", "当前时间加偏移")
+            }
             TimeType::Sequence => tr("current frame with offset", "当前帧加偏移"),
         },
         TimeRangeBoundary::Absolute(_) => match time_type {
@@ -131,9 +133,7 @@ fn edit_boundary_ui(
                     TimeType::DurationNs | TimeType::TimestampNs => {
                         "作为时间范围边界的时长，相对当前时间之前/之后"
                     }
-                    TimeType::Sequence => {
-                        "作为时间范围边界的帧数，相对当前时间之前/之后"
-                    }
+                    TimeType::Sequence => "作为时间范围边界的帧数，相对当前时间之前/之后",
                 });
 
             *value = edit_value.into();
@@ -190,16 +190,20 @@ pub fn relative_time_range_label_text(
         && time_range.end == TimeRangeBoundary::AT_CURSOR
     {
         let current_time = time_type.format(current_time, timestamp_format);
-        (format!("位于 {current_time}"),
-
-            Some("不执行 latest-at 查询，只显示恰好记录在当前时间标记位置的数据。".to_owned()))
+        (
+            trf!("At {current_time}", "位于 {current_time}"),
+            Some("不执行 latest-at 查询，只显示恰好记录在当前时间标记位置的数据。".to_owned()),
+        )
     } else {
         let absolute_range = AbsoluteTimeRange::from_relative_time_range(time_range, current_time);
         let from_formatted = time_type.format(absolute_range.min(), timestamp_format);
         let to_formatted = time_type.format(absolute_range.max(), timestamp_format);
 
         (
-            format!("{from_formatted} 到 {to_formatted}"),
+            trf!(
+                "{from_formatted} to {to_formatted}",
+                "{from_formatted} 到 {to_formatted}"
+            ),
             Some("显示此范围内的数据（含边界）。".to_owned()),
         )
     }

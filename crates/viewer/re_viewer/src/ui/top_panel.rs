@@ -3,6 +3,7 @@ use egui::{
 };
 use emath::{Rect, RectAlign, Vec2};
 use re_format::format_uint;
+use re_i18n::{tr, trf};
 use re_renderer::WgpuResourcePoolStatistics;
 use re_sorbet::TimestampLocation;
 use re_ui::{ContextExt as _, UICommand, UiExt as _, icons};
@@ -345,7 +346,7 @@ fn connection_status_ui(
         match latency {
             LatencyResult::ToBeAssigned => {}
             LatencyResult::NoConnection => {
-                ui.label(format!("未连接到 {url}"));
+                ui.label(trf!("no connection to {url}", "未连接到 {url}"));
             }
             LatencyResult::MostRecent(duration) => {
                 let mut layout_job = egui::text::LayoutJob::default();
@@ -361,7 +362,7 @@ fn connection_status_ui(
                         egui::Align::Center,
                     );
 
-                RichText::new(format!(" — 到 {url} 的延迟")).append_to(
+                RichText::new(trf!(" latency for {url}", " — 到 {url} 的延迟")).append_to(
                     &mut layout_job,
                     ui.style(),
                     egui::FontSelection::Default,
@@ -713,7 +714,7 @@ fn latency_snapshot_button_ui(
         return None; // Probably an old recording and not live data.
     }
 
-    let text = format!("延迟：{}", latency_text(ui.visuals(), e2e).text());
+    let text = trf!("Latency: {}", "延迟：{}", latency_text(ui.visuals(), e2e).text());
     let response = ui.weak(text);
 
     let response = response.on_hover_ui(|ui| {

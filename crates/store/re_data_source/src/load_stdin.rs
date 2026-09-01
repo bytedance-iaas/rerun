@@ -15,7 +15,13 @@ pub fn load_stdin(tx: re_log_channel::LogSender) -> anyhow::Result<()> {
             let msg = match msg {
                 Ok(msg) => msg,
                 Err(err) => {
-                    re_log::warn_once!("{}", trf!("Failed to decode message in stdin: {err}", "解码 stdin 中的消息失败：{err}"));
+                    re_log::warn_once!(
+                        "{}",
+                        trf!(
+                            "Failed to decode message in stdin: {err}",
+                            "解码 stdin 中的消息失败：{err}"
+                        )
+                    );
                     continue;
                 }
             };

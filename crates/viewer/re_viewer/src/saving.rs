@@ -37,9 +37,10 @@ pub fn default_blueprint_path(app_id: &ApplicationId) -> anyhow::Result<std::pat
     let extension_part_length = ".rbl".len();
     let total_reserved_length = directory_part_length + hash_part_length + extension_part_length;
     if total_reserved_length > MAX_PATH {
-        anyhow::bail!(
+        anyhow::bail!(trf!(
+            "Could not form blueprint path: total minimum length exceeds {MAX_PATH} characters.",
             "无法生成 blueprint 路径：最小总长度超过了 {MAX_PATH} 个字符。"
-        )
+        ))
     }
     sanitized_app_id.truncate(MAX_PATH - total_reserved_length);
 

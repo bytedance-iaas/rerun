@@ -115,7 +115,11 @@ impl DataUi for LatestAtInstanceResult<'_> {
                 &instance,
             );
         } else if ui_layout.is_single_line() {
-            ui.label(format!("{} 个值", re_format::format_uint(num_instances)));
+            ui.label(if re_i18n::is_chinese() {
+                format!("{} 个值", re_format::format_uint(num_instances))
+            } else {
+                re_format::format_plural_s(num_instances, "value")
+            });
         } else {
             let table_style = re_ui::TableStyle::Dense;
             ui_layout
@@ -171,7 +175,8 @@ impl DataUi for LatestAtInstanceResult<'_> {
                 });
 
             if num_instances > num_displayed_rows {
-                ui.label(format!(
+                ui.label(trf!(
+                    "…and {} more.",
                     "…还有 {} 个。",
                     re_format::format_uint(num_instances - num_displayed_rows)
                 ));

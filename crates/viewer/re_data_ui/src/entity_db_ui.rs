@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::fmt::Write as _;
 
 use egui::NumExt as _;
@@ -76,11 +76,11 @@ impl crate::AppUi for EntityDb {
                             }
                             (false, true) => {
                                 ui.add_space(8.0);
-                                ui.label(format!("这是当前应用 '{active_app_id}' 正在生效的 blueprint"));
+                                ui.label(trf!("This is the active blueprint for the current application, '{active_app_id}'", "这是当前应用 '{active_app_id}' 正在生效的 blueprint"));
                             }
                             (true, true) => {
                                 ui.add_space(8.0);
-                                ui.label(format!("这既是当前应用 '{active_app_id}' 正在生效的 blueprint，也是其默认 blueprint"));
+                                ui.label(trf!("This is both the active and default blueprint for the current application, '{active_app_id}'", "这既是当前应用 '{active_app_id}' 正在生效的 blueprint，也是其默认 blueprint"));
                             }
                         }
                     } else {
@@ -235,7 +235,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
             ui.horizontal(|ui| {
                 if db.redap_connection_state() == RedapConnectionState::PartialManifest {
                     ui.label(format!("{current_size} / ?"));
-                    ui.label(format!("（{} / ? 个 chunk）", format_uint(num_fully_loaded)));
+                    ui.label(trf!("({} / ? chunks)", "（{} / ? 个 chunk）", format_uint(num_fully_loaded)));
                     ui.end_row();
                 } else if num_fully_loaded == num_root_chunks {
                     ui.label("100%");
@@ -247,12 +247,14 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
                             ui.small_icon(&re_ui::icons::INFO, Some(ui.visuals().text_color()));
 
                         ui.allocate_rect(rect, egui::Sense::hover())
-                            .on_hover_text(format!(
+                            .on_hover_text(trf!(
+                                "Download limited to {memory_limit} memory budget",
                                 "受 {memory_limit} 内存预算限制，不会全部下载"
                             ));
                     }
 
-                    ui.label(format!(
+                    ui.label(trf!(
+                        "({} / {} chunks)",
                         "（{} / {} 个 chunk）",
                         format_uint(num_fully_loaded),
                         format_uint(num_root_chunks)
@@ -309,7 +311,8 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         } = db.storage_engine().store().config();
 
         ui.grid_left_hand_label("chunk 合并配置");
-        ui.label(format!(
+        ui.label(trf!(
+            "{} rows ({} if unsorted) or {}",
             "{} 行（未排序时 {} 行）或 {}",
             re_format::format_uint(chunk_max_rows),
             re_format::format_uint(chunk_max_rows_if_unsorted),

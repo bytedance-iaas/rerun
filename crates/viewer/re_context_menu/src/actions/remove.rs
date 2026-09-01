@@ -1,5 +1,5 @@
-use re_i18n::tr;
 use re_entity_db::InstancePath;
+use re_i18n::tr;
 use re_viewer_context::{ContainerId, Contents, Item, ViewId};
 
 use crate::{ContextMenuAction, ContextMenuContext};

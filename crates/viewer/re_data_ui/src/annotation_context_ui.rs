@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use egui::{NumExt as _, Vec2, color_picker};
 use itertools::Itertools as _;
 use re_log_types::EntityPath;
@@ -133,7 +133,8 @@ impl DataUi for AnnotationContext {
                 let text = if self.0.len() == 1 {
                     let descr = &self.0[0].class_description;
 
-                    format!(
+                    trf!(
+                        "One class containing {} keypoints and {} connections",
                         "一个类别，包含 {} 个关键点和 {} 条连接",
                         descr.keypoint_annotations.len(),
                         descr.keypoint_connections.len()
@@ -190,7 +191,7 @@ fn class_description_ui(
     if !class.keypoint_annotations.is_empty() {
         ui.maybe_collapsing_header(
             use_collapsible,
-            &format!("类别 {} 的关键点标注", id.0),
+            &trf!("Keypoints Annotation for Class {}", "类别 {} 的关键点标注", id.0),
             true,
             |ui| {
                 let annotation_infos = class
@@ -208,7 +209,7 @@ fn class_description_ui(
     if !class.keypoint_connections.is_empty() {
         ui.maybe_collapsing_header(
             use_collapsible,
-            &format!("类别 {} 的关键点连接", id.0),
+            &trf!("Keypoint Connections for Class {}", "类别 {} 的关键点连接", id.0),
             true,
             |ui| {
                 use egui_extras::Column;

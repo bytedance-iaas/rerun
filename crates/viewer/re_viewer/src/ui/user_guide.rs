@@ -14,16 +14,18 @@ struct Page {
     markdown: &'static str,
 }
 
-const PAGES: &[Page] = &[
-    Page {
-        tab: tr("Viewer", "Viewer 篇"),
-        markdown: include_str!("../../../../../docs/release/user-guide/01-viewer.md"),
-    },
-    Page {
-        tab: tr("Catalog server", "Catalog server 篇"),
-        markdown: include_str!("../../../../../docs/release/user-guide/02-catalog.md"),
-    },
-];
+fn pages() -> [Page; 2] {
+    [
+        Page {
+            tab: tr("Viewer", "Viewer 篇"),
+            markdown: include_str!("../../../../../docs/release/user-guide/01-viewer.md"),
+        },
+        Page {
+            tab: tr("Catalog server", "Catalog server 篇"),
+            markdown: include_str!("../../../../../docs/release/user-guide/02-catalog.md"),
+        },
+    ]
+}
 
 /// The screenshots the pages reference, embedded alongside them.
 const IMAGES: &[(&str, &[u8])] = &[
@@ -74,7 +76,7 @@ const IMAGES: &[(&str, &[u8])] = &[
 fn processed_markdown(page: usize) -> &'static str {
     static CACHE: OnceLock<Vec<String>> = OnceLock::new();
     let pages = CACHE.get_or_init(|| {
-        PAGES
+        pages()
             .iter()
             .map(|page| {
                 page.markdown
@@ -117,7 +119,7 @@ impl UserGuideModal {
             requested
         });
         if let Some(page) = requested {
-            self.selected = page.min(PAGES.len() - 1);
+            self.selected = page.min(pages().len() - 1);
             self.open = true;
 
             if !self.images_registered {
@@ -145,7 +147,7 @@ impl UserGuideModal {
             .default_pos(ui.ctx().content_rect().center() - 0.5 * default_size)
             .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
-                    for (index, page) in PAGES.iter().enumerate() {
+                    for (index, page) in pages().iter().enumerate() {
                         ui.selectable_value(selected, index, page.tab);
                     }
                 });

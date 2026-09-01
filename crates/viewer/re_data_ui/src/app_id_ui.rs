@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use itertools::Itertools as _;
 use re_entity_db::EntityDb;
 use re_log_types::ApplicationId;
@@ -46,7 +46,8 @@ impl crate::AppUi for ApplicationId {
                 if recordings.len() == 1 {
                     ui.label(tr("There is 1 loaded recording for this app.", "该应用已加载 1 个录制文件。"));
                 } else {
-                    ui.label(format!(
+                    ui.label(trf!(
+                        "There are {} loaded recordings for this app.",
                         "该应用已加载 {} 个录制文件。",
                         re_format::format_uint(recordings.len()),
                     ));

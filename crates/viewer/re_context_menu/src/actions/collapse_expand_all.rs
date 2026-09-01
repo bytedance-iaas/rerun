@@ -2,8 +2,8 @@
 //!
 //! Note: the actual collapse/expand logic is in [`crate::collapse_expand`].
 
-use re_i18n::tr;
 use re_entity_db::InstancePath;
+use re_i18n::tr;
 use re_log_types::StoreKind;
 use re_viewer_context::{CollapseScope, ContainerId, Item, ItemContext, ViewId};
 

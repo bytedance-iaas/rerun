@@ -29,7 +29,7 @@ impl TextureReadbacks {
         self.active_readbacks.retain(|(id, action)| {
             if let Some(readback) = re_renderer::poll_read_texture(render_ctx, *id) {
                 let Some(color_type) = texture_format_to_color_type(readback.format) else {
-                    re_log::warn!("无法下载格式为 {:?} 的纹理", readback.format);
+                    re_log::warn!("{}", trf!("Can't download texture with format {:?}", "无法下载格式为 {:?} 的纹理", readback.format));
                     return false;
                 };
                 match action {

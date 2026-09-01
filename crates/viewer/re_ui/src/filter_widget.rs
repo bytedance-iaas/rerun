@@ -231,11 +231,15 @@ impl FilterState {
                 ui.horizontal(|ui| {
                     ui.set_height(19.0);
 
-                    ui.add_enabled_ui(false, |ui| ui.small_icon_button(&icons::SEARCH, tr("Search", "搜索")));
+                    ui.add_enabled_ui(false, |ui| {
+                        ui.small_icon_button(&icons::SEARCH, tr("Search", "搜索"))
+                    });
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if !inner_state.filter_query.is_empty()
-                            && ui.small_icon_button(&icons::CLOSE, tr("Close", "关闭")).clicked()
+                            && ui
+                                .small_icon_button(&icons::CLOSE, tr("Close", "关闭"))
+                                .clicked()
                         {
                             *inner_state = Default::default();
                         }

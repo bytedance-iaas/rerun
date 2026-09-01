@@ -639,7 +639,7 @@ impl App {
                 if err.to_string().contains(url) {
                     re_log::error!("{err}");
                 } else {
-                    re_log::error!(?url, "打开 URL 失败：{err}");
+                    re_log::error!(?url, "{}", trf!("Failed to open URL: {err}", "打开 URL 失败：{err}"));
                 }
             }
         }
@@ -1164,14 +1164,14 @@ impl App {
                                 Ok(()) => {
                                     // Only show a user-facing toast for user-initiated screenshots.
                                     if notify {
-                                        re_log::info!("截图已保存到 {file_path:?}");
+                                        re_log::info!("{}", trf!("Saved screenshot to {file_path:?}", "截图已保存到 {file_path:?}"));
                                     } else {
                                         re_log::debug!("Saved screenshot to {file_path:?}");
                                     }
                                     Ok(())
                                 }
                                 Err(err) => {
-                                    re_log::error!(?file_path, "保存截图失败：{err}");
+                                    re_log::error!(?file_path, "{}", trf!("Failed to save screenshot: {err}", "保存截图失败：{err}"));
                                     // Image library has the bad habit of creating the file even when it fails e.g. due to unsupported format. Remove it again.
                                     std::fs::remove_file(&file_path).ok();
                                     Err(SaveScreenshotError::SaveToPathFailed {
@@ -1735,7 +1735,7 @@ fn save_profile_trace(view: &re_tracing::reexports::puffin::FrameView) -> anyhow
     let mut writer = std::io::BufWriter::new(file);
     view.write(&mut writer)?;
 
-    re_log::info!("性能分析记录已保存到 {}", path.display());
+    re_log::info!("{}", trf!("Saved profile trace to {}", "性能分析记录已保存到 {}", path.display()));
     Ok(())
 }
 

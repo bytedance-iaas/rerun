@@ -4,7 +4,7 @@
 //! datasets were open before (with their metadata) and re-opens one with a click — by bringing
 //! up the matching "Open from …" dialog pre-filled, so credential handling stays in one place.
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use re_ui::{DesignTokens, UiExt as _, icons};
 
 use crate::recent_datasets::{RecentDataset, RecentKind, now_unix, relative_time_label};
@@ -46,7 +46,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
         );
         if let Some(count) = recent.item_count {
             use std::fmt::Write as _;
-            write!(meta, " · {count} 项").ok();
+            write!(meta, "{}", trf!(" · {count} items", " · {count} 项")).ok();
         }
 
         ui.horizontal(|ui| {

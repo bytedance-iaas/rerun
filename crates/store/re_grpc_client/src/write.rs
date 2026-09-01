@@ -313,12 +313,24 @@ impl Drop for Client {
 
         // Wait for flush, blocking forever if needed.
         if let Err(err) = self.flush_blocking(Duration::MAX) {
-            re_log::error!("{}", trf!("Failed to flush gRPC messages during shutdown: {err}", "关闭时未能刷写 gRPC 消息：{err}"));
+            re_log::error!(
+                "{}",
+                trf!(
+                    "Failed to flush gRPC messages during shutdown: {err}",
+                    "关闭时未能刷写 gRPC 消息：{err}"
+                )
+            );
         }
 
         // Quit immediately - no more messages left in the queue
         if let Err(err) = self.shutdown_tx.try_send(()) {
-            re_log::error!("{}", trf!("Failed to gracefully shut down message proxy client: {err}", "未能正常关闭消息代理客户端：{err}"));
+            re_log::error!(
+                "{}",
+                trf!(
+                    "Failed to gracefully shut down message proxy client: {err}",
+                    "未能正常关闭消息代理客户端：{err}"
+                )
+            );
             return;
         }
 
@@ -344,7 +356,13 @@ async fn message_proxy_client(
             status.store(ClientConnectionState::Disconnected(Err(
                 ClientConnectionFailure::InvalidEndpoint,
             )));
-            re_log::error!("{}", trf!("Invalid message proxy server endpoint: {err}", "无效的消息代理服务端地址：{err}"));
+            re_log::error!(
+                "{}",
+                trf!(
+                    "Invalid message proxy server endpoint: {err}",
+                    "无效的消息代理服务端地址：{err}"
+                )
+            );
             return;
         }
     };

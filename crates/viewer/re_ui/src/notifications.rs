@@ -7,7 +7,7 @@
 //! - If a notifications text contains [`re_error::DETAILS_SEPARATOR`] the section after that
 //!   will be displayed inside a collapsible details header.
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::time::Duration;
 
 use egui::{NumExt as _, Widget as _};
@@ -440,12 +440,19 @@ impl NotificationUi {
 
         ui.horizontal_top(|ui| {
             if !notifications.is_empty() {
-                ui.strong(format!("通知（{}）", notifications.len()));
+                ui.strong(trf!(
+                    "Notifications ({})",
+                    "通知（{}）",
+                    notifications.len()
+                ));
             } else {
                 ui.strong(tr("Notifications", "通知"));
             }
             ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
-                if ui.small_icon_button(&icons::CLOSE, tr("Close", "关闭")).clicked() {
+                if ui
+                    .small_icon_button(&icons::CLOSE, tr("Close", "关闭"))
+                    .clicked()
+                {
                     ui.close();
                 }
             });
@@ -530,7 +537,8 @@ impl Toasts {
                 notification.toast_ttl = notification.toast_ttl.saturating_sub(dt);
             }
 
-            let response = response.on_hover_text(tr("Click to close and copy contents", "点击关闭并复制内容"));
+            let response = response
+                .on_hover_text(tr("Click to close and copy contents", "点击关闭并复制内容"));
 
             if response.clicked() {
                 if let Some(link) = &notification.link {
@@ -635,7 +643,8 @@ fn show_notification(
                             |ui| {
                                 if show_dismiss {
                                     if permanent_dismiss_id.is_some() {
-                                        if ui.button(tr("Don't show again", "不再显示")).clicked() {
+                                        if ui.button(tr("Don't show again", "不再显示")).clicked()
+                                        {
                                             reaction = Some(NotificationReaction::NeverShowAgain);
                                         }
                                     } else {

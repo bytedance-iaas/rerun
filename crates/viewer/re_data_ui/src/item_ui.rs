@@ -2,7 +2,7 @@
 //!
 //! TODO(andreas): This is not a `data_ui`, can this go somewhere else, shouldn't be in `re_data_ui`.
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use re_entity_db::entity_db::EntityDbClass;
 use re_entity_db::{EntityTree, InstancePath};
 use re_format::format_uint;
@@ -316,17 +316,20 @@ fn entity_tree_stats_ui(
     if total_stats.num_rows == 0 {
         return;
     } else if timeline_stats.num_rows == 0 {
-        ui.label(format!(
+        ui.label(trf!(
+            "{} static rows{subtree_caveat}",
             "{} 行静态数据{subtree_caveat}",
             format_uint(total_stats.num_rows)
         ));
     } else if static_stats.num_rows == 0 {
-        ui.label(format!(
+        ui.label(trf!(
+            "{} rows on timeline '{timeline}'{subtree_caveat}",
             "时间轴 '{timeline}' 上有 {} 行{subtree_caveat}",
             format_uint(total_stats.num_rows),
         ));
     } else {
-        ui.label(format!(
+        ui.label(trf!(
+            "{} rows = {} static + {} on timeline '{timeline}'{subtree_caveat}",
             "共 {} 行 = {} 行静态数据 + 时间轴 '{timeline}' 上 {} 行{subtree_caveat}",
             format_uint(total_stats.num_rows),
             format_uint(static_stats.num_rows),
@@ -378,13 +381,15 @@ fn entity_tree_stats_ui(
     }
 
     if let Some(data_rate) = data_rate {
-        ui.label(format!(
+        ui.label(trf!(
+            "Using ~{}{subtree_caveat} ≈ {}",
             "占用约 {}{subtree_caveat} ≈ {}",
             format_bytes(total_stats.total_size_bytes as f64),
             data_rate
         ));
     } else {
-        ui.label(format!(
+        ui.label(trf!(
+            "Using ~{}{subtree_caveat}",
             "占用约 {}{subtree_caveat}",
             format_bytes(total_stats.total_size_bytes as f64)
         ));
@@ -713,9 +718,9 @@ pub fn entity_db_button_ui(
                 }
                 if let Some(eta) = progress.eta_secs {
                     if eta >= 90.0 {
-                        write!(title, " · 约剩 {:.0} 分钟", (eta / 60.0).ceil()).ok();
+                        write!(title, "{}", trf!(" · ~{:.0}min left", " · 约剩 {:.0} 分钟", (eta / 60.0).ceil())).ok();
                     } else {
-                        write!(title, " · 约剩 {eta:.0} 秒").ok();
+                        write!(title, "{}", trf!(" · ~{eta:.0}s left", " · 约剩 {eta:.0} 秒")).ok();
                     }
                 }
             }
@@ -916,7 +921,8 @@ pub fn entity_db_button_ui(
             || "大小未知".to_owned(),
             |total| re_format::format_bytes(total as _),
         );
-        response = response.on_hover_text(format!(
+        response = response.on_hover_text(trf!(
+            "Downloading: {} of {} · {}/s",
             "正在下载：{} / {} · {}/s",
             re_format::format_bytes(progress.bytes_done as _),
             total,
@@ -936,7 +942,7 @@ pub fn entity_db_button_ui(
         if ui
             .add_enabled(url.is_ok(), egui::Button::new("复制该片段的链接"))
             .on_disabled_hover_text(if let Err(err) = url.as_ref() {
-                format!("无法复制该片段的链接：{err}")
+                trf!("Can't copy a link to this segment: {err}", "无法复制该片段的链接：{err}")
             } else {
                 "无法复制该片段的链接".to_owned()
             })
@@ -948,7 +954,7 @@ pub fn entity_db_button_ui(
         }
 
         if ui.button("复制片段名称").clicked() {
-            re_log::info!("已复制 {recording_name:?} 到剪贴板");
+            re_log::info!("{}", trf!("Copied {recording_name:?} to clipboard", "已复制 {recording_name:?} 到剪贴板"));
             ui.copy_text(recording_name);
         }
 
@@ -1054,7 +1060,7 @@ pub fn table_id_button_ui(
         list_item
             .show_hierarchical(ui, item_content)
             .on_hover_ui(|ui| {
-                ui.label(format!("表格：{table_id}"));
+                ui.label(trf!("Table: {table_id}", "表格：{table_id}"));
             })
     })
     .inner;
