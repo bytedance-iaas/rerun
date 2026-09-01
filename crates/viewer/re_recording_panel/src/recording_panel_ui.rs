@@ -756,11 +756,7 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                 } else {
                     (&icons::PAUSE, tr("Pause downloading this dataset", "暂停下载该数据集"))
                 };
-                if ui
-                    .small_icon_button(icon, tooltip)
-                    .on_hover_text(tooltip)
-                    .clicked()
-                {
+                if ui.small_icon_button(icon, tooltip).clicked() {
                     re_data_source::lerobot_remote::set_dataset_paused(app_id.as_str(), !paused);
                 }
             }

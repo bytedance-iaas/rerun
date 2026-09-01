@@ -122,10 +122,12 @@ pub trait UiExt {
     }
 
     /// The `alt_text` will be used for accessibility (e.g. read by screen readers),
-    /// and is also how we can query the button in tests.
+    /// is how we can query the button in tests, and doubles as the hover tooltip —
+    /// an icon-only button is unreadable without one.
     fn small_icon_button(&mut self, icon: &Icon, alt_text: impl Into<String>) -> egui::Response {
-        let widget = self.small_icon_button_widget(icon, alt_text);
-        self.ui_mut().add(widget)
+        let alt_text = alt_text.into();
+        let widget = self.small_icon_button_widget(icon, alt_text.clone());
+        self.ui_mut().add(widget).on_hover_text(alt_text)
     }
 
     /// The `alt_text` will be used for accessibility (e.g. read by screen readers),

@@ -296,7 +296,7 @@ impl Server {
             ui.horizontal(|ui| {
                 // Navigate up one level.
                 if ui
-                    .small_icon_button(&icons::ARROW_UP, "Go to parent folder")
+                    .small_icon_button(&icons::ARROW_UP, tr("Go to parent folder", "回到上一级文件夹"))
                     .on_hover_text(tr("Go to parent folder", "回到上一级文件夹"))
                     .clicked()
                 {

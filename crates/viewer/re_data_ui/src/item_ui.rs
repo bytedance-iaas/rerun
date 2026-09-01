@@ -853,7 +853,7 @@ pub fn entity_db_button_ui(
                         }
                     } else if episode_parked {
                         if ui
-                            .small_icon_button(&icons::PLAY, "继续下载这个 episode")
+                            .small_icon_button(&icons::PLAY, tr("Resume downloading this episode", "继续下载这个 episode"))
                             .on_hover_text("继续下载这个 episode")
                             .clicked()
                         {
@@ -861,7 +861,7 @@ pub fn entity_db_button_ui(
                         }
                     } else if (has_data || episode_failed)
                         && ui
-                            .small_icon_button(&icons::RESET, "重新下载这个 episode")
+                            .small_icon_button(&icons::RESET, tr("Redownload this episode", "重新下载这个 episode"))
                             .on_hover_text("重新下载这个 episode")
                             .clicked()
                     {
@@ -1036,7 +1036,7 @@ pub fn table_id_button_ui(
         item_content = item_content.with_buttons(|ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, "关闭表格")
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close table", "关闭表格"))
                 .on_hover_text("关闭这个表格（所有数据都会丢失）");
             if resp.clicked() {
                 ctx.command_sender()

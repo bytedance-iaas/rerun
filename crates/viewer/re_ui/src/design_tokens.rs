@@ -567,6 +567,10 @@ impl DesignTokens {
         self.set_spacing(style);
         self.set_colors(style);
 
+        // Snappier tooltips: with icon-only buttons everywhere, the egui default (0.5s)
+        // makes them feel broken — users move on before the tooltip appears.
+        style.interaction.tooltip_delay = 0.2;
+
         style.number_formatter = egui::style::NumberFormatter::new(format_with_decimals_in_range);
     }
 

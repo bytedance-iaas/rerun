@@ -813,7 +813,7 @@ impl<'a> DataFusionTableWidget<'a> {
                                 None => "Refresh table".to_owned(),
                             };
                             if ui
-                                .small_icon_button(&icons::RESET, "Refresh table")
+                                .small_icon_button(&icons::RESET, re_i18n::tr("Refresh table", "刷新表"))
                                 .on_hover_text(refresh_tooltip)
                                 .clicked()
                             {
@@ -866,7 +866,7 @@ fn title_ui(
                     ui.heading(RichText::new(title).strong());
                     if let Some(url) = url
                         && ui
-                            .small_icon_button(&re_ui::icons::COPY, "Copy URL")
+                            .small_icon_button(&re_ui::icons::COPY, re_i18n::tr("Copy URL", "复制 URL"))
                             .on_hover_text(url)
                             .clicked()
                     {

@@ -249,7 +249,15 @@ impl ExampleSection {
     /// │                               │    │
     /// │                               │    │
     /// ```
-    pub(super) fn ui(&mut self, ui: &mut egui::Ui, ctx: &AppContext<'_>, login_state: &CloudState) {
+    pub(super) fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &AppContext<'_>,
+        login_state: &CloudState,
+        recent_datasets: &[crate::recent_datasets::RecentDataset],
+    ) -> Option<super::RecentAction> {
+        let mut recent_action = None;
+
         let examples = self
             .examples
             .get_or_insert_with(|| load_manifest(ui.ctx(), self.manifest_url.clone()));
@@ -275,6 +283,10 @@ impl ExampleSection {
 
                 welcome_section_ui(ui);
                 intro_section(ui, ctx, login_state);
+
+                // The "recently opened" list sits below the feature cards: the cards are
+                // the stable landmarks of this screen, the recents change all the time.
+                recent_action = super::recent_section::recent_datasets_ui(ui, recent_datasets);
 
                 ui.add_space(AFTER_HEADER_VSPACE);
 
@@ -428,6 +440,8 @@ impl ExampleSection {
                     });
             });
         });
+
+        recent_action
     }
 }
 

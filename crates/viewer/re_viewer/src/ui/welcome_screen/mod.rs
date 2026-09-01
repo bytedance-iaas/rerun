@@ -64,9 +64,10 @@ impl WelcomeScreen {
                     ..Default::default()
                 }
                 .show(ui, |ui| {
-                    recent_action = recent_section::recent_datasets_ui(ui, recent_datasets);
-
                     if welcome_screen_state.hide_examples {
+                        // No cards on this minimal screen, so the recents lead.
+                        recent_action = recent_section::recent_datasets_ui(ui, recent_datasets);
+
                         if let Some(loading_text) =
                             loading_data_ui::loading_text_for_data_sources(log_sources)
                         {
@@ -75,7 +76,9 @@ impl WelcomeScreen {
                             no_data_ui::no_data_ui(ui);
                         }
                     } else {
-                        self.example_page.ui(ui, ctx, login_state);
+                        // The full welcome screen draws the recents below the feature cards.
+                        recent_action =
+                            self.example_page.ui(ui, ctx, login_state, recent_datasets);
                     }
                 });
             });
