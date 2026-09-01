@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use re_chunk::{Chunk, RowId};
 use re_log_types::{ApplicationId, EntityPath, TimePoint};
 
@@ -45,7 +46,7 @@ impl Importer for ArchetypeImporter {
 
         let contents = {
             re_tracing::profile_scope!("fs::read");
-            std::fs::read(&filepath).with_context(|| format!("读取文件失败：{filepath:?}"))?
+            std::fs::read(&filepath).with_context(|| trf!("Failed to read file {filepath:?}", "读取文件失败：{filepath:?}"))?
         };
         let contents = std::borrow::Cow::Owned(contents);
 

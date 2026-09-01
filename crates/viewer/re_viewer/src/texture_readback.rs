@@ -1,5 +1,6 @@
 //! Helper to poll, and then save a texture from [`re_renderer::poll_read_texture`].
 
+use re_i18n::trf;
 use image::{ExtendedColorType, ImageEncoder as _};
 use re_renderer::{external::wgpu::TextureFormat, texture_readback::TextureReadbackId};
 use re_viewer_context::{CommandSender, DownloadAction};
@@ -56,7 +57,7 @@ impl TextureReadbacks {
                                 color_type,
                             )
                         {
-                            re_log::error!("将预览图编码为 PNG 失败：{err}");
+                            re_log::error!("{}", trf!("Failed to encode preview image as PNG: {err}", "将预览图编码为 PNG 失败：{err}"));
                         } else {
                             command_sender.save_file_dialog(
                                 re_capabilities::MainThreadToken::from_egui_ui(ui),
@@ -186,7 +187,7 @@ fn to_color_image(
         }
 
         _ => {
-            re_log::error!("无法复制颜色类型为 `{color_type:?}` 的纹理");
+            re_log::error!("{}", trf!("Can't copy textures with color type `{color_type:?}`", "无法复制颜色类型为 `{color_type:?}` 的纹理"));
             return None;
         }
     })

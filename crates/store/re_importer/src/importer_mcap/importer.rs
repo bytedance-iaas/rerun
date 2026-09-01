@@ -1,6 +1,6 @@
 //! MCAP file importer implementation.
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -174,7 +174,7 @@ impl McapImporter {
                         Ok(chunk) => emit_final_chunk(chunk),
                         Err(partial) => {
                             for error in partial.errors() {
-                                re_log::error_once!("Lens 错误：{error}");
+                                re_log::error_once!("{}", trf!("Lens error: {error}", "Lens 错误：{error}"));
                             }
                             if let Some(chunk) = partial.partial_chunk() {
                                 emit_final_chunk(chunk);
@@ -210,7 +210,7 @@ impl McapImporter {
                 &on_chunk_with_transforms,
             )
         {
-            re_log::warn_once!("从 robot_description 话题提取 URDF 失败：{err}");
+            re_log::warn_once!("{}", trf!("Failed to extract URDF from robot_description topics: {err}", "从 robot_description 话题提取 URDF 失败：{err}"));
         }
 
         Ok(())
@@ -248,7 +248,7 @@ impl Importer for McapImporter {
                 let file = match std::fs::File::open(&path) {
                     Ok(f) => f,
                     Err(err) => {
-                        re_log::error!("打开 MCAP 文件失败：{err}");
+                        re_log::error!("{}", trf!("Failed to open MCAP file: {err}", "打开 MCAP 文件失败：{err}"));
                         return;
                     }
                 };
@@ -258,14 +258,14 @@ impl Importer for McapImporter {
                 let mmap = match unsafe { memmap2::Mmap::map(&file) } {
                     Ok(m) => m,
                     Err(err) => {
-                        re_log::error!("内存映射（mmap）MCAP 文件失败：{err}");
+                        re_log::error!("{}", trf!("Failed to mmap MCAP file: {err}", "内存映射（mmap）MCAP 文件失败：{err}"));
                         return;
                     }
                 };
                 let mcap_file = re_mcap::McapFile::new(mmap, loader.recover);
 
                 if let Err(err) = loader.load_and_send(&mcap_file, &settings, &tx) {
-                    re_log::error!("加载 MCAP 文件失败：{err}");
+                    re_log::error!("{}", trf!("Failed to load MCAP file: {err}", "加载 MCAP 文件失败：{err}"));
                 }
             })
             .map_err(|err| ImporterError::Other(err.into()))?;
@@ -305,7 +305,7 @@ impl Importer for McapImporter {
                     .spawn(move || {
                         let mcap_file = re_mcap::McapFile::new(contents, loader.recover);
                         if let Err(err) = loader.load_and_send(&mcap_file, &settings, &tx) {
-                            re_log::error!("加载 MCAP 文件失败：{err}");
+                            re_log::error!("{}", trf!("Failed to load MCAP file: {err}", "加载 MCAP 文件失败：{err}"));
                         }
                     })
                     .map_err(|err| ImporterError::Other(err.into()))?;

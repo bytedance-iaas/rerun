@@ -4,7 +4,7 @@
 //! (range-)downloading files. Works both natively and in the browser (both endpoints are
 //! CORS-enabled). Public datasets need no token; a token is sent as a bearer header when set.
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::ops::Range;
 
 use re_log_channel::LogReceiver;
@@ -170,7 +170,7 @@ fn http_error(response: &ehttp::Response, what: &str, context: &str) -> anyhow::
     let server_says = if body.is_empty() {
         String::new()
     } else {
-        format!("\n服务器返回：{body}")
+        trf!("\nServer response: {body}", "\n服务器返回：{body}")
     };
     anyhow::Error::new(HttpStatusError(status)).context(format!(
         "{what}失败，HTTP {status}{}{server_says}\n{context}",
@@ -259,7 +259,7 @@ impl DatasetStore for HfStore {
         let response = hf_fetch(request).await?;
 
         if !response.ok {
-            return Err(http_error(&response, "HEAD 请求", &format!("文件：{rel_path}")));
+            return Err(http_error(&response, "HEAD 请求", &trf!("File: {rel_path}", "文件：{rel_path}")));
         }
 
         if let Some(size) = response
@@ -314,7 +314,7 @@ impl DatasetStore for HfStore {
         let response = hf_fetch(request).await?;
 
         if !(response.status == 200 || response.status == 206) {
-            return Err(http_error(&response, "GET 请求", &format!("文件：{rel_path}")));
+            return Err(http_error(&response, "GET 请求", &trf!("File: {rel_path}", "文件：{rel_path}")));
         }
 
         Ok(response.bytes)

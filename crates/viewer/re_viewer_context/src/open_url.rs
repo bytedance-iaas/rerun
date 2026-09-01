@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::sync::LazyLock;
 
 use re_chunk::ChunkId;
@@ -920,7 +920,7 @@ pub fn combine_with_base_url(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn handle_web_event_listener(_egui_ctx: &egui::Context, _command_sender: &CommandSender) {
-    re_log::warn!("{WEB_EVENT_LISTENER_SCHEME:?} URL 仅在 web viewer 中可用。");
+    re_log::warn!("{}", trf!("{WEB_EVENT_LISTENER_SCHEME:?} urls are only available on the web viewer.", "{WEB_EVENT_LISTENER_SCHEME:?} URL 仅在 web viewer 中可用。"));
 }
 
 #[cfg(target_arch = "wasm32")]

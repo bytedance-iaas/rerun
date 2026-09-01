@@ -9290,6 +9290,7 @@ dependencies = [
  "re_async",
  "re_chunk",
  "re_error",
+ "re_i18n",
  "re_log",
  "re_log_channel",
  "re_log_encoding",

@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::collections::BTreeMap;
 
 use arrow::datatypes::Field;
@@ -168,7 +168,7 @@ fn datatype_ui(ui: &mut egui::Ui, column_name: &str, datatype: &arrow::datatypes
                 .clicked()
             {
                 ui.copy_text(format!("{datatype:#?}")); // TODO(apache/arrow-rs#8351): use Display once arrow 57 is released
-                re_log::info!("已复制列 `{column_name}` 的完整数据类型到剪贴板");
+                re_log::info!("{}", trf!("Copied full datatype of column `{column_name}` to clipboard", "已复制列 `{column_name}` 的完整数据类型到剪贴板"));
             }
         },
     );

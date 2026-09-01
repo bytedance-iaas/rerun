@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use anyhow::Context as _;
 use itertools::Itertools as _;
 use re_build_info::CrateVersion;
@@ -481,7 +481,7 @@ impl App {
                     }
                     re_ui::RedapServerCommandKind::CopyUrl => {
                         let url = origin.to_string();
-                        re_log::info!("已复制 {url:?} 到剪贴板");
+                        re_log::info!("{}", trf!("Copied {url:?} to clipboard", "已复制 {url:?} 到剪贴板"));
                         egui_ctx.copy_text(url);
                     }
                     re_ui::RedapServerCommandKind::Remove => {
@@ -573,7 +573,7 @@ impl App {
                     match db.add_chunk(&Arc::new(chunk)) {
                         Ok(_store_events) => {}
                         Err(err) => {
-                            re_log::warn_once!("追加 chunk 失败：{err}");
+                            re_log::warn_once!("{}", trf!("Failed to append chunk: {err}", "追加 chunk 失败：{err}"));
                         }
                     }
                 }
@@ -691,7 +691,7 @@ impl App {
             #[cfg(not(target_arch = "wasm32"))]
             SystemCommand::FileSaver(file_saver) => {
                 if let Err(err) = self.background_tasks.spawn_file_saver(file_saver) {
-                    re_log::error!("保存文件失败：{err}");
+                    re_log::error!("{}", trf!("Failed to save file: {err}", "保存文件失败：{err}"));
                 }
             }
 
@@ -707,12 +707,12 @@ impl App {
                     match re_auth::oauth::Credentials::try_new(access_token, None, email) {
                         Ok(credentials) => credentials,
                         Err(err) => {
-                            re_log::error!("创建凭证失败：{err}");
+                            re_log::error!("{}", trf!("Failed to create credentials: {err}", "创建凭证失败：{err}"));
                             return;
                         }
                     };
                 if let Err(err) = credentials.ensure_stored() {
-                    re_log::error!("保存凭证失败：{err}");
+                    re_log::error!("{}", trf!("Failed to store credentials: {err}", "保存凭证失败：{err}"));
                 }
             }
             SystemCommand::Logout => {
@@ -735,7 +735,7 @@ impl App {
                         re_log::debug!("No session to logout from");
                     }
                     Err(err) => {
-                        re_log::error!("退出登录失败：{err}");
+                        re_log::error!("{}", trf!("Failed to logout: {err}", "退出登录失败：{err}"));
                     }
                 }
                 let logged_out_origins = self.state.redap_servers.logout();
@@ -792,7 +792,7 @@ impl App {
                                 }),
                             ));
                     } else {
-                        re_log::warn!("找不到要截图的视图 {view_id}");
+                        re_log::warn!("{}", trf!("View {view_id} not found for screenshot", "找不到要截图的视图 {view_id}"));
                     }
                 } else {
                     // Screenshot the entire viewer
@@ -1091,7 +1091,7 @@ impl App {
                         .share_modal
                         .open(storage_context.hub, route, rec_cfg, selection)
                 {
-                    re_log::error!("无法分享当前界面的链接：{err}");
+                    re_log::error!("{}", trf!("Cannot share link to current screen: {err}", "无法分享当前界面的链接：{err}"));
                 }
             }
             UICommand::CopyDirectLink => {
@@ -1201,7 +1201,7 @@ impl App {
                 #[cfg(target_arch = "wasm32")] // Web
                 {
                     if let Err(err) = save_active_recording(self, store_context) {
-                        re_log::error!("保存录制文件失败：{err}");
+                        re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
                     }
                 }
 
@@ -1233,13 +1233,13 @@ impl App {
 
                     if selected_stores.is_empty() {
                         if let Err(err) = save_active_recording(self, store_context) {
-                            re_log::error!("保存录制文件失败：{err}");
+                            re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
                         }
                     } else if selected_stores.len() == 1 {
                         // Common case: saving a single recording.
                         // In this case we want the user to be able to pick a file name (not just a folder):
                         if let Err(err) = save_recording(self, selected_stores[0], None) {
-                            re_log::error!("保存录制文件失败：{err}");
+                            re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
                         }
                     } else {
                         // Save all selected recordings to a folder:
@@ -1444,7 +1444,7 @@ impl App {
                         if any_error.load(Ordering::Relaxed) {
                             re_log::error!("部分录制文件保存失败。");
                         } else {
-                            re_log::info!("已成功保存 {num_stores} 个录制文件到 {folder}");
+                            re_log::info!("{}", trf!("{num_stores} recordings successfully saved to {folder}", "已成功保存 {num_stores} 个录制文件到 {folder}"));
                         }
                     }
 
@@ -1470,7 +1470,7 @@ impl App {
     /// Copies text to the clipboard, and gives a notification about it.
     fn copy_text(&mut self, url: String) {
         self.notifications
-            .success(format!("已复制 {url:?} 到剪贴板"));
+            .success(trf!("Copied {url:?} to clipboard", "已复制 {url:?} 到剪贴板"));
         self.egui_ctx.copy_text(url);
     }
 
@@ -1925,7 +1925,7 @@ fn save_entity_db(
                 if let Err(err) =
                     async_save_dialog(rrd_version, &file_name, &title, messages.into_iter()).await
                 {
-                    re_log::error!("文件保存失败：{err}");
+                    re_log::error!("{}", trf!("File saving failed: {err}", "文件保存失败：{err}"));
                 }
             });
         }

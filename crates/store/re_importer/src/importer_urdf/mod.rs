@@ -6,7 +6,7 @@ mod urdf_tree;
 pub(crate) use robot_description_parser::build_urdf_chunks_from_xml;
 pub use urdf_tree::UrdfTree;
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
@@ -197,7 +197,7 @@ fn walk_tree(
 ) -> anyhow::Result<Vec<Transform3D>> {
     let link = urdf_tree
         .get_link(link_name)
-        .with_context(|| format!("映射中缺少 link {link_name:?}"))?;
+        .with_context(|| trf!("Link {link_name:?} missing from map", "映射中缺少 link {link_name:?}"))?;
     re_log::debug_assert_eq!(link_name, link.name);
 
     emit_link(urdf_tree, timepoint, link, emit)?;
@@ -433,7 +433,7 @@ fn emit_link(
 /// from e.g. a ROS-bag importer.
 #[cfg(target_arch = "wasm32")]
 fn load_ros_resource(_root_dir: Option<&PathBuf>, resource_path: &str) -> anyhow::Result<Vec<u8>> {
-    bail!("WebAssembly 环境不支持加载 ROS 资源：{resource_path}");
+    bail!(trf!("Loading ROS resources is not supported in WebAssembly: {resource_path}", "WebAssembly 环境不支持加载 ROS 资源：{resource_path}"));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -444,11 +444,11 @@ fn load_ros_resource(
 ) -> anyhow::Result<Vec<u8>> {
     if let Some((scheme, path)) = resource_path.split_once("://") {
         match scheme {
-            "file" => std::fs::read(path).with_context(|| format!("读取文件失败：{path}")),
+            "file" => std::fs::read(path).with_context(|| trf!("Failed to read file: {path}", "读取文件失败：{path}")),
             "package" => read_ros_package_resource(root_dir, path),
             "http" | "https" => fetch_http_resource(resource_path),
             _ => {
-                bail!("未知的资源 scheme {scheme:?}：{resource_path}");
+                bail!(trf!("Unknown resource scheme: {scheme:?} in {resource_path}", "未知的资源 scheme {scheme:?}：{resource_path}"));
             }
         }
     } else {
@@ -458,7 +458,7 @@ fn load_ros_resource(
             std::fs::read(&full_path)
                 .with_context(|| format!("读取文件失败：{}", full_path.display()))
         } else {
-            bail!("未设置 URDF 根目录，无法加载资源：{resource_path}");
+            bail!(trf!("No root directory set for URDF, cannot load resource: {resource_path}", "未设置 URDF 根目录，无法加载资源：{resource_path}"));
         }
     }
 }
@@ -482,7 +482,7 @@ fn fetch_http_resource(url: &str) -> anyhow::Result<Vec<u8>> {
     let mut response = agent
         .get(url)
         .call()
-        .with_context(|| format!("获取网格资源失败：{url}"))?;
+        .with_context(|| trf!("Failed to fetch mesh resource from {url}", "获取网格资源失败：{url}"))?;
 
     let bytes = response
         .body_mut()
@@ -649,7 +649,7 @@ fn read_ros_package_resource(
             .with_context(|| format!("读取文件失败：{}", full_path.display()))
     } else {
         // If no `root_dir` is provided, we cannot resolve the relative path.
-        bail!("未设置 URDF 根目录，无法加载资源：{resource_path}");
+        bail!(trf!("No root directory set for URDF, cannot load resource: {resource_path}", "未设置 URDF 根目录，无法加载资源：{resource_path}"));
     }
 }
 

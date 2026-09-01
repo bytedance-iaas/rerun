@@ -1,3 +1,4 @@
+use re_i18n::trf;
 /// Used by `eframe` to decide where to store the app state.
 pub const APP_ID: &str = "rerun";
 
@@ -81,7 +82,7 @@ fn icon_data() -> egui::IconData {
                     panic!("加载应用图标失败：{err}");
                 }
                 _ => {
-                    re_log::warn!("加载应用图标失败：{err}");
+                    re_log::warn!("{}", trf!("Failed to load app icon: {err}", "加载应用图标失败：{err}"));
                     Default::default()
                 }
             }

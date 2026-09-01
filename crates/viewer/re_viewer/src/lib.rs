@@ -25,6 +25,7 @@
 //!
 //! See [`re_viewer_context::VisualizerInstructionReport`] for how these break down further.
 
+use re_i18n::trf;
 mod app;
 mod app_blueprint;
 mod app_state;
@@ -312,7 +313,7 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
                 if let Err(err) = std::fs::remove_dir_all(&data_dir) {
                     anyhow::bail!("删除失败：{err}\n目录：{data_dir:?}");
                 } else {
-                    re_log::info!("已清除 {data_dir:?}。");
+                    re_log::info!("{}", trf!("Cleared {data_dir:?}.", "已清除 {data_dir:?}。"));
                 }
 
                 if let Ok(analytics) = analytics {
@@ -332,7 +333,7 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
                         anyhow::bail!("删除失败：{err}\n目录：{cache_dir:?}");
                     }
                 } else {
-                    re_log::info!("已清除 {cache_dir:?}。");
+                    re_log::info!("{}", trf!("Cleared {cache_dir:?}.", "已清除 {cache_dir:?}。"));
                 }
             }
         }

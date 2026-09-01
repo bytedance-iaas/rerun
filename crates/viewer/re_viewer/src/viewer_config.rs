@@ -4,6 +4,7 @@
 //! `/config.json` next to the viewer; natively `~/.rerun/config.json`
 //! (or `$RERUN_CONFIG`) with environment-variable overrides.
 
+use re_i18n::trf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
@@ -114,7 +115,7 @@ pub fn request() {
             let parsed = match &result {
                 Ok(response) if response.status == 200 => {
                     serde_json::from_slice::<ViewerConfig>(&response.bytes).unwrap_or_else(|err| {
-                        re_log::warn!("解析 Viewer 默认配置失败：{err}\n文件：config.json");
+                        re_log::warn!("{}", trf!("Failed to parse viewer defaults: {err}\nFile: config.json", "解析 Viewer 默认配置失败：{err}\n文件：config.json"));
                         ViewerConfig::default()
                     })
                 }
@@ -127,7 +128,7 @@ pub fn request() {
                     ViewerConfig::default()
                 }
                 Err(err) => {
-                    re_log::warn!("加载 Viewer 默认配置失败：{err}\n文件：config.json");
+                    re_log::warn!("{}", trf!("Failed to load viewer defaults: {err}\nFile: config.json", "加载 Viewer 默认配置失败：{err}\n文件：config.json"));
                     ViewerConfig::default()
                 }
             };

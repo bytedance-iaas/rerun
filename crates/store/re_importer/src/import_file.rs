@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::borrow::Cow;
 
 use ahash::{HashMap, HashMapExt as _};
@@ -28,12 +29,12 @@ pub fn import_from_path(
     if !path.exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("路径不存在：{path:?}"),
+            trf!("path does not exist: {path:?}", "路径不存在：{path:?}"),
         )
         .into());
     }
 
-    re_log::info!("正在加载 {path:?}…");
+    re_log::info!("{}", trf!("Loading {path:?}…", "正在加载 {path:?}…"));
 
     // If no application ID was specified, we derive one from the filename.
     let application_id = settings
@@ -72,7 +73,7 @@ pub fn import_from_file_contents(
 ) -> Result<(), ImporterError> {
     re_tracing::profile_function!(filepath.to_string_lossy());
 
-    re_log::info!("正在加载 {filepath:?}…");
+    re_log::info!("{}", trf!("Loading {filepath:?}…", "正在加载 {filepath:?}…"));
 
     let application_id = settings
         .application_id

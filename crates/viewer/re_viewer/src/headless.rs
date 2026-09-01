@@ -2,6 +2,7 @@
 //!
 //! Used for things like CI screenshot generation via `ViewerClient::save_screenshot`.
 
+use re_i18n::trf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -124,7 +125,7 @@ fn handle_pending_screenshots(harness: &mut egui_kittest::Harness<'_, App>) {
     let rgba = match harness.render() {
         Ok(rgba) => rgba,
         Err(err) => {
-            re_log::error!("渲染无界面截图失败：{err}");
+            re_log::error!("{}", trf!("Failed to render headless screenshot: {err}", "渲染无界面截图失败：{err}"));
             return;
         }
     };

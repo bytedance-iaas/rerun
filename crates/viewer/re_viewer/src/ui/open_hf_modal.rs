@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -147,7 +147,7 @@ impl OpenHfModal {
                     Err(err) => Err(err),
                 };
                 if let Err(err) = &outcome {
-                    re_log::warn!("加载服务器端默认配置失败：{err}\n文件：config.json");
+                    re_log::warn!("{}", trf!("Failed to load server TOS defaults: {err}\nFile: config.json", "加载服务器端默认配置失败：{err}\n文件：config.json"));
                 }
                 *config.lock() = Some(outcome);
             });

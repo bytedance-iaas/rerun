@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use re_chunk_store::ChunkTrackingMode;
 use re_log_types::{ComponentPath, Instance};
 use re_ui::UiExt as _;
@@ -46,10 +46,10 @@ impl DataUi for ComponentPath {
             ) {
                 ui.label("<unset>");
             } else {
-                ui.warning_label(format!("实体 {entity_path} 没有组件 {component}"));
+                ui.warning_label(trf!("Entity {entity_path} has no component {component}", "实体 {entity_path} 没有组件 {component}"));
             }
         } else {
-            ui.error_label(format!("未知的组件路径：{self}"));
+            ui.error_label(trf!("Unknown component path: {self}", "未知的组件路径：{self}"));
         }
     }
 }

@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::sync::Arc;
 
 use egui::{FocusDirection, Key};
@@ -364,7 +365,7 @@ impl App {
             &mut component_fallback_registry,
         )
         .unwrap_or_else(|err| {
-            re_log::error!("创建视图类注册表失败：{err}");
+            re_log::error!("{}", trf!("Failed to create view class registry: {err}", "创建视图类注册表失败：{err}"));
             Default::default()
         });
 
@@ -1119,7 +1120,7 @@ impl App {
                             image::ExtendedColorType::Rgba8,
                         )
                     {
-                        re_log::error!("把截图编码为 PNG 失败：{err}");
+                        re_log::error!("{}", trf!("Failed to encode screenshot as PNG: {err}", "把截图编码为 PNG 失败：{err}"));
                     } else {
                         let file_name = format!("{name}.png");
                         self.command_sender.save_file_dialog(
@@ -1250,7 +1251,7 @@ impl eframe::App for App {
             }
 
             if let Err(err) = hub.save_app_blueprints() {
-                re_log::error!("保存 blueprint 失败：{err}");
+                re_log::error!("{}", trf!("Saving blueprints failed: {err}", "保存 blueprint 失败：{err}"));
             }
         } else {
             re_log::error!("无法保存 blueprint：store hub 不可用");
@@ -1278,7 +1279,7 @@ impl eframe::App for App {
                 if let Some(capture) = self.profile_capture.take()
                     && let Err(err) = save_profile_trace(&capture.finish())
                 {
-                    re_log::error!("保存性能分析记录失败：{err}");
+                    re_log::error!("{}", trf!("Failed to save profile trace: {err}", "保存性能分析记录失败：{err}"));
                 }
             } else {
                 ui.ctx().request_repaint();

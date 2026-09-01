@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use crate::CommandSender;
 
 fn is_safe_filename_char(c: char) -> bool {
@@ -30,9 +31,9 @@ impl CommandSender {
                 // Web
                 re_async::spawn_local(async move {
                     if let Err(err) = async_save_dialog(&file_name, &title, data).await {
-                        re_log::error!("保存文件失败：{err}");
+                        re_log::error!("{}", trf!("File saving failed: {err}", "保存文件失败：{err}"));
                     } else {
-                        re_log::info!("{file_name} 已保存。");
+                        re_log::info!("{}", trf!("{file_name} saved.", "{file_name} 已保存。"));
                     }
                 });
             }

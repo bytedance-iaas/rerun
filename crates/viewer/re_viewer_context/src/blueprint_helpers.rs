@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use arrow::array::ArrayRef;
 use re_chunk::{ComponentIdentifier, LatestAtQuery, RowId, TimelineName};
 use re_chunk_store::external::re_chunk::Chunk;
@@ -84,7 +85,7 @@ pub trait BlueprintContext {
         component_batch: &dyn ComponentBatch,
     ) {
         let Some(serialized) = component_batch.serialized(component_descr.clone()) else {
-            re_log::warn!("无法序列化描述符为 `{component_descr}` 的组件");
+            re_log::warn!("{}", trf!("could not serialize components with descriptor `{component_descr}`", "无法序列化描述符为 `{component_descr}` 的组件"));
             return;
         };
 
@@ -98,7 +99,7 @@ pub trait BlueprintContext {
         component_batch: &dyn ComponentBatch,
     ) {
         let Some(serialized) = component_batch.serialized(component_descr.clone()) else {
-            re_log::warn!("无法序列化描述符为 `{component_descr}` 的组件");
+            re_log::warn!("{}", trf!("could not serialize components with descriptor `{component_descr}`", "无法序列化描述符为 `{component_descr}` 的组件"));
             return;
         };
 

@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use egui::NumExt as _;
 use re_chunk_store::UnitChunkShared;
 use re_entity_db::InstancePath;
@@ -47,7 +47,7 @@ impl DataUi for LatestAtInstanceResult<'_> {
             .schema()
             .entity_component_descriptor(&entity_path, component)
         else {
-            ui.label(format!("实体 {entity_path} 没有组件 {component}"));
+            ui.label(trf!("Entity {entity_path} has no component {component}", "实体 {entity_path} 没有组件 {component}"));
             return;
         };
 

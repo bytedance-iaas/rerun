@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use re_log_types::ApplicationId;
 
 /// Convert to lowercase and replace any character that is not a fairly common
@@ -76,7 +77,7 @@ pub fn encode_to_file(
     use anyhow::Context as _;
 
     let mut file = std::fs::File::create(path)
-        .with_context(|| format!("创建文件失败：{path:?}"))?;
+        .with_context(|| trf!("Failed to create file at {path:?}", "创建文件失败：{path:?}"))?;
 
     let encoding_options = re_log_encoding::rrd::EncodingOptions::PROTOBUF_COMPRESSED;
     re_log_encoding::Encoder::encode_into(version, encoding_options, messages, &mut file)

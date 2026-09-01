@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::ops::ControlFlow;
 
 use egui::{Key, NumExt as _, Ui};
@@ -202,7 +203,7 @@ fn view_space_origin_widget_editing_ui(
         let excluded_count = view_suggestions.len() - filtered_view_suggestions.len();
         if excluded_count > 0 {
             ui.list_item_flat_noninteractive(
-                list_item::LabelContent::new(format!("另有 {excluded_count} 条被隐藏的建议"))
+                list_item::LabelContent::new(trf!("{excluded_count} hidden suggestions", "另有 {excluded_count} 条被隐藏的建议"))
                     .weak(true)
                     .italics(true),
             );

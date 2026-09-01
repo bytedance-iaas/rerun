@@ -1,5 +1,7 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::ops::Sub as _;
+
+use re_format::format_plural_s;
 
 use re_log_types::{Timestamp, TimestampFormat};
 
@@ -15,7 +17,14 @@ pub fn format_duration_short(timestamp: Timestamp, fallback_format: TimestampFor
     let duration = Timestamp::now().sub(timestamp);
     let seconds = duration.as_secs_f64() as u64;
 
-    let format_plural = |n: u64, unit: &'static str| format!("{n} {unit}前");
+    // English pluralizes the unit ("2 minutes ago"); Chinese does not ("2 分钟前").
+    let format_plural = |n: u64, unit_en: &'static str, unit_zh: &'static str| {
+        if re_i18n::is_chinese() {
+            format!("{n} {unit_zh}前")
+        } else {
+            format!("{} ago", format_plural_s(n, unit_en))
+        }
+    };
 
     if seconds < 10 {
         tr("just now", "刚刚").to_owned()
@@ -23,13 +32,13 @@ pub fn format_duration_short(timestamp: Timestamp, fallback_format: TimestampFor
         tr("less than a minute ago", "不到一分钟前").to_owned()
     } else if seconds < 3600 {
         let minutes = seconds / 60;
-        format_plural(minutes, tr("minute", "分钟"))
+        format_plural(minutes, "minute", "分钟")
     } else if seconds < 24 * 3600 {
         let hours = seconds / 3600;
-        format_plural(hours, tr("hour", "小时"))
+        format_plural(hours, "hour", "小时")
     } else if seconds < 7 * 24 * 3600 {
         let days = seconds / 86400;
-        format_plural(days, tr("day", "天"))
+        format_plural(days, "day", "天")
     } else {
         timestamp.format(fallback_format)
     }

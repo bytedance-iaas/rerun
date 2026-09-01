@@ -1,4 +1,3 @@
-use re_i18n::tr;
 //! Remembers which remote datasets (TOS / Hugging Face) were opened, across viewer restarts.
 //!
 //! Converted data lives only in RAM, so restarting the viewer starts blank. This list — persisted
@@ -6,6 +5,7 @@ use re_i18n::tr;
 //! welcome screen show what was opened before and re-open it with one click. Only non-secret
 //! metadata is stored: never access keys or tokens.
 
+use re_i18n::tr;
 /// Which remote backend a recent dataset lives on.
 #[derive(Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RecentKind {

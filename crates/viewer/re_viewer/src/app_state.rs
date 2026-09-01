@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::borrow::Cow;
 
 use ahash::HashMap;
@@ -656,7 +656,7 @@ impl AppState {
                             ui.center("loading error", |ui| {
                                 ui.set_max_width(ui.available_width() * 0.75);
                                 ui.vertical_centered(|ui| {
-                                    ui.error_label(format!("加载 {source_name} 失败：{err}"));
+                                    ui.error_label(trf!("Failed to load {source_name}: {err}", "加载 {source_name} 失败：{err}"));
 
                                     if ui.button(tr("Go Back", "返回")).clicked() {
                                         command_sender.send_system(SystemCommand::ResetRoute);

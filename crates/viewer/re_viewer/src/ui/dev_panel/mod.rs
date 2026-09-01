@@ -5,7 +5,7 @@ mod server_streaming_tab;
 mod streaming_history;
 mod transform_cache_ui;
 
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use ahash::HashMap;
 use egui_plot::HoverPosition;
 use plot_utils::history_to_plot;
@@ -233,7 +233,7 @@ impl DevPanel {
                 let title = format!("{} {}", store_id.kind(), store_id.recording_id());
                 ui.collapsing_header(&title, false, |ui| {
                     if let Some(data_source) = &store_stats.store_source {
-                        ui.weak(format!("数据源：{data_source}"));
+                        ui.weak(trf!("Source: {data_source}", "数据源：{data_source}"));
 
                         ui.separator();
                     }

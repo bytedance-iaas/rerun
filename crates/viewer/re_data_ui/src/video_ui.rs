@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::sync::Arc;
 
 use egui::NumExt as _;
@@ -530,7 +530,7 @@ fn decoded_frame_ui(
                 | re_video::FFmpegError::FailedToDetermineFFmpegVersion(_)
                 | re_video::FFmpegError::FFmpegNotInstalled => {
                     if let Some(download_url) = re_video::ffmpeg_download_url() {
-                        ui.markdown_ui(&format!("可以在[这里]({download_url})下载 `FFmpeg`。要让 Rerun 能用上它，其可执行文件需要能从 `PATH` 中找到。"));
+                        ui.markdown_ui(&trf!("You can download a build of `FFmpeg` [here]({download_url}). For Rerun to be able to use it, its binaries need to be reachable from `PATH`.", "可以在[这里]({download_url})下载 `FFmpeg`。要让 Rerun 能用上它，其可执行文件需要能从 `PATH` 中找到。"));
                     }
                 }
 

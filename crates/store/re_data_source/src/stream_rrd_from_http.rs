@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
@@ -17,7 +18,7 @@ pub fn stream_from_http_to_channel(url: String) -> re_log_channel::LogReceiver {
                 if tx.send(msg.into()).is_ok() {
                     ControlFlow::Continue(())
                 } else {
-                    re_log::info_once!("已关闭连接：{url}");
+                    re_log::info_once!("{}", trf!("Closing connection to {url}", "已关闭连接：{url}"));
                     ControlFlow::Break(())
                 }
             }

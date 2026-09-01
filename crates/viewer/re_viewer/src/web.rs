@@ -2,6 +2,7 @@
 
 #![allow(clippy::allow_attributes, clippy::mem_forget)] // False positives from #[wasm_bindgen] macro
 
+use re_i18n::trf;
 use std::rc::Rc;
 use std::str::FromStr as _;
 
@@ -742,7 +743,7 @@ fn create_app(
         match re_auth::Jwt::try_from(fallback_token) {
             Ok(token) => connection_registry.set_fallback_token(token),
             Err(err) => {
-                re_log::warn!("解析 JWT token 失败：{err}");
+                re_log::warn!("{}", trf!("Failed to parse JWT token: {err}", "解析 JWT token 失败：{err}"));
             }
         }
     }

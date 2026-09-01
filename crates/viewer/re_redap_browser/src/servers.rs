@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::task::Poll;
@@ -542,7 +542,7 @@ fn error_ui(
                                                 Some((origin.clone(), Box::new(flow)));
                                         }
                                         Err(err) => {
-                                            re_log::error!("启动登录失败：{err}");
+                                            re_log::error!("{}", trf!("Failed to start login: {err}", "启动登录失败：{err}"));
                                         }
                                     }
                                 }
@@ -966,7 +966,7 @@ impl RedapServers {
                         .ok();
                 }
                 LoginFlowResult::Failure(err) => {
-                    re_log::warn!("登录失败：{err}");
+                    re_log::warn!("{}", trf!("Login failed: {err}", "登录失败：{err}"));
                 }
             }
             self.inline_login_flow = None;

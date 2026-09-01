@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, LazyLock};
 
@@ -690,7 +691,7 @@ impl StoreHub {
         if !self.active_blueprint_by_app_id.contains_key(app_id)
             && let Err(err) = self.try_to_load_persisted_blueprint(app_id)
         {
-            re_log::warn!("加载已保存的 blueprint 失败：{err}");
+            re_log::warn!("{}", trf!("Failed to load persisted blueprint: {err}", "加载已保存的 blueprint 失败：{err}"));
         }
     }
 
@@ -710,7 +711,7 @@ impl StoreHub {
     /// Close this application and all its recordings.
     pub fn close_app(&mut self, app_id: &ApplicationId) {
         if let Err(err) = self.save_app_blueprints() {
-            re_log::warn!("保存 blueprint 失败：{err}");
+            re_log::warn!("{}", trf!("Failed to save blueprints: {err}", "保存 blueprint 失败：{err}"));
         }
 
         let mut store_ids_removed = HashSet::default();
@@ -880,7 +881,7 @@ impl StoreHub {
         if let Some(blueprint_id) = self.default_blueprint_by_app_id.get(app_id).cloned() {
             self.set_cloned_blueprint_active_for_app(&blueprint_id)
                 .unwrap_or_else(|err| {
-                    re_log::warn!("激活 blueprint 失败：{err}");
+                    re_log::warn!("{}", trf!("Failed to make blueprint active: {err}", "激活 blueprint 失败：{err}"));
                 });
             return;
         }

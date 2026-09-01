@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -311,7 +312,7 @@ impl UrdfTree {
                 let joint_name = joint_names.value(name_index);
                 let joint = self
                     .get_joint_by_name(joint_name)
-                    .with_context(|| format!("URDF 中不包含关节 {joint_name:?}"))?;
+                    .with_context(|| trf!("URDF does not contain joint {joint_name:?}", "URDF 中不包含关节 {joint_name:?}"))?;
 
                 let result = joint_transform::internal::compute_joint_transform(
                     joint,

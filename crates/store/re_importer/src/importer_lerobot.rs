@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::thread;
 
 use anyhow::{Context as _, anyhow};
@@ -64,7 +65,7 @@ impl LeRobotDatasetImporter {
     ) -> Result<(), ImporterError> {
         let filepath = filepath.as_ref().to_owned();
         let dataset = datasetv2::LeRobotDatasetV2::load_from_directory(&filepath)
-            .map_err(|err| anyhow!("加载 LeRobot v2 数据集失败：{err}"))?;
+            .map_err(|err| anyhow!(trf!("Loading LeRobot v2 dataset failed: {err}", "加载 LeRobot v2 数据集失败：{err}")))?;
 
         let application_id = settings
             .application_id
@@ -90,7 +91,7 @@ impl LeRobotDatasetImporter {
                 load_and_stream_versioned(&dataset, &application_id, &tx, &loader_name);
             })
             .with_context(|| {
-                format!("启动 IO 线程加载 LeRobot v2 数据集失败：{filepath:?}")
+                trf!("Failed to spawn IO thread to load LeRobot v2 dataset {filepath:?}", "启动 IO 线程加载 LeRobot v2 数据集失败：{filepath:?}")
             })?;
 
         Ok(())
@@ -103,7 +104,7 @@ impl LeRobotDatasetImporter {
     ) -> Result<(), ImporterError> {
         let filepath = filepath.as_ref().to_owned();
         let dataset = datasetv3::LeRobotDatasetV3::load_from_directory(&filepath)
-            .map_err(|err| anyhow!("加载 LeRobot v3 数据集失败：{err}"))?;
+            .map_err(|err| anyhow!(trf!("Loading LeRobot v3 dataset failed: {err}", "加载 LeRobot v3 数据集失败：{err}")))?;
 
         let application_id = settings
             .application_id
@@ -129,7 +130,7 @@ impl LeRobotDatasetImporter {
                 load_and_stream_versioned(&dataset, &application_id, &tx, &loader_name);
             })
             .with_context(|| {
-                format!("启动 IO 线程加载 LeRobot v3 数据集失败：{filepath:?}")
+                trf!("Failed to spawn IO thread to load LeRobot v3 dataset {filepath:?}", "启动 IO 线程加载 LeRobot v3 数据集失败：{filepath:?}")
             })?;
 
         Ok(())

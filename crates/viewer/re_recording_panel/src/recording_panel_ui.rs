@@ -1,4 +1,4 @@
-use re_i18n::tr;
+use re_i18n::{tr, trf};
 use std::sync::Arc;
 
 use egui::collapsing_header::CollapsingState;
@@ -862,7 +862,7 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                 if ui
                     .add_enabled(
                         !deleting && !no_permission,
-                        egui::Button::new(format!("删除全部 rrd 转换产物（{artifact_count}）…")),
+                        egui::Button::new(trf!("Delete all rrd artifacts ({artifact_count})…", "删除全部 rrd 转换产物（{artifact_count}）…")),
                     )
                     .on_disabled_hover_text(if no_permission {
                         tr("These credentials have no delete permission", "当前凭证没有删除权限")
