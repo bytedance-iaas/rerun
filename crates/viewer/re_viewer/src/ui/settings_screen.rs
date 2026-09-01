@@ -82,6 +82,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
         show_metrics,
         show_notification_toasts,
         custom_window_decorations,
+        language: _, // switched via the top-panel 中/EN toggle
         include_rerun_examples_button_in_recordings_panel,
         show_picking_debug_overlay: _, // not yet exposed
         inspect_blueprint_timeline: _, // not yet exposed

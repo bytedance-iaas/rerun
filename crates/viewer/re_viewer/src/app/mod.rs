@@ -1258,6 +1258,12 @@ impl eframe::App for App {
     }
 
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        // Keep the global language switch in sync with the persisted option, so both the
+        // UI (`tr`) and lower-level crates (data sources, importers) render in the chosen
+        // language. Cheap atomic store; doing it every frame also applies the loaded
+        // setting on startup and any change from the toggle immediately.
+        re_i18n::set_language(self.state.app_options.language);
+
         self.logic_impl(ctx, frame);
     }
 

@@ -170,6 +170,8 @@ fn top_bar_ui(
             ui.add_space(extra_margin);
         }
 
+        language_toggle_ui(app, ui);
+
         panel_buttons_r2l(app, app_blueprint, ui, store_hub);
 
         if app.app_options().show_metrics && !app.is_screenshotting() && !app.app_env().is_test() {
@@ -181,6 +183,20 @@ fn top_bar_ui(
             );
         }
     });
+}
+
+/// A one-click Chinese/English toggle. Shows the language you would switch *to*.
+fn language_toggle_ui(app: &mut crate::App, ui: &mut egui::Ui) {
+    let current = app.state.app_options.language;
+    let (en_tip, zh_tip) = ("Switch to Chinese", "切换到英文");
+    let response = ui
+        .button(current.toggle_label())
+        .on_hover_text(re_i18n::tr(en_tip, zh_tip));
+    if response.clicked() {
+        app.state.app_options.language = current.toggled();
+        // Immediate-mode UI: the next frame re-renders everything in the new language.
+        ui.ctx().request_repaint();
+    }
 }
 
 fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppEnvironment) {

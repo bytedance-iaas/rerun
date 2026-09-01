@@ -77,6 +77,7 @@ re_dataframe_ui.workspace = true
 re_entity_db.workspace = true
 re_error.workspace = true
 re_format.workspace = true
+re_i18n.workspace = true
 re_log = { workspace = true, features = ["setup"] }
 re_log_channel.workspace = true
 re_log_encoding = { workspace = true, features = ["decoder", "encoder", "stream_from_http"] }
