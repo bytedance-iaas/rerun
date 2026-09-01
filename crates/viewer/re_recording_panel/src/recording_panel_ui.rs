@@ -762,14 +762,27 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                 } else {
                     (&icons::PAUSE, tr("Pause downloading this dataset", "暂停下载该数据集"))
                 };
-                if ui.small_icon_button(icon, tooltip).clicked() {
+                // Secondary (gray) like the Diagnose button, so the row's buttons look alike.
+                if ui
+                    .add(re_ui::ReButton::icon(icon.clone()).secondary().small())
+                    .on_hover_text(tooltip)
+                    .clicked()
+                {
                     re_data_source::lerobot_remote::set_dataset_paused(app_id.as_str(), !paused);
                 }
             }
 
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"));
+                .add(
+                    re_ui::ReButton::icon(icons::CLOSE_SMALL.clone())
+                        .secondary()
+                        .small(),
+                )
+                .on_hover_text(tr(
+                    "Close all recordings in this dataset",
+                    "关闭该数据集中的所有录制文件",
+                ));
 
             if resp.clicked() {
                 ctx.command_sender()
