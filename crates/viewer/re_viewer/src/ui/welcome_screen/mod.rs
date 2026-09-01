@@ -17,10 +17,12 @@ use crate::app_state::WelcomeScreenState;
 pub use intro_section::{CloudState, LoginState};
 
 /// The uniform section heading of the welcome screen ("Volcengine enhancements",
-/// "About the original Rerun", "Recently opened datasets"): same size, underlined.
+/// "About the original Rerun", "Recently opened datasets"): same size, bold.
+/// (No underline: with mixed CJK/Latin text the two fonts disagree on the
+/// underline position and egui draws it broken.)
 pub(super) fn section_heading_ui(ui: &mut egui::Ui, text: &str) {
     ui.add(egui::Label::new(
-        egui::RichText::new(text).strong().size(18.0).underline(),
+        egui::RichText::new(text).strong().size(18.0),
     ));
     ui.add_space(10.0);
 }
