@@ -51,14 +51,25 @@ impl ServerTosConfig {
 /// Volcengine TOS regions, for the Region dropdown — the list and order mirror the
 /// volcengine console's create-bucket region picker (2026-08-18). The list may lag
 /// behind newly opened regions, so free-text entry stays available.
-const TOS_REGIONS: &[&str] = &[
-    "cn-beijing",
-    "ap-southeast-1",
-    "ap-southeast-3",
-    "cn-guangzhou",
-    "cn-hongkong",
-    "cn-shanghai",
+/// Known TOS regions: the code sent to TOS, paired with its Chinese display name.
+/// The UI only shows the Chinese name; the code stays internal.
+const TOS_REGIONS: &[(&str, &str)] = &[
+    ("cn-beijing", "华北2（北京）"),
+    ("ap-southeast-1", "亚太东南（柔佛）"),
+    ("ap-southeast-3", "亚太东南（雅加达）"),
+    ("cn-guangzhou", "华南1（广州）"),
+    ("cn-hongkong", "中国香港"),
+    ("cn-shanghai", "华东2（上海）"),
 ];
+
+/// The Chinese display name for a region code, falling back to the code itself
+/// for anything not in [`TOS_REGIONS`].
+fn tos_region_label(code: &str) -> &str {
+    TOS_REGIONS
+        .iter()
+        .find(|(c, _)| *c == code)
+        .map_or(code, |(_, name)| name)
+}
 
 /// How long after the last keystroke the malformed-URL error may turn red.
 const URL_ERROR_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
@@ -214,27 +225,27 @@ impl OpenTosModal {
                         }
                         ui.end_row();
 
-                        // Region: free text with a dropdown of known values. The list may lag
-                        // behind newly opened regions, so typing always works. The endpoint is
-                        // derived from the region, so there is nothing else to fill.
-                        ui.label("地域（Region）：");
-                        ui.horizontal(|ui| {
-                            let menu_width = 20.0;
-                            egui::TextEdit::singleline(&mut self.region)
-                                .hint_text("cn-beijing")
-                                .desired_width(
-                                    ui.available_width() - menu_width - ui.spacing().item_spacing.x,
-                                )
-                                .show(ui);
-                            ui.menu_button("⏷", |ui| {
-                                for region in TOS_REGIONS {
-                                    if ui.button(*region).clicked() {
-                                        self.region = (*region).to_owned();
-                                        ui.close();
-                                    }
+                        // Region: a dropdown of known regions shown by their Chinese name.
+                        // The code (e.g. "cn-beijing") is what we send to TOS, and the endpoint
+                        // is derived from it, so there is nothing else to fill.
+                        ui.label("地区：");
+                        let selected_label = if self.region.trim().is_empty() {
+                            "请选择地区"
+                        } else {
+                            tos_region_label(&self.region)
+                        };
+                        egui::ComboBox::from_id_salt("tos_region")
+                            .selected_text(selected_label)
+                            .width(ui.available_width())
+                            .show_ui(ui, |ui| {
+                                for (code, name) in TOS_REGIONS {
+                                    ui.selectable_value(
+                                        &mut self.region,
+                                        (*code).to_owned(),
+                                        *name,
+                                    );
                                 }
                             });
-                        });
                         ui.end_row();
 
                         url_edit.response
@@ -249,7 +260,7 @@ impl OpenTosModal {
                 // Credentials: the deployment's (docker secrets on the web, config.json
                 // natively) are used unless the user opts into entering their own.
                 ui.add_space(2.0);
-                ui.re_checkbox(&mut self.use_custom_credentials, "使用自定义凭证");
+                ui.re_checkbox(&mut self.use_custom_credentials, "使用自带 AK/SK");
 
                 if self.use_custom_credentials {
                     egui::Grid::new("tos_credentials_fields")
@@ -331,12 +342,12 @@ impl OpenTosModal {
                     ui.label(if !config_resolved {
                         "正在加载部署的 TOS 设置…"
                     } else if self.region.trim().is_empty() {
-                        "地域（Region）必填。"
+                        "请选择地区。"
                     } else if self.use_custom_credentials {
                         "请输入 access key 和 secret key。"
                     } else {
                         "这个部署没有配置 TOS 凭证（config.json）— \
-                         勾选“使用自定义凭证”后输入你自己的。"
+                         勾选“使用自带 AK/SK”后输入你自己的。"
                     });
                 } else {
                     ui.label(

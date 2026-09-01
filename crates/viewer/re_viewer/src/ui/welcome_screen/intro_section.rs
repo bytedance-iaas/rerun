@@ -52,8 +52,8 @@ pub enum IntroItem {
 
 /// The user guides for this fork's features: label and in-app guide page index.
 const GUIDE_PAGES: &[(&str, usize)] = &[
-    ("Viewer 篇 — 打开、可视化并探索数据集", 0),
-    ("Catalog 服务器篇 — 查询 TOS 数据集并用于训练", 1),
+    ("Viewer 篇 — 浏览和探索数据集", 0),
+    ("Catalog server 篇 — 查询 TOS 数据集并用于训练", 1),
 ];
 
 impl IntroItem {
@@ -69,7 +69,7 @@ impl IntroItem {
         }
         if let Some(url) = re_viewer_context::daft_link::downloads_url() {
             items.push(Self::DeploymentItem {
-                title: "获取 SDK",
+                title: "下载 SDK",
                 link_label: "下载",
                 url,
                 body: "火山引擎增强版 Python SDK — 各平台 wheel 均内置 Viewer，用 pip 安装即可。",

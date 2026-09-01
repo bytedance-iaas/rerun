@@ -19,7 +19,7 @@ const PAGES: &[Page] = &[
         markdown: include_str!("../../../../../docs/release/user-guide/01-viewer.md"),
     },
     Page {
-        tab: "Catalog 服务器篇",
+        tab: "Catalog server 篇",
         markdown: include_str!("../../../../../docs/release/user-guide/02-catalog.md"),
     },
 ];

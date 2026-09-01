@@ -216,7 +216,7 @@ impl OpenHfModal {
                 // Token: the deployment's docker-secret default is used unless the user opts
                 // into providing their own. Public datasets need no token at all.
                 ui.add_space(2.0);
-                ui.re_checkbox(&mut self.use_custom_token, "使用自定义 token");
+                ui.re_checkbox(&mut self.use_custom_token, "使用自带 token");
 
                 if self.use_custom_token {
                     egui::Grid::new("hf_token_field")

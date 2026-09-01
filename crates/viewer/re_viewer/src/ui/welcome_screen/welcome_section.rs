@@ -1,7 +1,7 @@
 use re_ui::DesignTokens;
 
 pub(super) const DOCS_URL: &str = "https://www.rerun.io/docs";
-pub(super) const WELCOME_SCREEN_TITLE: &str = "具身智能的数据底座";
+pub(super) const WELCOME_SCREEN_TITLE: &str = "VePAI之数据底座";
 pub(super) const WELCOME_SCREEN_BULLET_TEXT: &[&str] = &[
     "用 C++、Python 或 Rust 的 Rerun SDK 记录多频率、多模态数据",
     "可视化并探索管线各环节的实时或已录制数据",
