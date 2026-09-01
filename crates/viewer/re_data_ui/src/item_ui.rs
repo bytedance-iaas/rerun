@@ -791,7 +791,7 @@ pub fn entity_db_button_ui(
         item_content = item_content.with_buttons(move |ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, tr("Close recording", "关闭录制文件"))
+                .add(ui.small_icon_button_widget(&icons::CLOSE_SMALL, tr("Close recording", "关闭录制文件")))
                 .on_hover_text(match store_id.kind() {
                     re_log_types::StoreKind::Recording => tr("Close this recording", "关闭这个录制文件"),
                     re_log_types::StoreKind::Blueprint => {
@@ -812,14 +812,12 @@ pub fn entity_db_button_ui(
                 if is_hidden {
                     if ui
                         .small_icon_button(&icons::VISIBLE, tr("Move the episode back to the list", "把这个 episode 移回列表"))
-                        .on_hover_text(tr("Move the episode back to the list", "把这个 episode 移回列表"))
                         .clicked()
                     {
                         re_viewer_context::hidden_recordings::unhide(&store_id);
                     }
                 } else if ui
                     .small_icon_button(&icons::INVISIBLE, tr("Hide the episode", "隐藏这个 episode"))
-                    .on_hover_text(tr("Hide the episode", "隐藏这个 episode"))
                     .clicked()
                 {
                     re_viewer_context::hidden_recordings::hide(store_id.clone());
@@ -840,11 +838,11 @@ pub fn entity_db_button_ui(
                 ui.add_enabled_ui(!dataset_paused, |ui| {
                     if episode_loading {
                         if ui
-                            .small_icon_button(&icons::PAUSE, tr("Pause downloading this episode", "暂停下载这个 episode"))
-                            .on_hover_text(
-                                "暂停下载这个 episode。\
-                             点击该 episode（或它的继续按钮）可重新开始。",
-                            )
+                            .add(ui.small_icon_button_widget(&icons::PAUSE, tr("Pause downloading this episode", "暂停下载这个 episode")))
+                            .on_hover_text(tr(
+                                "Pause downloading this episode. Click the episode (or its resume button) to start again.",
+                                "暂停下载这个 episode。点击该 episode（或它的继续按钮）可重新开始。",
+                            ))
                             .clicked()
                         {
                             re_data_source::lerobot_remote::pause_current_item(
@@ -854,7 +852,6 @@ pub fn entity_db_button_ui(
                     } else if episode_parked {
                         if ui
                             .small_icon_button(&icons::PLAY, tr("Resume downloading this episode", "继续下载这个 episode"))
-                            .on_hover_text("继续下载这个 episode")
                             .clicked()
                         {
                             re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);
@@ -862,7 +859,6 @@ pub fn entity_db_button_ui(
                     } else if (has_data || episode_failed)
                         && ui
                             .small_icon_button(&icons::RESET, tr("Redownload this episode", "重新下载这个 episode"))
-                            .on_hover_text("重新下载这个 episode")
                             .clicked()
                     {
                         // Arm the re-download marker, then close the recording to drop the old
@@ -1036,8 +1032,7 @@ pub fn table_id_button_ui(
         item_content = item_content.with_buttons(|ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, tr("Close table", "关闭表格"))
-                .on_hover_text("关闭这个表格（所有数据都会丢失）");
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close this table (all data will be lost)", "关闭这个表格（所有数据都会丢失）"));
             if resp.clicked() {
                 ctx.command_sender()
                     .send_system(SystemCommand::CloseRecordingOrTable(

@@ -1332,7 +1332,6 @@ fn list_views_with_entity(
 
 fn remove_button_ui(ui: &mut Ui, alt_text_and_tooltip: &str) -> Response {
     ui.small_icon_button(&re_ui::icons::REMOVE, alt_text_and_tooltip)
-        .on_hover_text(alt_text_and_tooltip)
 }
 
 fn visibility_button_ui(ui: &mut egui::Ui, enabled: bool, visible: &mut bool) -> egui::Response {

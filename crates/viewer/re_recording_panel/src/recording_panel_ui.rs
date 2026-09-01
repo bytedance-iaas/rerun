@@ -543,8 +543,7 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
         list_item_content = list_item_content.with_buttons(|ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"))
-                .on_hover_text(tr("Remove this dataset from the viewer", "从 Viewer 中移除该数据集"));
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"));
 
             if resp.clicked() {
                 for db in displayed_segments.iter().filter_map(SegmentData::entity_db) {
@@ -763,8 +762,7 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
 
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"))
-                .on_hover_text(tr("Remove this dataset from the viewer", "从 Viewer 中移除该数据集"));
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"));
 
             if resp.clicked() {
                 ctx.command_sender()
@@ -951,8 +949,7 @@ fn receiver_ui(
         })
         .with_buttons(|ui| {
             let resp = ui
-                .small_icon_button(&re_ui::icons::REMOVE, tr("Disconnect", "断开连接"))
-                .on_hover_text(tr("Disconnect from this source", "断开与该数据来源的连接"));
+                .small_icon_button(&re_ui::icons::REMOVE, tr("Disconnect from this source", "断开与该数据来源的连接"));
 
             if resp.clicked() {
                 ctx.connected_receivers.remove(receiver);

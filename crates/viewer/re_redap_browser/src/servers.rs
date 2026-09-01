@@ -297,7 +297,6 @@ impl Server {
                 // Navigate up one level.
                 if ui
                     .small_icon_button(&icons::ARROW_UP, tr("Go to parent folder", "回到上一级文件夹"))
-                    .on_hover_text(tr("Go to parent folder", "回到上一级文件夹"))
                     .clicked()
                 {
                     let parent_route = if let Some((parent, _)) =

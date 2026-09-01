@@ -284,20 +284,20 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         let store = storage_engine.store();
         let schema = store.schema().chunk_column_descriptors();
 
-        ui.grid_left_hand_label("实体")
+        ui.grid_left_hand_label(tr("Entities", "实体"))
             .on_hover_text("位于 ChunkStore 中的实体数");
         ui.label(re_format::format_uint(store.all_entities().len()));
         ui.end_row();
 
-        ui.grid_left_hand_label("时间轴列");
+        ui.grid_left_hand_label(tr("Timeline columns", "时间轴列"));
         ui.label(re_format::format_uint(schema.indices.len()));
         ui.end_row();
 
-        ui.grid_left_hand_label("数据列");
+        ui.grid_left_hand_label(tr("Data columns", "数据列"));
         ui.label(re_format::format_uint(schema.components.len()));
         ui.end_row();
 
-        ui.grid_left_hand_label("行数");
+        ui.grid_left_hand_label(tr("Rows", "行数"));
         ui.label(re_format::format_uint(store.stats().total().num_rows));
         ui.end_row();
     }
@@ -310,7 +310,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
             chunk_max_rows_if_unsorted,
         } = db.storage_engine().store().config();
 
-        ui.grid_left_hand_label("chunk 合并配置");
+        ui.grid_left_hand_label(tr("Compaction config", "chunk 合并配置"));
         ui.label(trf!(
             "{} rows ({} if unsorted) or {}",
             "{} 行（未排序时 {} 行）或 {}",
@@ -319,6 +319,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
             re_format::format_bytes(chunk_max_bytes as _),
         ))
             .on_hover_text(
+                if re_i18n::is_chinese() {
                 unindent::unindent(&format!("\
                     当前录制文件的 chunk 合并配置为：不断合并 chunk，\
                     直到达到 {chunk_max_rows} 行（未排序时 {chunk_max_rows_if_unsorted} 行）或 {chunk_max_bytes} 上限，以先到者为准。
@@ -348,7 +349,42 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
                         ENV_CHUNK_MAX_ROWS = ChunkStoreConfig::ENV_CHUNK_MAX_ROWS,
                         ENV_CHUNK_MAX_ROWS_IF_UNSORTED = ChunkStoreConfig::ENV_CHUNK_MAX_ROWS_IF_UNSORTED,
                         ENV_CHUNK_MAX_BYTES = ChunkStoreConfig::ENV_CHUNK_MAX_BYTES,
-                )),
+                ))
+                } else {
+                unindent::unindent(&format!("\
+                    The current compaction configuration for this recording is to merge chunks until they \
+                    reach either a maximum of {chunk_max_rows} rows ({chunk_max_rows_if_unsorted} if unsorted) or {chunk_max_bytes}, whichever comes first.
+
+                    The viewer compacts chunks together as they come in, in order to find the right \
+                    balance between space and compute overhead.
+                    This is not to be confused with the SDK's batcher, which does a similar job, with \
+                    different goals and constraints, on the logging side (SDK).
+                    These two functions (SDK batcher & viewer compactor) complement each other.
+
+                    Higher thresholds generally translate to better space overhead, but require more compute \
+                    for both ingestion and queries.
+                    Lower thresholds generally translate to worse space overhead, but faster ingestion times
+                    and more responsive queries.
+                    This is a broad oversimplification -- use the defaults if unsure, they fit most workfloads well.
+
+                    To modify the current configuration, set these environment variables before starting the viewer:
+                    * {ENV_CHUNK_MAX_ROWS}
+                    * {ENV_CHUNK_MAX_ROWS_IF_UNSORTED}
+                    * {ENV_CHUNK_MAX_BYTES}
+
+                    This compaction process is an ephemeral, in-memory optimization of the Rerun viewer.\
+                    It will not modify the recording itself: use the `Save` command of the viewer, or the \
+                    `rerun rrd optimize` CLI tool if you wish to persist the compacted results, which will \
+                    make future runs cheaper.
+                    ",
+                        chunk_max_rows = re_format::format_uint(chunk_max_rows),
+                        chunk_max_rows_if_unsorted = re_format::format_uint(chunk_max_rows_if_unsorted),
+                        chunk_max_bytes = re_format::format_bytes(chunk_max_bytes as _),
+                        ENV_CHUNK_MAX_ROWS = ChunkStoreConfig::ENV_CHUNK_MAX_ROWS,
+                        ENV_CHUNK_MAX_ROWS_IF_UNSORTED = ChunkStoreConfig::ENV_CHUNK_MAX_ROWS_IF_UNSORTED,
+                        ENV_CHUNK_MAX_BYTES = ChunkStoreConfig::ENV_CHUNK_MAX_BYTES,
+                ))
+                },
             );
         ui.end_row();
     }
@@ -356,7 +392,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
     if let Some(data_source) = &db.data_source
         && ui_layout.is_selection_panel()
     {
-        ui.grid_left_hand_label("数据源");
+        ui.grid_left_hand_label(tr("Data source", "数据源"));
         data_source_button_ui(ctx, ui, data_source);
         ui.end_row();
     }
@@ -366,7 +402,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 fn debug_ui(ui: &mut egui::Ui, db: &EntityDb) {
     egui::Grid::new("debug-info").show(ui, |ui| {
         if let Some(manifest) = db.rrd_manifest_index().manifest() {
-            ui.label("实体");
+            ui.label(tr("Entities", "实体"));
             ui.label(format_uint(
                 manifest.recording_schema().all_entities().len(),
             ));
@@ -377,11 +413,11 @@ fn debug_ui(ui: &mut egui::Ui, db: &EntityDb) {
         ui.label(db.is_buffering().to_string());
         ui.end_row();
 
-        ui.label("连接");
+        ui.label(tr("Connection", "连接"));
         ui.label(format!("{:?}", db.redap_connection_state())); // NOLINT: debug-only UI
         ui.end_row();
 
-        ui.label("物理 chunk 数");
+        ui.label(tr("Physical chunks", "物理 chunk 数"));
         ui.label(format_bytes(db.byte_size_of_physical_chunks() as _));
         ui.end_row();
     });
