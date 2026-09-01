@@ -55,8 +55,8 @@ impl TableCommandKind {
     pub fn text_and_tooltip(self) -> (&'static str, &'static str) {
         match self {
             Self::Refresh => (
-                "Refresh table",
-                "Refresh the contents of the current dataset or table",
+                "刷新表",
+                "刷新当前数据集或表的内容",
             ),
         }
     }

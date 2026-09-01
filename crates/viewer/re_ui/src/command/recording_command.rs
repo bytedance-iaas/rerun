@@ -167,98 +167,98 @@ impl RecordingCommandKind {
     pub fn text_and_tooltip(self) -> (&'static str, &'static str) {
         match self {
             Self::Save => (
-                "Save recording…",
-                "Save all data to a Rerun data file (.rrd)",
+                "保存录制文件…",
+                "把全部数据保存为 Rerun 数据文件（.rrd）",
             ),
 
             Self::SaveTimeSelection => (
-                "Save current time selection…",
-                "Save data for the current loop selection to a Rerun data file (.rrd)",
+                "保存当前选中时间段…",
+                "把当前循环选区内的数据保存为 Rerun 数据文件（.rrd）",
             ),
 
             Self::SaveBlueprint => (
-                "Save blueprint…",
-                "Save the current viewer setup as a Rerun blueprint file (.rbl)",
+                "保存 blueprint…",
+                "把当前的 Viewer 布局保存为 Rerun blueprint 文件（.rbl）",
             ),
 
             Self::Close => (
-                "Close current recording",
-                "Close the current recording (unsaved data will be lost)",
+                "关闭当前录制文件",
+                "关闭当前录制文件（未保存的数据会丢失）",
             ),
 
             Self::Undo => (
-                "Undo",
-                "Undo the last blueprint edit for the open recording",
+                "撤销",
+                "撤销当前录制文件上最近一次 blueprint 修改",
             ),
-            Self::Redo => ("Redo", "Redo the last undone thing"),
+            Self::Redo => ("重做", "重做刚撤销的操作"),
 
             Self::AddViewOrContainer => (
-                "Add view or container…",
-                "Add a new view or container to the viewport",
+                "添加视图或容器…",
+                "在视口中添加一个新的视图或容器",
             ),
 
             Self::ClearActiveBlueprint => (
-                "Reset to default blueprint",
-                "Clear active blueprint and use the default blueprint instead. If no default blueprint is set, this will use a heuristic blueprint.",
+                "重置为默认 blueprint",
+                "清除当前 blueprint，改用默认 blueprint。如果没有设置默认 blueprint，会改用自动推断的 blueprint。",
             ),
 
             Self::ClearActiveBlueprintAndEnableHeuristics => (
-                "Reset to heuristic blueprint",
-                "Re-populate viewport with automatically chosen views using default visualizers",
+                "重置为自动推断的 blueprint",
+                "用默认可视化器自动选择视图，重新填充视口",
             ),
 
-            Self::ToggleTimePanel => ("Toggle time panel", "Toggle the bottom panel"),
+            Self::ToggleTimePanel => ("显示/隐藏时间面板", "显示或隐藏底部面板"),
             Self::ToggleChunkStoreBrowser => (
-                "Toggle chunk store browser",
-                "Toggle the chunk store browser",
+                "显示/隐藏 chunk 存储浏览器",
+                "显示或隐藏 chunk 存储浏览器",
             ),
 
             #[cfg(debug_assertions)]
             Self::ToggleBlueprintInspectionPanel => (
-                "Toggle blueprint inspection panel",
-                "Inspect the timeline of the internal blueprint data.",
+                "显示/隐藏 blueprint 检查面板",
+                "查看内部 blueprint 数据的时间轴。",
             ),
 
-            Self::PlaybackTogglePlayPause => ("Toggle play/pause", "Either play or pause the time"),
+            Self::PlaybackTogglePlayPause => ("播放/暂停", "播放或暂停时间"),
             Self::PlaybackStepBack => (
-                "Step backwards",
-                "Move the time marker back to the previous point in time with any data",
+                "上一步",
+                "把时间标记移到上一个有数据的时间点",
             ),
             Self::PlaybackStepForward => (
-                "Step forwards",
-                "Move the time marker to the next point in time with any data",
+                "下一步",
+                "把时间标记移到下一个有数据的时间点",
             ),
-            Self::PlaybackBack => ("Backward 1", "Move the time marker backward by 1 second"),
-            Self::PlaybackForward => ("Forward 1", "Move the time marker forward by 0.1 seconds"),
-            Self::PlaybackBackFast => ("Backward 10", "Move the time marker backwards by 1 second"),
+            Self::PlaybackBack => ("后退 1", "把时间标记后退 1 秒"),
+            Self::PlaybackForward => ("前进 1", "把时间标记前进 0.1 秒"),
+            Self::PlaybackBackFast => ("后退 10", "把时间标记后退 1 秒"),
             Self::PlaybackForwardFast => {
-                ("Forward 10", "Move the time marker forwards by 0.1 seconds")
+                ("前进 10", "把时间标记前进 0.1 秒")
             }
-            Self::PlaybackBeginning => ("Start of timeline", "Go to beginning of timeline"),
+            Self::PlaybackBeginning => ("回到时间轴开头", "跳到时间轴的起点"),
             Self::PlaybackEndAndFollow => (
-                "End of timeline",
-                "Go to end of timeline and follow the latest data as it streams in",
+                "跳到时间轴末尾",
+                "跳到时间轴末尾，并跟随不断流入的最新数据",
             ),
 
             Self::PlaybackSpeed(_) => (
-                "Set playback speed",
-                "This is a chord, so you can press 5+0 to set the speed to 50x",
+                "设置播放速度",
+                "这是组合按键：比如依次按 5、0 就是 50 倍速",
             ),
 
             #[cfg(not(target_arch = "wasm32"))]
             Self::PrintChunkStore => (
-                "Print datastore",
-                "Prints the entire chunk store to the console and clipboard. WARNING: this may be A LOT of text.",
+                "打印数据存储",
+                "把整个 chunk 存储打印到控制台和剪贴板。注意：文本量可能非常大。",
             ),
             #[cfg(not(target_arch = "wasm32"))]
             Self::PrintBlueprintStore => (
-                "Print blueprint store",
-                "Prints the entire blueprint store to the console and clipboard. WARNING: this may be A LOT of text.",
+                "打印 blueprint 存储",
+                "把整个 blueprint 存储打印到控制台和剪贴板。注意：文本量可能非常大。",
             ),
             #[cfg(not(target_arch = "wasm32"))]
             Self::PrintPrimaryCache => (
-                "Print primary cache",
-                "Prints the state of the entire primary cache to the console and clipboard. WARNING: this may be A LOT of text.",
+                "打印主缓存",
+                "把整个主缓存的状态打印到控制台和剪贴板。注意：文本量可能非常大。",
             ),
         }
     }

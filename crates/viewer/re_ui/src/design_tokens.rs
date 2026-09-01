@@ -585,6 +585,23 @@ impl DesignTokens {
             .get_mut(&egui::FontFamily::Proportional)
             .unwrap()
             .insert(0, "Inter-Medium".into());
+
+        // 中文回退字体：egui 自带字体没有汉字字形，UI 已汉化，两种字体族都需要兜底。
+        // Noto Sans SC（SIL OFL 1.1，见同目录 LICENSE-NotoSansSC.txt），已裁剪到常用汉字范围。
+        font_definitions.font_data.insert(
+            "NotoSansSC".into(),
+            std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+                "../data/NotoSansSC-subset.otf"
+            ))),
+        );
+        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+            font_definitions
+                .families
+                .get_mut(&family)
+                .unwrap()
+                .push("NotoSansSC".into());
+        }
+
         ctx.set_fonts(font_definitions);
     }
 

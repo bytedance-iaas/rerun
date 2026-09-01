@@ -115,12 +115,12 @@ impl RedapServerCommandKind {
     pub fn text_and_tooltip(self) -> (&'static str, &'static str) {
         match self {
             Self::Refresh => (
-                "Refresh server",
-                "Refresh the contents (datasets & tables) of the server",
+                "刷新服务器",
+                "刷新服务器上的内容（数据集和表）",
             ),
-            Self::Edit => ("Edit server…", "Edit the URL and credentials of the server"),
-            Self::CopyUrl => ("Copy server URL", "Copy the URL of the server"),
-            Self::Remove => ("Remove server", "Remove the server"),
+            Self::Edit => ("编辑服务器…", "修改服务器的 URL 和访问凭证"),
+            Self::CopyUrl => ("复制服务器 URL", "复制服务器的 URL"),
+            Self::Remove => ("移除服务器", "移除该服务器"),
         }
     }
 

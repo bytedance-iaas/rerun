@@ -24,13 +24,6 @@ const PAGES: &[Page] = &[
     },
 ];
 
-/// A CJK font for the (Chinese) guide text — egui's built-in fonts have no CJK glyphs.
-/// Noto Sans SC (SIL OFL 1.1, see LICENSE-NotoSansSC.txt next to it), subset to the
-/// common CJK ranges. Registered lazily on first open, as a fallback for both font
-/// families, so it also fixes CJK anywhere else in the UI once loaded.
-const CJK_FONT: &[u8] =
-    include_bytes!("../../../../../crates/viewer/re_viewer/data/fonts/NotoSansSC-subset.otf");
-
 /// The screenshots the pages reference, embedded alongside them.
 const IMAGES: &[(&str, &[u8])] = &[
     (
@@ -131,20 +124,6 @@ impl UserGuideModal {
                     ui.ctx()
                         .include_bytes(format!("bytes://user-guide/images/{name}"), *bytes);
                 }
-                ui.ctx().add_font(egui::epaint::text::FontInsert::new(
-                    "NotoSansSC",
-                    egui::FontData::from_static(CJK_FONT),
-                    vec![
-                        egui::epaint::text::InsertFontFamily {
-                            family: egui::FontFamily::Proportional,
-                            priority: egui::epaint::text::FontPriority::Lowest,
-                        },
-                        egui::epaint::text::InsertFontFamily {
-                            family: egui::FontFamily::Monospace,
-                            priority: egui::epaint::text::FontPriority::Lowest,
-                        },
-                    ],
-                ));
                 self.images_registered = true;
             }
         }
