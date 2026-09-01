@@ -212,7 +212,7 @@ impl WebHandle {
                 );
             }
             Err(err) => {
-                re_log::warn!(?url, "Failed to open URL: {err}");
+                re_log::warn!(?url, "打开 URL 失败：{err}");
             }
         }
     }
@@ -241,7 +241,7 @@ impl WebHandle {
         };
 
         if self.log_senders.contains_key(id) {
-            re_log::warn!("Channel with id '{}' already exists.", id);
+            re_log::warn!("ID 为 '{}' 的通道已存在。", id);
             return;
         }
 
@@ -742,7 +742,7 @@ fn create_app(
         match re_auth::Jwt::try_from(fallback_token) {
             Ok(token) => connection_registry.set_fallback_token(token),
             Err(err) => {
-                re_log::warn!("Failed to parse JWT token: {err}");
+                re_log::warn!("解析 JWT token 失败：{err}");
             }
         }
     }
@@ -797,7 +797,7 @@ fn create_app(
                 .options_mut(|o| o.theme_preference = egui::ThemePreference::System),
             _ => {
                 re_log::warn!(
-                    "Ignoring unknown `theme` value {theme:?}; expected `dark`, `light`, or `system`."
+                    "忽略未知的 `theme` 值 {theme:?}；应为 `dark`、`light` 或 `system`。"
                 );
             }
         }
@@ -835,7 +835,7 @@ fn create_app(
                     );
                 }
                 Err(err) => {
-                    re_log::warn!(?url, "Failed to open URL: {err}");
+                    re_log::warn!(?url, "打开 URL 失败：{err}");
                 }
             }
         }

@@ -137,14 +137,14 @@ impl ViewClass for MapView {
     }
 
     fn help(&self, os: egui::os::OperatingSystem) -> Help {
-        Help::new("Map view")
+        Help::new("Map 视图")
             .docs_link("https://rerun.io/docs/reference/types/views/map_view")
-            .control("Pan", (icons::LEFT_MOUSE_CLICK, "+", "drag"))
+            .control("平移", (icons::LEFT_MOUSE_CLICK, "+", "拖动"))
             .control(
-                "Zoom",
+                "缩放",
                 IconText::from_modifiers_and(os, Modifiers::COMMAND, icons::SCROLL),
             )
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control("重置视角", ("双击", icons::LEFT_MOUSE_CLICK))
     }
 
     fn on_register(

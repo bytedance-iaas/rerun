@@ -50,19 +50,19 @@ impl ViewClass for BarChartView {
             ..
         } = egui::InputOptions::default(); // This is OK, since we don't allow the user to change these modifiers.
 
-        Help::new("Bar chart view")
+        Help::new("Bar chart 视图")
             .docs_link("https://rerun.io/docs/reference/types/views/bar_chart_view")
-            .control("Pan", (icons::LEFT_MOUSE_CLICK, "+", "drag"))
+            .control("平移", (icons::LEFT_MOUSE_CLICK, "+", "拖动"))
             .control(
-                "Horizontal pan",
+                "水平平移",
                 IconText::from_modifiers_and(os, horizontal_scroll_modifier, icons::SCROLL),
             )
             .control(
-                "Zoom",
+                "缩放",
                 IconText::from_modifiers_and(os, zoom_modifier, icons::SCROLL),
             )
             .control(
-                "Zoom X-axis",
+                "缩放 X 轴",
                 IconText::from_modifiers_and(
                     os,
                     zoom_modifier | horizontal_scroll_modifier,
@@ -70,7 +70,7 @@ impl ViewClass for BarChartView {
                 ),
             )
             .control(
-                "Zoom Y-axis",
+                "缩放 Y 轴",
                 IconText::from_modifiers_and(
                     os,
                     zoom_modifier | vertical_scroll_modifier,
@@ -78,10 +78,10 @@ impl ViewClass for BarChartView {
                 ),
             )
             .control(
-                "Zoom to selection",
-                (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "drag"),
+                "缩放到选区",
+                (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "拖动"),
             )
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control("重置视角", ("双击", icons::LEFT_MOUSE_CLICK))
     }
 
     fn on_register(

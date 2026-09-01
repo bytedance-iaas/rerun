@@ -265,22 +265,22 @@ impl ItemCollection {
             let entries = entries.map(|(_, text)| text).collect_vec();
 
             let desc = match desc {
-                ClipboardTextDesc::FilePath => "file path",
+                ClipboardTextDesc::FilePath => "文件路径",
                 ClipboardTextDesc::Url => "URL",
-                ClipboardTextDesc::AppId => "app id",
-                ClipboardTextDesc::StoreId => "store id",
-                ClipboardTextDesc::EntityPath => "entity path",
-                ClipboardTextDesc::ComponentPath => "component path",
+                ClipboardTextDesc::AppId => "应用 ID",
+                ClipboardTextDesc::StoreId => "存储 ID",
+                ClipboardTextDesc::EntityPath => "实体路径",
+                ClipboardTextDesc::ComponentPath => "组件路径",
             };
             if !content_description.is_empty() {
-                content_description.push_str(", ");
+                content_description.push_str("、");
             }
             if entries.len() == 1 {
                 // Singular
                 content_description.push_str(desc);
             } else {
                 // Plural
-                write!(content_description, "{desc}s").ok();
+                write!(content_description, "{desc}").ok();
             }
 
             let texts = entries.into_iter().join("\n");
@@ -292,7 +292,7 @@ impl ItemCollection {
 
         if !clipboard_text.is_empty() {
             re_log::info!(
-                "Copied {content_description} to clipboard:\n{}",
+                "已复制 {content_description} 到剪贴板：\n{}",
                 &clipboard_text
             );
             egui_ctx.copy_text(clipboard_text);

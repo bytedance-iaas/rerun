@@ -28,7 +28,7 @@ impl TextureReadbacks {
         self.active_readbacks.retain(|(id, action)| {
             if let Some(readback) = re_renderer::poll_read_texture(render_ctx, *id) {
                 let Some(color_type) = texture_format_to_color_type(readback.format) else {
-                    re_log::warn!("Can't download texture with format {:?}", readback.format);
+                    re_log::warn!("无法下载格式为 {:?} 的纹理", readback.format);
                     return false;
                 };
                 match action {
@@ -56,7 +56,7 @@ impl TextureReadbacks {
                                 color_type,
                             )
                         {
-                            re_log::error!("Failed to encode preview image as PNG: {err}");
+                            re_log::error!("将预览图编码为 PNG 失败：{err}");
                         } else {
                             command_sender.save_file_dialog(
                                 re_capabilities::MainThreadToken::from_egui_ui(ui),
@@ -94,7 +94,7 @@ fn to_color_image(
         ExtendedColorType::A8 | ExtendedColorType::L8 => egui::ColorImage::from_gray(size, data),
 
         ExtendedColorType::L16 => {
-            re_log::warn!("16 bit image copied as 8 bit image, some precision was lost.");
+            re_log::warn!("16 位图像已按 8 位图像复制，损失了部分精度。");
 
             egui::ColorImage::from_gray_iter(
                 size,
@@ -129,7 +129,7 @@ fn to_color_image(
         ),
 
         ExtendedColorType::Rgb16 => {
-            re_log::warn!("16 bit image copied as 8 bit image, some precision was lost.");
+            re_log::warn!("16 位图像已按 8 位图像复制，损失了部分精度。");
 
             egui::ColorImage::from_rgb(
                 size,
@@ -156,7 +156,7 @@ fn to_color_image(
         }
 
         ExtendedColorType::Rgba16 => {
-            re_log::warn!("16 bit image copied as 8 bit image, some precision was lost.");
+            re_log::warn!("16 位图像已按 8 位图像复制，损失了部分精度。");
 
             egui::ColorImage::from_rgb(
                 size,
@@ -186,7 +186,7 @@ fn to_color_image(
         }
 
         _ => {
-            re_log::error!("Can't copy textures with color type `{color_type:?}`");
+            re_log::error!("无法复制颜色类型为 `{color_type:?}` 的纹理");
             return None;
         }
     })

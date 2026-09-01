@@ -690,7 +690,7 @@ impl StoreHub {
         if !self.active_blueprint_by_app_id.contains_key(app_id)
             && let Err(err) = self.try_to_load_persisted_blueprint(app_id)
         {
-            re_log::warn!("Failed to load persisted blueprint: {err}");
+            re_log::warn!("加载已保存的 blueprint 失败：{err}");
         }
     }
 
@@ -710,7 +710,7 @@ impl StoreHub {
     /// Close this application and all its recordings.
     pub fn close_app(&mut self, app_id: &ApplicationId) {
         if let Err(err) = self.save_app_blueprints() {
-            re_log::warn!("Failed to save blueprints: {err}");
+            re_log::warn!("保存 blueprint 失败：{err}");
         }
 
         let mut store_ids_removed = HashSet::default();
@@ -832,7 +832,7 @@ impl StoreHub {
             let blueprint_id = blueprint_id.clone();
             if let Err(err) = self.set_cloned_blueprint_active_for_app(&blueprint_id) {
                 re_log::warn!(
-                    "Failed to promote new default blueprint to active for '{app_id}': {err}"
+                    "将新的默认 blueprint 设为“{app_id}”的活动 blueprint 失败：{err}"
                 );
             }
         }
@@ -880,7 +880,7 @@ impl StoreHub {
         if let Some(blueprint_id) = self.default_blueprint_by_app_id.get(app_id).cloned() {
             self.set_cloned_blueprint_active_for_app(&blueprint_id)
                 .unwrap_or_else(|err| {
-                    re_log::warn!("Failed to make blueprint active: {err}");
+                    re_log::warn!("激活 blueprint 失败：{err}");
                 });
             return;
         }
@@ -1010,7 +1010,7 @@ impl StoreHub {
         if let Some(deleter) = &self.persistence.deleter {
             for app_id in &affected_app_ids {
                 if let Err(err) = (deleter)(app_id) {
-                    re_log::warn!("Failed to delete persisted blueprint for {app_id}: {err}");
+                    re_log::warn!("删除 {app_id} 已保存的 blueprint 失败：{err}");
                 }
             }
         }
@@ -1127,8 +1127,7 @@ impl StoreHub {
 
             if closed_count > 0 {
                 re_log::warn!(
-                    "Closed {} to stay within memory limit",
-                    re_format::format_plural_s(closed_count, "background recording")
+                    "为控制在内存上限以内，已关闭 {closed_count} 个后台录制文件"
                 );
             }
         }

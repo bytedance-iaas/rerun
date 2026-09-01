@@ -33,7 +33,7 @@ impl BackgroundTasks {
         let name = name.into();
 
         if self.promises.contains_key(&name) {
-            anyhow::bail!("there's already a promise {name:?} running!");
+            anyhow::bail!("已经有一个名为 {name:?} 的任务在运行了！");
         }
 
         let f = move || Box::new(f()) as Box<dyn Any + Send>; // erase it
@@ -50,7 +50,7 @@ impl BackgroundTasks {
         F: FnOnce() -> anyhow::Result<PathBuf> + Send + 'static,
     {
         if self.is_file_save_in_progress() {
-            anyhow::bail!("Another save operation is already in progress");
+            anyhow::bail!("已经有一个保存操作正在进行中");
         }
 
         self.spawn_threaded_promise(FILE_SAVER_PROMISE, f)

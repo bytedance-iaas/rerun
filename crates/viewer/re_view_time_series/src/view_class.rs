@@ -140,19 +140,19 @@ impl ViewClass for TimeSeriesView {
             ..
         } = egui::InputOptions::default(); // This is OK, since we don't allow the user to change these modifiers.
 
-        Help::new("Time series view")
+        Help::new("Time series 视图")
             .docs_link("https://rerun.io/docs/reference/types/views/time_series_view")
-            .control("Pan", (icons::LEFT_MOUSE_CLICK, "+", "drag"))
+            .control("平移", (icons::LEFT_MOUSE_CLICK, "+", "拖动"))
             .control(
-                "Horizontal pan",
+                "水平平移",
                 IconText::from_modifiers_and(os, horizontal_scroll_modifier, icons::SCROLL),
             )
             .control(
-                "Zoom",
+                "缩放",
                 IconText::from_modifiers_and(os, zoom_modifier, icons::SCROLL),
             )
             .control(
-                "Zoom X-axis",
+                "缩放 X 轴",
                 IconText::from_modifiers_and(
                     os,
                     zoom_modifier | horizontal_scroll_modifier,
@@ -160,7 +160,7 @@ impl ViewClass for TimeSeriesView {
                 ),
             )
             .control(
-                "Zoom Y-axis",
+                "缩放 Y 轴",
                 IconText::from_modifiers_and(
                     os,
                     zoom_modifier | vertical_scroll_modifier,
@@ -168,18 +168,18 @@ impl ViewClass for TimeSeriesView {
                 ),
             )
             .control(
-                "Zoom to selection",
-                (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "drag"),
+                "缩放到选区",
+                (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "拖动"),
             )
-            .control("Move time cursor", MouseButtonText(MOVE_TIME_CURSOR_BUTTON))
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control("移动时间标记", MouseButtonText(MOVE_TIME_CURSOR_BUTTON))
+            .control("重置视角", ("双击", icons::LEFT_MOUSE_CLICK))
             .control_separator()
-            .control("Hide/show series", (icons::LEFT_MOUSE_CLICK, "legend"))
+            .control("显示/隐藏序列", (icons::LEFT_MOUSE_CLICK, "图例"))
             .control(
-                "Hide/show other series",
+                "显示/隐藏其他序列",
                 (
                     IconText::from_modifiers_and(os, egui::Modifiers::ALT, icons::LEFT_MOUSE_CLICK),
-                    "legend",
+                    "图例",
                 ),
             )
     }

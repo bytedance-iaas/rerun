@@ -387,7 +387,7 @@ impl AppState {
 
                 // If the blueprint is invalid, reset it.
                 if viewport_ui.blueprint.is_invalid() {
-                    re_log::warn!("Incompatible blueprint detected. Resetting to default.");
+                    re_log::warn!("检测到不兼容的 blueprint，正在重置为默认值。");
                     command_sender
                         .send_system(re_viewer_context::SystemCommand::ClearActiveBlueprint);
 

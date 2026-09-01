@@ -14,12 +14,12 @@ pub fn default_blueprint_path(app_id: &ApplicationId) -> anyhow::Result<std::pat
     use anyhow::Context as _;
 
     let Some(storage_dir) = eframe::storage_dir(crate::native::APP_ID) else {
-        anyhow::bail!("Error finding project directory for blueprints.")
+        anyhow::bail!("找不到 blueprint 的项目目录。")
     };
 
     let blueprint_dir = storage_dir.join("blueprints");
     std::fs::create_dir_all(&blueprint_dir)
-        .context("Could not create blueprint save directory.")?;
+        .context("无法创建 blueprint 保存目录。")?;
 
     // We want a unique filename (not a directory) for each app-id.
 
@@ -37,7 +37,7 @@ pub fn default_blueprint_path(app_id: &ApplicationId) -> anyhow::Result<std::pat
     let total_reserved_length = directory_part_length + hash_part_length + extension_part_length;
     if total_reserved_length > MAX_PATH {
         anyhow::bail!(
-            "Could not form blueprint path: total minimum length exceeds {MAX_PATH} characters."
+            "无法生成 blueprint 路径：最小总长度超过了 {MAX_PATH} 个字符。"
         )
     }
     sanitized_app_id.truncate(MAX_PATH - total_reserved_length);
@@ -76,10 +76,10 @@ pub fn encode_to_file(
     use anyhow::Context as _;
 
     let mut file = std::fs::File::create(path)
-        .with_context(|| format!("Failed to create file at {path:?}"))?;
+        .with_context(|| format!("创建文件失败：{path:?}"))?;
 
     let encoding_options = re_log_encoding::rrd::EncodingOptions::PROTOBUF_COMPRESSED;
     re_log_encoding::Encoder::encode_into(version, encoding_options, messages, &mut file)
         .map(|_| ())
-        .context("Message encode")
+        .context("编码消息失败")
 }

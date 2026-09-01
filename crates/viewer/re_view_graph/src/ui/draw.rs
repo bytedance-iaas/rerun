@@ -389,7 +389,7 @@ pub fn draw_graph(
             }
             Node::Implicit { graph_node, .. } => {
                 draw_node(ui, center, node.label(), Default::default(), lod).on_hover_text(format!(
-                    "Implicit node {} created via a reference in a GraphEdge component",
+                    "隐式节点 {}，通过 GraphEdge 组件中的引用创建",
                     graph_node.as_str(),
                 ))
             }

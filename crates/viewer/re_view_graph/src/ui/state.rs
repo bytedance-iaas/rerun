@@ -20,8 +20,8 @@ impl GraphViewState {
         let Some(rect) = self.layout_state.bounding_rect() else {
             return;
         };
-        ui.grid_left_hand_label("Bounding box")
-            .on_hover_text("The bounding box encompassing all entities in the view right now");
+        ui.grid_left_hand_label("包围盒")
+            .on_hover_text("当前视图中包含所有实体的包围盒");
         ui.vertical(|ui| {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
             let egui::Rect { min, max } = rect;
@@ -32,7 +32,7 @@ impl GraphViewState {
     }
 
     pub fn simulation_ui(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Reset simulation").clicked() {
+        if ui.button("重置模拟").clicked() {
             self.layout_state.reset();
         }
     }

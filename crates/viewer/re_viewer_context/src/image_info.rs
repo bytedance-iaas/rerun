@@ -516,11 +516,11 @@ impl ImageInfo {
                 &mut std::io::Cursor::new(&mut png_bytes),
                 image::ImageFormat::Png,
             ) {
-                anyhow::bail!("Failed to encode PNG: {err}");
+                anyhow::bail!("编码 PNG 失败：{err}");
             }
             Ok(png_bytes)
         } else {
-            anyhow::bail!("Invalid image");
+            anyhow::bail!("无效的图片");
         }
     }
 }

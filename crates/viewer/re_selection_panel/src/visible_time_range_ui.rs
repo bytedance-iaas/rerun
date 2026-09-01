@@ -128,8 +128,7 @@ fn save_visible_time_ranges(
             QueryRange::TimeRange(time_range) => time_range,
             QueryRange::LatestAt => {
                 re_log::error!(
-                    "Latest-at queries can't be used as an override yet. They can only \
-                come from defaults."
+                    "Latest-at 查询目前还不能用作覆盖，只能来自默认值。"
                 );
                 return;
             }
@@ -170,36 +169,36 @@ fn query_range_ui(
 ) {
     let time_ctrl = &ctx.time_ctrl;
     let Some(&timeline) = time_ctrl.timeline() else {
-        ui.weak("No active timeline");
+        ui.weak("没有活动的时间轴");
         return;
     };
     let time_type = timeline.typ();
 
-    let markdown = "# Visible time range\n
-This feature controls the time range used to display data in the view.
+    let markdown = "# 可见时间范围\n
+这个功能控制视图里用来显示数据的时间范围。
 
-Notes:
-- The settings are inherited from the enclosing view if not overridden.
-- Visible time range properties are stored on a per-timeline basis.
-- The data current as of the time range starting time is included.";
+说明：
+- 如果没有设置覆盖，这些设置会从上层视图继承。
+- 可见时间范围属性是按时间轴分别存储的。
+- 时间范围起始时刻当时有效的数据会被包含在内。";
 
     let collapsing_response = ui
-        .section_collapsing_header("Visible time range")
+        .section_collapsing_header("可见时间范围")
         .default_open(true)
         .with_help_markdown(markdown)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.re_radio_value(has_individual_time_range, false, "Default")
+                ui.re_radio_value(has_individual_time_range, false, "默认")
                     .on_hover_text(if is_view {
-                        "Default query range settings for this kind of view"
+                        "这类视图的默认查询范围设置"
                     } else {
-                        "Query range settings inherited from enclosing view"
+                        "从上层视图继承来的查询范围设置"
                     });
-                ui.re_radio_value(has_individual_time_range, true, "Override")
+                ui.re_radio_value(has_individual_time_range, true, "覆盖")
                     .on_hover_text(if is_view {
-                        "Set query range settings for the contents of this view"
+                        "为这个视图的内容设置查询范围"
                     } else {
-                        "Set query range settings for this entity"
+                        "为这个实体设置查询范围"
                     });
             });
             let time_drag_value =
@@ -245,8 +244,8 @@ Notes:
                     QueryRange::LatestAt => {
                         let current_time =
                             time_type.format(current_time, ctx.app_options().timestamp_format);
-                        ui.label(format!("Latest-at query at: {current_time}"))
-                            .on_hover_text("Uses the latest known value for each component.");
+                        ui.label(format!("Latest-at 查询时间点：{current_time}"))
+                            .on_hover_text("对每个组件使用最近一次已知的值。");
                     }
                 }
             }
@@ -311,17 +310,17 @@ fn show_visual_time_range(
 
     // Show the resolved visible range as labels (user can't edit them):
     if resolved_range == &TimeRange::EVERYTHING {
-        ui.label("Entire timeline").on_hover_text("The full timeline of the recording, which may be bigger than the data range of this plot");
+        ui.label("整条时间轴").on_hover_text("录制文件的完整时间轴，它可能比这张图的数据范围更大");
     } else if resolved_range == &TimeRange::AT_CURSOR {
         let current_time = time_type.format(current_time, ctx.app_options().timestamp_format);
-        ui.label(format!("At {} = {current_time}", timeline.name())).on_hover_text("Does not perform a latest-at query, shows only data logged at exactly the current time cursor position.");
+        ui.label(format!("在 {} = {current_time}", timeline.name())).on_hover_text("不做 latest-at 查询，只显示恰好记录在当前时间标记位置的数据。");
     } else {
         egui::Grid::new("from_to_labels").show(ui, |ui| {
-            ui.grid_left_hand_label("From");
+            ui.grid_left_hand_label("从");
             resolved_visible_history_boundary_ui(ctx, ui, &resolved_range.start, time_type, true);
             ui.end_row();
 
-            ui.grid_left_hand_label("To");
+            ui.grid_left_hand_label("到");
             resolved_visible_history_boundary_ui(ctx, ui, &resolved_range.end, time_type, false);
             ui.end_row();
         });
@@ -353,18 +352,18 @@ fn resolved_visible_history_boundary_ui(
 ) {
     let boundary_type = match visible_history_boundary {
         TimeRangeBoundary::CursorRelative(_) => match time_type {
-            TimeType::DurationNs | TimeType::TimestampNs => "current time",
-            TimeType::Sequence => "current frame",
+            TimeType::DurationNs | TimeType::TimestampNs => "当前时间",
+            TimeType::Sequence => "当前帧",
         },
         TimeRangeBoundary::Absolute(_) => match time_type {
-            TimeType::DurationNs | TimeType::TimestampNs => "absolute time",
-            TimeType::Sequence => "frame",
+            TimeType::DurationNs | TimeType::TimestampNs => "绝对时间",
+            TimeType::Sequence => "帧",
         },
         TimeRangeBoundary::Infinite => {
             if low_bound {
-                "beginning of timeline"
+                "时间轴起点"
             } else {
-                "end of timeline"
+                "时间轴终点"
             }
         }
     };
@@ -391,12 +390,12 @@ fn resolved_visible_history_boundary_ui(
                             ("ns", 1.)
                         };
 
-                        write!(label, " with {} {} offset", offset as f64 / factor, unit).ok();
+                        write!(label, "，偏移 {} {}", offset as f64 / factor, unit).ok();
                     }
                     TimeType::Sequence => {
                         write!(
                             label,
-                            " with {} offset",
+                            "，偏移 {}",
                             re_format::format_plural_signed_s(offset, "frame")
                         )
                         .ok();

@@ -201,7 +201,7 @@ impl ViewerOpenUrl {
             match selection.parse::<Item>() {
                 Ok(item) => Ok(Self::IntraRecordingSelection(item)),
                 Err(err) => {
-                    anyhow::bail!("Failed to parse selection path {selection:?}: {err}")
+                    anyhow::bail!("解析选择路径 {selection:?} 失败：{err}")
                 }
             }
         } else if url.starts_with(WEB_EVENT_LISTENER_SCHEME) {
@@ -224,7 +224,7 @@ impl ViewerOpenUrl {
                 }
 
                 #[cfg(not(target_arch = "wasm32"))]
-                LogDataSource::Stdin => Err(anyhow::anyhow!("`-` is not a valid URL.")),
+                LogDataSource::Stdin => Err(anyhow::anyhow!("`-` 不是有效的 URL。")),
 
                 LogDataSource::RedapDatasetSegment {
                     uri,
@@ -237,19 +237,19 @@ impl ViewerOpenUrl {
                     // `tos://` URLs are parsed into `Self::TosDataset` above;
                     // `LogDataSource::from_uri` never constructs this variant.
                     Err(anyhow::anyhow!(
-                        "TOS datasets are opened via tos:// URLs or the 'Open from Volcengine TOS' dialog"
+                        "TOS 数据集请通过 tos:// URL 或“从火山引擎 TOS 打开”对话框打开"
                     ))
                 }
 
                 LogDataSource::HfDataset(_) => Err(anyhow::anyhow!(
-                    "Hugging Face datasets are opened via the 'Open from Hugging Face' dialog"
+                    "Hugging Face 数据集请通过“从 Hugging Face 打开”对话框打开"
                 )),
             }
         } else if let Ok(url) = parse_webviewer_url(url) {
             // Web viewer URL with `url` parameters.
             Ok(url)
         } else {
-            anyhow::bail!("Failed to parse URL: {url}")
+            anyhow::bail!("解析 URL 失败：{url}")
         }
     }
 }
@@ -435,18 +435,18 @@ impl ViewerOpenUrl {
                 let recording = store_hub
                     .store_bundle()
                     .get(recording_id)
-                    .ok_or_else(|| anyhow::anyhow!("No data for active recording"))?;
+                    .ok_or_else(|| anyhow::anyhow!("当前录制文件没有数据"))?;
                 let data_source = recording
                     .data_source
                     .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("No data source"))?;
+                    .ok_or_else(|| anyhow::anyhow!("没有数据源"))?;
 
                 Self::from_data_source(data_source)
             }
 
             Route::LocalTable(_table_id) => {
                 // We can't share links to local tables, so can't update the url.
-                Err(anyhow::anyhow!("Can't share links to local tables."))
+                Err(anyhow::anyhow!("无法分享本地表格的链接。"))
             }
 
             Route::RedapEntry { origin, kind } => match kind {
@@ -486,7 +486,7 @@ impl ViewerOpenUrl {
             Self::IntraRecordingSelection(item) => {
                 let data_path = item.to_data_path().ok_or_else(|| {
                     // See also `Item::from_str`
-                    anyhow::anyhow!("Can only share links to entities & components")
+                    anyhow::anyhow!("只能分享实体和组件的链接")
                 })?;
                 let data_path_str = data_path.to_string();
                 vec1![format!(
@@ -743,7 +743,7 @@ impl ViewerOpenUrl {
 
                         if _base_url != current_webpage_base_url {
                             re_log::warn!(
-                                "The base URL of the web viewer ({:?}) does not match the URL being opened ({:?}). This URL may be intended for a different Rerun version.",
+                                "web viewer 的基础 URL（{:?}）与正在打开的 URL（{:?}）不一致。该 URL 可能是为不同版本的 Rerun 准备的。",
                                 current_webpage_base_url.as_str(),
                                 _base_url.as_str(),
                             );
@@ -855,7 +855,7 @@ fn parse_chunk_store_browser_url(url: &str) -> anyhow::Result<Option<ViewerOpenU
     }
 
     let Some(query) = rest.strip_prefix('?') else {
-        anyhow::bail!("Invalid chunk store browser URL: {url}");
+        anyhow::bail!("无效的 chunk store browser URL：{url}");
     };
 
     let mut selected_chunk = None;
@@ -877,7 +877,7 @@ fn parse_chunk_store_browser_url(url: &str) -> anyhow::Result<Option<ViewerOpenU
             recording_id,
         )),
         (None, None) => None,
-        _ => anyhow::bail!("Chunk store browser URL must include both app_id and recording_id"),
+        _ => anyhow::bail!("chunk store browser URL 必须同时包含 app_id 和 recording_id"),
     };
 
     Ok(Some(ViewerOpenUrl::ChunkStoreBrowser {
@@ -912,14 +912,14 @@ pub fn combine_with_base_url(
         Ok(url)
     } else {
         Err(anyhow::anyhow!(
-            "Can't share more than one URL without a web viewer base URL"
+            "没有 web viewer 基础 URL 时，无法分享多个 URL"
         ))
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn handle_web_event_listener(_egui_ctx: &egui::Context, _command_sender: &CommandSender) {
-    re_log::warn!("{WEB_EVENT_LISTENER_SCHEME:?} urls are only available on the web viewer.");
+    re_log::warn!("{WEB_EVENT_LISTENER_SCHEME:?} URL 仅在 web viewer 中可用。");
 }
 
 #[cfg(target_arch = "wasm32")]

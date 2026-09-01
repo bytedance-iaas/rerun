@@ -84,7 +84,7 @@ pub trait BlueprintContext {
         component_batch: &dyn ComponentBatch,
     ) {
         let Some(serialized) = component_batch.serialized(component_descr.clone()) else {
-            re_log::warn!("could not serialize components with descriptor `{component_descr}`");
+            re_log::warn!("无法序列化描述符为 `{component_descr}` 的组件");
             return;
         };
 
@@ -98,7 +98,7 @@ pub trait BlueprintContext {
         component_batch: &dyn ComponentBatch,
     ) {
         let Some(serialized) = component_batch.serialized(component_descr.clone()) else {
-            re_log::warn!("could not serialize components with descriptor `{component_descr}`");
+            re_log::warn!("无法序列化描述符为 `{component_descr}` 的组件");
             return;
         };
 

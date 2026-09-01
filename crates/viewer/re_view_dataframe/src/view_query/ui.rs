@@ -67,7 +67,7 @@ impl Query {
             (time_drag_value, timeline.typ())
         });
 
-        ui.label("Filter rows by time range:");
+        ui.label("按时间范围过滤行：");
         let range = self.filter_by_range()?;
         let (mut start, mut end) = (range.min(), range.max());
 
@@ -77,10 +77,10 @@ impl Query {
             let mut reset_start = false;
 
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("Start")
+                list_item::PropertyContent::new("起始")
                     .with_action_button_enabled(
                         &re_ui::icons::RESET,
-                        "Reset",
+                        "重置",
                         start != TimeInt::MIN,
                         || {
                             reset_start = true;
@@ -118,10 +118,10 @@ impl Query {
             let mut reset_to = false;
 
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("End")
+                list_item::PropertyContent::new("结束")
                     .with_action_button_enabled(
                         &re_ui::icons::RESET,
-                        "Reset",
+                        "重置",
                         end != TimeInt::MAX,
                         || {
                             reset_to = true;

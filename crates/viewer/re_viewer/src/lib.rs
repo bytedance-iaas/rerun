@@ -300,7 +300,7 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
         }
         _ => {
             let Some(data_dir) = eframe::storage_dir(native::APP_ID) else {
-                anyhow::bail!("Failed to figure out where Rerun stores its data.")
+                anyhow::bail!("无法确定 Rerun 的数据存储位置。")
             };
 
             // Note: `remove_dir_all` fails if the directory doesn't exist.
@@ -310,9 +310,9 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
                 let analytics = std::fs::read(&analytics_file_path);
 
                 if let Err(err) = std::fs::remove_dir_all(&data_dir) {
-                    anyhow::bail!("Failed to remove {data_dir:?}: {err}");
+                    anyhow::bail!("删除失败：{err}\n目录：{data_dir:?}");
                 } else {
-                    re_log::info!("Cleared {data_dir:?}.");
+                    re_log::info!("已清除 {data_dir:?}。");
                 }
 
                 if let Ok(analytics) = analytics {
@@ -321,7 +321,7 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
                     std::fs::write(&analytics_file_path, analytics).ok();
                 }
             } else {
-                re_log::info!("Rerun state was already cleared.");
+                re_log::info!("Rerun 状态已被清除。");
             }
 
             // Clear the default cache directory if it exists
@@ -329,10 +329,10 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
             if let Some(cache_dir) = re_viewer_context::AppOptions::default_cache_directory() {
                 if let Err(err) = std::fs::remove_dir_all(&cache_dir) {
                     if err.kind() != std::io::ErrorKind::NotFound {
-                        anyhow::bail!("Failed to remove {cache_dir:?}: {err}");
+                        anyhow::bail!("删除失败：{err}\n目录：{cache_dir:?}");
                     }
                 } else {
-                    re_log::info!("Cleared {cache_dir:?}.");
+                    re_log::info!("已清除 {cache_dir:?}。");
                 }
             }
         }

@@ -100,7 +100,7 @@ impl Screenshotter {
                     .expect("Failed to create image");
             match image.save(&path) {
                 Ok(()) => {
-                    re_log::info!("Screenshot saved to {path:?}");
+                    re_log::info!("截图已保存到 {path:?}");
                     self.quit = true;
                 }
                 Err(err) => {
@@ -109,7 +109,7 @@ impl Screenshotter {
             }
         } else {
             egui_ctx.copy_image(image.clone());
-            re_log::info!("Screenshot copied to clipboard");
+            re_log::info!("截图已复制到剪贴板");
         }
     }
 }

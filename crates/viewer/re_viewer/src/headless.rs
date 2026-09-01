@@ -60,7 +60,7 @@ pub fn run_headless_app(
 
     init_result.map_err(|err| eframe::Error::AppCreation(Box::new(err)))?;
 
-    re_log::info!("Headless viewer running at {}x{}.", size.x, size.y);
+    re_log::info!("无界面 Viewer 正在以 {}x{} 运行。", size.x, size.y);
 
     let idle_timeout = Duration::from_secs(1);
     loop {
@@ -68,7 +68,7 @@ pub fn run_headless_app(
         handle_pending_screenshots(&mut harness);
 
         if has_pending_close(&harness) {
-            re_log::info!("Headless viewer received close request, shutting down.");
+            re_log::info!("无界面 Viewer 收到关闭请求，正在退出。");
             return Ok(());
         }
 
@@ -124,7 +124,7 @@ fn handle_pending_screenshots(harness: &mut egui_kittest::Harness<'_, App>) {
     let rgba = match harness.render() {
         Ok(rgba) => rgba,
         Err(err) => {
-            re_log::error!("Failed to render headless screenshot: {err}");
+            re_log::error!("渲染无界面截图失败：{err}");
             return;
         }
     };

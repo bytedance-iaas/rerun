@@ -91,7 +91,7 @@ impl FallbackProviderRegistry {
             .is_some()
         {
             re_log::warn!(
-                "There was already a component fallback provider registered for {component}"
+                "组件 {component} 已经注册过 fallback provider"
             );
         }
     }
@@ -123,7 +123,7 @@ impl FallbackProviderRegistry {
             .is_some()
         {
             re_log::warn!(
-                "There was already a component fallback provider registered for {component}"
+                "组件 {component} 已经注册过 fallback provider"
             );
         }
     }
@@ -158,7 +158,7 @@ impl FallbackProviderRegistry {
             .is_some()
         {
             re_log::warn!(
-                "There was already a view component fallback provider registered for {component} in {view}"
+                "视图 {view} 中的组件 {component} 已经注册过 fallback provider"
             );
         }
     }

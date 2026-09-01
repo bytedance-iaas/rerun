@@ -45,14 +45,14 @@ impl ViewClass for GraphView {
     fn help(&self, os: egui::os::OperatingSystem) -> Help {
         let egui::InputOptions { zoom_modifier, .. } = egui::InputOptions::default(); // This is OK, since we don't allow the user to change this modifier.
 
-        Help::new("Graph view")
+        Help::new("Graph 视图")
             .docs_link("https://rerun.io/docs/reference/types/views/graph_view")
-            .control("Pan", (MouseButtonText(DRAG_PAN2D_BUTTON), "+", "drag"))
+            .control("平移", (MouseButtonText(DRAG_PAN2D_BUTTON), "+", "拖动"))
             .control(
-                "Zoom",
+                "缩放",
                 IconText::from_modifiers_and(os, zoom_modifier, icons::SCROLL),
             )
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control("重置视角", ("双击", icons::LEFT_MOUSE_CLICK))
     }
 
     /// Register all systems (contexts & parts) that the view needs.

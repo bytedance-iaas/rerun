@@ -69,15 +69,15 @@ pub fn remember(list: &mut Vec<RecentDataset>, mut entry: RecentDataset) {
 pub fn relative_time_label(last_opened_unix: i64, now_unix: i64) -> String {
     let secs = now_unix.saturating_sub(last_opened_unix);
     if secs < 60 {
-        "just now".to_owned()
+        "刚刚".to_owned()
     } else if secs < 60 * 60 {
-        format!("{} min ago", secs / 60)
+        format!("{} 分钟前", secs / 60)
     } else if secs < 24 * 60 * 60 {
-        format!("{} h ago", secs / (60 * 60))
+        format!("{} 小时前", secs / (60 * 60))
     } else if secs < 2 * 24 * 60 * 60 {
-        "yesterday".to_owned()
+        "昨天".to_owned()
     } else {
-        format!("{} days ago", secs / (24 * 60 * 60))
+        format!("{} 天前", secs / (24 * 60 * 60))
     }
 }
 
@@ -134,12 +134,12 @@ mod tests {
 
     #[test]
     fn relative_time_labels() {
-        assert_eq!(relative_time_label(100, 130), "just now");
-        assert_eq!(relative_time_label(0, 5 * 60), "5 min ago");
-        assert_eq!(relative_time_label(0, 3 * 60 * 60), "3 h ago");
-        assert_eq!(relative_time_label(0, 30 * 60 * 60), "yesterday");
-        assert_eq!(relative_time_label(0, 3 * 24 * 60 * 60), "3 days ago");
+        assert_eq!(relative_time_label(100, 130), "刚刚");
+        assert_eq!(relative_time_label(0, 5 * 60), "5 分钟前");
+        assert_eq!(relative_time_label(0, 3 * 60 * 60), "3 小时前");
+        assert_eq!(relative_time_label(0, 30 * 60 * 60), "昨天");
+        assert_eq!(relative_time_label(0, 3 * 24 * 60 * 60), "3 天前");
         // A clock that went backwards must not underflow.
-        assert_eq!(relative_time_label(100, 50), "just now");
+        assert_eq!(relative_time_label(100, 50), "刚刚");
     }
 }

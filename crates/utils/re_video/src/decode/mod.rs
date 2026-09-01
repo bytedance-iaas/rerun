@@ -664,9 +664,9 @@ pub struct DecodeSettings {
 impl std::fmt::Display for DecodeHardwareAcceleration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Auto => write!(f, "Auto"),
-            Self::PreferSoftware => write!(f, "Prefer software"),
-            Self::PreferHardware => write!(f, "Prefer hardware"),
+            Self::Auto => write!(f, "自动"),
+            Self::PreferSoftware => write!(f, "优先软件解码"),
+            Self::PreferHardware => write!(f, "优先硬件解码"),
         }
     }
 }

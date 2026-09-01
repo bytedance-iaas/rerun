@@ -85,38 +85,38 @@ impl View3DState {
 // ----------------------------------------------------------------------------
 
 pub fn help(os: egui::os::OperatingSystem) -> Help {
-    Help::new("3D view")
+    Help::new("3D 视图")
         .docs_link("https://rerun.io/docs/reference/types/views/spatial3d_view")
-        .control("Pan", (MouseButtonText(DRAG_PAN3D_BUTTON), "+", "drag"))
-        .control("Zoom", icons::SCROLL)
-        .control("Rotate", (MouseButtonText(ROTATE3D_BUTTON), "+", "drag"))
+        .control("平移", (MouseButtonText(DRAG_PAN3D_BUTTON), "+", "拖动"))
+        .control("缩放", icons::SCROLL)
+        .control("旋转", (MouseButtonText(ROTATE3D_BUTTON), "+", "拖动"))
         .control(
-            "Roll",
+            "翻滚",
             IconText::from_modifiers_and(os, ROLL_MOUSE_MODIFIER, MouseButtonText(ROLL_MOUSE_ALT)),
         )
-        .control("Navigate", ("WASD", "/", "QE"))
+        .control("移动", ("WASD", "/", "QE"))
         .control(
-            "Slow down / speed up",
+            "减速 / 加速",
             (
                 IconText::from_modifiers(os, RuntimeModifiers::slow_down(&os)),
                 "/",
                 IconText::from_modifiers(os, SPEED_UP_3D_MODIFIER),
             ),
         )
-        .control("Focus", ("double", icons::LEFT_MOUSE_CLICK, "object"))
+        .control("聚焦", ("双击", icons::LEFT_MOUSE_CLICK, "对象"))
         .control(
-            "Track",
+            "跟踪",
             (
                 IconText::from_modifiers(os, Modifiers::ALT),
                 "+",
-                "double",
+                "双击",
                 icons::LEFT_MOUSE_CLICK,
-                "object",
+                "对象",
             ),
         )
         .control(
-            "Reset view",
-            ("double", icons::LEFT_MOUSE_CLICK, "background"),
+            "重置视角",
+            ("双击", icons::LEFT_MOUSE_CLICK, "背景"),
         )
 }
 

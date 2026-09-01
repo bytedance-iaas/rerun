@@ -16,9 +16,9 @@ pub fn paint_view_loading_indicator(
 
     if 0.0 < loading_indicator_opacity {
         let reason = if recording.is_downloading_manifest() {
-            "Downloading manifest from redap"
+            "正在从 redap 下载清单"
         } else {
-            "Fetching chunks from redap"
+            "正在从 redap 读取 chunk"
         };
 
         re_ui::loading_indicator::paint_loading_indicator_inside(

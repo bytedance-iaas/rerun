@@ -430,7 +430,7 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
                 )
                 .unwrap_or_else(|err| {
                     re_log::error!(
-                        "Error in view UI (class: {}, display name: {}): {err}",
+                        "视图 UI 出错（类别：{}，显示名称：{}）：{err}",
                         view_blueprint.class_identifier(),
                         class.display_name(),
                     );
@@ -478,8 +478,8 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
             view.display_name_or_default().as_ref().into()
         } else {
             // All panes are views, so this shouldn't happen unless we have a bug
-            re_log::warn_once!("ViewId missing during egui_tiles");
-            self.ctx.egui_ctx().error_text("Internal error").into()
+            re_log::warn_once!("在 egui_tiles 中缺少 ViewId");
+            self.ctx.egui_ctx().error_text("内部错误").into()
         }
     }
 
@@ -598,11 +598,11 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
         if *self.maximized == Some(view_id) {
             // Show minimize-button:
             if ui
-                .small_icon_button(&re_ui::icons::MINIMIZE, "Restore viewport")
+                .small_icon_button(&re_ui::icons::MINIMIZE, "还原视口")
                 .on_hover_ui(|ui| {
                     Help::new_without_title()
                         .control(
-                            "Restore - show all spaces",
+                            "还原 — 显示所有空间",
                             IconText::from_keyboard_shortcut(ui.os(), TOGGLE_MAXIMIZE_VIEW),
                         )
                         .ui(ui);
@@ -619,17 +619,17 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
                 self.ctx.selection().is_view_the_only_selected(&view_id);
             let toggle = is_view_the_only_selected && ui.input_mut(is_toggle_maximize_view_pressed);
             if ui
-                .small_icon_button(&re_ui::icons::MAXIMIZE, "Maximize view")
+                .small_icon_button(&re_ui::icons::MAXIMIZE, "最大化视图")
                 .on_hover_ui(|ui| {
                     if is_view_the_only_selected {
                         Help::new_without_title()
                             .control(
-                                "Maximize view",
+                                "最大化视图",
                                 IconText::from_keyboard_shortcut(ui.os(), TOGGLE_MAXIMIZE_VIEW),
                             )
                             .ui(ui);
                     } else {
-                        ui.label("Maximize view");
+                        ui.label("最大化视图");
                     }
                 })
                 .clicked()
@@ -648,7 +648,7 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
             // Show button to hide this view:
             let mut visible = true;
             ui.visibility_toggle_button(&mut visible)
-                .on_hover_text("Hide this view");
+                .on_hover_text("隐藏此视图");
             if !visible {
                 self.viewport_blueprint.set_content_visibility(
                     self.ctx,
@@ -674,7 +674,7 @@ impl<'a> egui_tiles::Behavior<ViewId> for TilesDelegate<'a, '_> {
             )
             .unwrap_or_else(|err| {
                 re_log::error!(
-                    "Error in view title bar UI (class: {}, display name: {}): {err}",
+                    "视图标题栏 UI 出错（类别：{}，显示名称：{}）：{err}",
                     view_blueprint.class_identifier(),
                     view_class.display_name(),
                 );
@@ -818,20 +818,20 @@ impl TilesDelegate<'_, '_> {
                     icons::WARNING
                         .as_image()
                         .fit_to_exact_size(ui.tokens().small_icon_size)
-                        .alt_text("View warnings")
+                        .alt_text("视图警告")
                         .tint(ui.tokens().alert_warning.icon)
                 } else {
                     icons::ERROR
                         .as_image()
                         .fit_to_exact_size(ui.tokens().small_icon_size)
-                        .alt_text("View errors")
+                        .alt_text("视图错误")
                         .tint(ui.tokens().alert_error.icon)
                 };
 
             let response = ui
                 .add(egui::Button::image(report_image))
                 .on_hover_text(format!(
-                    "Show {}",
+                    "显示 {}",
                     re_format::format_plural_s(report_count, "report")
                 ));
 
@@ -905,7 +905,7 @@ impl TilesDelegate<'_, '_> {
                                 ui.label(&report.summary);
 
                                 if let Some(details) = &report.details {
-                                    ui.collapsing("Details", |ui| {
+                                    ui.collapsing("详情", |ui| {
                                         ui.label(details);
                                     });
                                 }
@@ -965,10 +965,10 @@ impl TabWidget {
                         label: Some(view.display_name_or_default().into()),
                     }
                 } else {
-                    re_log::warn_once!("View {view_id} not found");
+                    re_log::warn_once!("找不到视图 {view_id}");
 
                     TabDesc {
-                        widget_text: tab_viewer.ctx.egui_ctx().error_text("Unknown view").into(),
+                        widget_text: tab_viewer.ctx.egui_ctx().error_text("未知视图").into(),
                         icon: &re_ui::icons::VIEW_GENERIC,
                         user_named: false,
                         item: None,
@@ -991,12 +991,12 @@ impl TabWidget {
                             container_blueprint.display_name.is_some(),
                         )
                     } else {
-                        re_log::warn_once!("Container {container_id} missing during egui_tiles");
+                        re_log::warn_once!("在 egui_tiles 中找不到容器 {container_id}");
                         (
                             tab_viewer
                                 .ctx
                                 .egui_ctx()
-                                .error_text("Internal error")
+                                .error_text("内部错误")
                                 .into(),
                             false,
                         )
@@ -1019,13 +1019,13 @@ impl TabWidget {
                         return Self::new(tab_viewer, ui, tiles, tile_id, tab_state, alpha);
                     }
 
-                    re_log::warn_once!("Container for tile ID {tile_id:?} not found");
+                    re_log::warn_once!("找不到 tile ID {tile_id:?} 对应的容器");
 
                     TabDesc {
                         widget_text: tab_viewer
                             .ctx
                             .egui_ctx()
-                            .error_text("Unknown container")
+                            .error_text("未知容器")
                             .into(),
                         icon: &re_ui::icons::VIEW_GENERIC,
                         user_named: false,
@@ -1035,13 +1035,13 @@ impl TabWidget {
                 }
             }
             None => {
-                re_log::warn_once!("Tile {tile_id:?} not found");
+                re_log::warn_once!("找不到 tile {tile_id:?}");
 
                 TabDesc {
                     widget_text: tab_viewer
                         .ctx
                         .egui_ctx()
-                        .error_text("Internal error")
+                        .error_text("内部错误")
                         .into(),
                     icon: &re_ui::icons::VIEW_UNKNOWN,
                     user_named: false,

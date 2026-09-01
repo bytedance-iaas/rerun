@@ -207,23 +207,23 @@ impl LogSource {
     pub fn status_string(&self) -> String {
         match self {
             Self::File { path } => {
-                format!("Loading {}…", path.display())
+                format!("正在加载 {}…", path.display())
             }
-            Self::Stdin => "Loading stdin…".to_owned(),
+            Self::Stdin => "正在加载标准输入…".to_owned(),
             Self::HttpStream { url } => {
-                format!("Waiting for data on {}…", url_display_name(url))
+                format!("正在等待 {} 的数据…", url_display_name(url))
             }
             Self::MessageProxy(uri) => {
-                format!("Waiting for data on {uri}…")
+                format!("正在等待 {uri} 的数据…")
             }
             Self::RedapGrpcStream { uri, .. } => {
                 format!(
-                    "Waiting for data on {}…",
+                    "正在等待 {} 的数据…",
                     uri.clone().without_query_and_fragment()
                 )
             }
-            Self::RrdWebEvent | Self::JsChannel { .. } => "Waiting for logging data…".to_owned(),
-            Self::Sdk => "Waiting for logging data from SDK".to_owned(),
+            Self::RrdWebEvent | Self::JsChannel { .. } => "正在等待日志数据…".to_owned(),
+            Self::Sdk => "正在等待来自 SDK 的日志数据".to_owned(),
         }
     }
 

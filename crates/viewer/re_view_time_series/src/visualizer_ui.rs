@@ -200,7 +200,7 @@ fn context_menu_ui(
     all_series_invisible: bool,
 ) {
     // Hide/show toggle
-    let label = if all_series_invisible { "Show" } else { "Hide" };
+    let label = if all_series_invisible { "显示" } else { "隐藏" };
     if ui.button(label).clicked() {
         instruction.save_override(
             ctx.viewer_ctx,
@@ -211,7 +211,7 @@ fn context_menu_ui(
     }
 
     // Remove visualizer
-    if ui.button("Remove").clicked() {
+    if ui.button("移除").clicked() {
         let active_visualizers: Vec<_> = node
             .data_result
             .visualizer_instructions
