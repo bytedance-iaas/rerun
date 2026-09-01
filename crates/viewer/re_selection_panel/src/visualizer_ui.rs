@@ -54,7 +54,7 @@ pub fn visualizer_ui(
         .lookup_result_by_path(entity_path.hash())
         .cloned()
     else {
-        ui.error_label("Entity not found in view");
+        ui.error_label("视图中找不到该实体");
         return;
     };
     let view_visualizers = ctx.new_visualizer_collection();
@@ -78,7 +78,7 @@ pub fn visualizer_ui(
             );
         })
         .enabled(!available_visualizers.is_empty())
-        .on_hover_text("Add additional visualizers")
+        .on_hover_text("添加更多可视化器")
         .on_disabled_hover_text("No additional visualizers available");
 
     let markdown = "# Visualizers
@@ -1126,7 +1126,7 @@ fn menu_more(
 ) {
     reset_override_button(ctx, ui, component_descr.clone(), override_path);
 
-    if ui.button("Make default for current view").clicked() {
+    if ui.button("设为当前视图的默认值").clicked() {
         ctx.save_blueprint_array(
             ViewBlueprint::defaults_path(ctx.view_id),
             component_descr,
@@ -1155,7 +1155,7 @@ pub fn reset_override_button(
             raw_override != raw_override_default_blueprint,
             egui::Button::new("Reset override to default blueprint"),
         )
-        .on_hover_text("Resets the override to what is specified in the default blueprint")
+        .on_hover_text("把覆盖值重置为默认 blueprint 中指定的值")
         .on_disabled_hover_text("Current override is the same as the override specified in the default blueprint (if any)")
         .clicked()
     {

@@ -238,15 +238,15 @@ fn video_data_ui(
                 if gop_sizes.smallest == gop_sizes.largest {
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("GOP size").value_uint(gop_sizes.smallest)
-                    ).on_hover_text("All known gops are this size.");
+                    ).on_hover_text("所有已知 GOP 都是这个大小。");
                 } else {
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("Smallest GOP size").value_uint(gop_sizes.smallest)
-                    ).on_hover_text("The smallest observed gop size.");
+                    ).on_hover_text("观测到的最小 GOP 大小。");
 
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("Largest GOP size").value_uint(gop_sizes.largest)
-                    ).on_hover_text("The largest observed gop size.");
+                    ).on_hover_text("观测到的最大 GOP 大小。");
                 }
             }
         });

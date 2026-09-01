@@ -435,7 +435,7 @@ impl Query {
 
                 if first {
                     ui.add_space(6.0);
-                    ui.label("Timelines");
+                    ui.label("时间轴");
                     first = false;
                 }
 
@@ -579,7 +579,7 @@ impl Query {
         ctx: &ViewerContext<'_>,
         ui: &mut egui::Ui,
     ) -> Result<(), ViewSystemExecutionError> {
-        ui.label("Empty cells:");
+        ui.label("空单元格：");
 
         let mut latest_at = self.latest_at_enabled()?;
         let changed = {
@@ -634,14 +634,14 @@ fn time_boundary_ui(
     time: &mut TimeInt,
 ) -> egui::Response {
     if *time == TimeInt::MAX {
-        let mut response = ui.button("+∞").on_hover_text("Click to edit");
+        let mut response = ui.button("+∞").on_hover_text("点击编辑");
         if response.clicked() {
             *time = time_drag_value.max_time();
             response.mark_changed();
         }
         response
     } else if *time == TimeInt::MIN {
-        let mut response = ui.button("–∞").on_hover_text("Click to edit");
+        let mut response = ui.button("–∞").on_hover_text("点击编辑");
         if response.clicked() {
             *time = time_drag_value.min_time();
             response.mark_changed();

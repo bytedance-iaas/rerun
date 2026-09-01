@@ -560,8 +560,8 @@ pub(super) fn file_saver_progress_ui(
                 .auto_sized()
                 .show(egui_ctx, |ui| {
                     ui.horizontal(|ui| {
-                        ui.loading_indicator("Writing file to disk");
-                        ui.label("Writing file to disk…");
+                        ui.loading_indicator("正在把文件写入磁盘");
+                        ui.label("正在把文件写入磁盘…");
                     })
                 });
         }

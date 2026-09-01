@@ -75,7 +75,7 @@ impl ViewClass for ViewClassPlaceholder {
             ..Default::default()
         }
         .show(ui, |ui| {
-            ui.error_label("Unknown view class");
+            ui.error_label("未知的视图类型");
             ui.markdown_ui(error_details);
         });
 

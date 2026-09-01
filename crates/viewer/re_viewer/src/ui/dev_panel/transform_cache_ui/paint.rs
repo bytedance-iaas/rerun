@@ -686,30 +686,30 @@ fn node_tooltip_ui(ui: &mut egui::Ui, model: &Model, node: &Node) {
             },
         ));
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Frame")
+            list_item::PropertyContent::new("坐标系")
                 .min_desired_width(FRAME_PROPERTY_MIN_WIDTH)
                 .value_text(node.label.as_str()),
         );
-        ui.list_item_flat_noninteractive(list_item::PropertyContent::new("Kind").value_text(
+        ui.list_item_flat_noninteractive(list_item::PropertyContent::new("类型").value_text(
             if is_implicit_frame(node) {
-                "implicit"
+                "隐式"
             } else {
-                "named"
+                "具名"
             },
         ));
         if !node.has_transform {
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("Warning").value_text("No transforms"),
+                list_item::PropertyContent::new("警告").value_text("没有变换"),
             );
         }
 
         let ancestors = model.path_to_roots(node.id).0.len();
         let children = model.num_children(node.id);
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Ancestors").value_text(ancestors.to_string()),
+            list_item::PropertyContent::new("祖先").value_text(ancestors.to_string()),
         );
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Children").value_text(children.to_string()),
+            list_item::PropertyContent::new("子节点").value_text(children.to_string()),
         );
     });
 }
@@ -788,7 +788,7 @@ fn edge_source_tooltip_ui(
 ) {
     ui.separator();
     ui.list_item_flat_noninteractive(
-        list_item::PropertyContent::new("Entity").value_text(entity_path.ui_string()),
+        list_item::PropertyContent::new("实体").value_text(entity_path.ui_string()),
     );
     if let Some(translation) = translation {
         ui.list_item_flat_noninteractive(list_item::PropertyContent::new("Translation").value_fn(
@@ -814,7 +814,7 @@ fn shared_fork_tooltip_ui(ui: &mut egui::Ui, model: &Model, parent: TransformFra
     ));
     ui.colored_label(
         ui.tokens().text_subdued,
-        "Hover a terminal segment or icon to inspect an individual transform.",
+        "把鼠标悬停在末端线段或图标上，可查看单个变换。",
     );
 }
 

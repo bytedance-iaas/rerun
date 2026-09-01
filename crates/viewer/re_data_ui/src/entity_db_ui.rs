@@ -362,7 +362,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 fn debug_ui(ui: &mut egui::Ui, db: &EntityDb) {
     egui::Grid::new("debug-info").show(ui, |ui| {
         if let Some(manifest) = db.rrd_manifest_index().manifest() {
-            ui.label("Entities");
+            ui.label("实体");
             ui.label(format_uint(
                 manifest.recording_schema().all_entities().len(),
             ));
@@ -373,11 +373,11 @@ fn debug_ui(ui: &mut egui::Ui, db: &EntityDb) {
         ui.label(db.is_buffering().to_string());
         ui.end_row();
 
-        ui.label("Connection");
+        ui.label("连接");
         ui.label(format!("{:?}", db.redap_connection_state())); // NOLINT: debug-only UI
         ui.end_row();
 
-        ui.label("Physical chunks");
+        ui.label("物理 chunk 数");
         ui.label(format_bytes(db.byte_size_of_physical_chunks() as _));
         ui.end_row();
     });

@@ -791,12 +791,12 @@ impl<'a> DataFusionTableWidget<'a> {
                         |ui| {
                             ui.set_height(height);
 
-                            ui.label("rows:");
+                            ui.label("行数：");
                             ui.strong(format_uint(total_rows));
 
                             ui.add_space(16.0);
 
-                            ui.label("columns:");
+                            ui.label("列数：");
                             ui.strong(format!(
                                 "{} out of {}",
                                 format_uint(visible_columns),
@@ -825,7 +825,7 @@ impl<'a> DataFusionTableWidget<'a> {
                                 ctx.app_options.timestamp_format,
                                 Ui::strong,
                             );
-                            ui.label("Last updated:");
+                            ui.label("最近更新：");
                         },
                     );
                 });

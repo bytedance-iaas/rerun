@@ -326,7 +326,7 @@ impl DatastoreUi {
         }
         .show(ui, |ui| {
             let Some(chunk_store) = chunk_store else {
-                ui.label("No recording selected");
+                ui.label("未选中录制文件");
                 return;
             };
 
@@ -389,7 +389,7 @@ impl DatastoreUi {
                 row.col(|ui| {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
 
-                    ui.strong("Components");
+                    ui.strong("组件");
                 });
             };
 
@@ -508,7 +508,7 @@ impl DatastoreUi {
                 "Filter the chunk list by entity path and/or component. Filtering is \
                 case-insensitive text-based.",
             );
-            ui.label("Entity:");
+            ui.label("实体：");
             autocomplete_text_edit(
                 ui,
                 &mut self.entity_path_filter,
@@ -517,7 +517,7 @@ impl DatastoreUi {
                 None::<&str>,
             );
 
-            ui.label("Component:");
+            ui.label("组件：");
             autocomplete_text_edit(
                 ui,
                 &mut self.component_filter,
@@ -646,9 +646,9 @@ impl DatastoreUi {
             .horizontal(|ui| {
                 ui.selectable_toggle(|ui| {
                     ui.selectable_value(&mut self.store_kind, StoreKind::Recording, "Recording")
-                        .on_hover_text("Display the current recording's data store");
+                        .on_hover_text("显示当前录制文件的数据存储");
                     ui.selectable_value(&mut self.store_kind, StoreKind::Blueprint, "Blueprint")
-                        .on_hover_text("Display the current recording's blueprint store");
+                        .on_hover_text("显示当前录制文件的 blueprint 存储");
                 });
 
                 ui.separator();
@@ -676,19 +676,19 @@ impl DatastoreUi {
 
                     ui.selectable_toggle(|ui| {
                         ui.selectable_value(&mut self.static_filter, StaticOrTemporal::All, "All")
-                            .on_hover_text("Show all chunks regardless of static/temporal status");
+                            .on_hover_text("显示所有 chunk，无论静态还是时序");
                         ui.selectable_value(
                             &mut self.static_filter,
                             StaticOrTemporal::Static,
                             "Static",
                         )
-                        .on_hover_text("Show only static chunks");
+                        .on_hover_text("只显示静态 chunk");
                         ui.selectable_value(
                             &mut self.static_filter,
                             StaticOrTemporal::Temporal,
                             "Temporal",
                         )
-                        .on_hover_text("Show only non-static chunks");
+                        .on_hover_text("只显示非静态 chunk");
                     });
 
                     if reset_clicked {
@@ -814,7 +814,7 @@ impl DatastoreUi {
     fn switch_recording_ui(&mut self, ui: &mut egui::Ui, storage_context: &StorageContext<'_>) {
         let recordings: Vec<&EntityDb> = storage_context.bundle.recordings().collect();
         if recordings.is_empty() {
-            ui.label("No recordings available");
+            ui.label("没有可用的录制文件");
             return;
         }
 
@@ -824,7 +824,7 @@ impl DatastoreUi {
             ui.id().with("selected_recording_icon"),
             egui::Sense::hover(),
         )
-        .on_hover_text("Selected recording");
+        .on_hover_text("选中的录制文件");
 
         store_selector_combo_ui(
             ui,
@@ -848,7 +848,7 @@ impl DatastoreUi {
             return;
         }
 
-        ui.label("Selected blueprint:");
+        ui.label("选中的 blueprint：");
 
         store_selector_combo_ui(
             ui,

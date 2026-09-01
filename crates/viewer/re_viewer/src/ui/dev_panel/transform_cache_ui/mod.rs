@@ -58,12 +58,12 @@ pub(super) fn ui(
     re_tracing::profile_function!();
 
     let Some(query) = query else {
-        ui.warning_label("No active timeline selected for the transform cache.");
+        ui.warning_label("变换缓存没有选中活动的时间轴。");
         return;
     };
 
     let Some(caches) = storage_context.hub.store_caches(recording.store_id()) else {
-        ui.label("No transform cache is available for this recording yet.");
+        ui.label("这个录制文件还没有可用的变换缓存。");
         return;
     };
 
@@ -96,13 +96,13 @@ pub(super) fn ui(
                 });
 
                 if current_model.snapshot.frames.is_empty() {
-                    ui.warning_label("No transform frames match the current filter.");
+                    ui.warning_label("没有符合当前筛选条件的变换坐标系。");
                 } else {
                     ui.info_label(format!(
-                        "{}, {}, {}",
-                        re_format::format_plural_s(current_model.num_trees(), "tree"),
-                        re_format::format_plural_s(current_model.snapshot.frames.len(), "frame"),
-                        re_format::format_plural_s(current_model.snapshot.edges.len(), "transform")
+                        "{} 棵树、{} 个坐标系、{} 个变换",
+                        current_model.num_trees(),
+                        current_model.snapshot.frames.len(),
+                        current_model.snapshot.edges.len()
                     ));
                 }
                 ui.separator();
@@ -117,7 +117,7 @@ pub(super) fn ui(
                     ));
 
                     if current_model.any_missing_chunks {
-                        ui.warning_label("Some chunks are missing");
+                        ui.warning_label("有部分 chunk 缺失");
                     }
                 });
 
@@ -141,23 +141,23 @@ fn frame_filter_ui(ui: &mut egui::Ui, state: &mut TransformCacheUiState) {
         ui.selectable_value(
             &mut state.frame_filter,
             FrameVisibilityFilter::Implicit,
-            "Implicit",
+            "隐式",
         )
-        .on_hover_text("Show only tf# frames derived from entity paths");
+        .on_hover_text("只显示由实体路径派生出的 tf# 坐标系");
         ui.selectable_value(
             &mut state.frame_filter,
             FrameVisibilityFilter::Named,
-            "Named",
+            "具名",
         )
-        .on_hover_text("Show explicitly named frames with transforms");
+        .on_hover_text("显示带变换的、显式命名的坐标系");
         ui.selectable_value(
             &mut state.frame_filter,
             FrameVisibilityFilter::Unlinked,
-            "Unlinked",
+            "未关联",
         )
-        .on_hover_text("Show named coordinate frames without transforms");
-        ui.selectable_value(&mut state.frame_filter, FrameVisibilityFilter::All, "All")
-            .on_hover_text("Show implicit, named, and unlinked frames");
+        .on_hover_text("显示没有变换的具名坐标系");
+        ui.selectable_value(&mut state.frame_filter, FrameVisibilityFilter::All, "全部")
+            .on_hover_text("显示隐式、具名和未关联的坐标系");
     });
 }
 
@@ -167,37 +167,37 @@ fn edge_filter_ui(ui: &mut egui::Ui, state: &mut TransformCacheUiState) {
         ui.selectable_value(
             &mut state.edge_filter,
             transform_cache_snapshot::EdgeFilter::Static,
-            "Static",
+            "静态",
         )
-        .on_hover_text("Show only static transforms");
+        .on_hover_text("只显示静态变换");
         ui.selectable_value(
             &mut state.edge_filter,
             transform_cache_snapshot::EdgeFilter::Temporal,
-            "Temporal",
+            "时序",
         )
-        .on_hover_text("Show only temporal transforms");
+        .on_hover_text("只显示时序变换");
         ui.selectable_value(
             &mut state.edge_filter,
             transform_cache_snapshot::EdgeFilter::All,
-            "All",
+            "全部",
         )
-        .on_hover_text("Show static and temporal transforms");
+        .on_hover_text("显示静态和时序变换");
     });
 }
 
 /// Draws the horizontal/vertical layout controls.
 fn layout_direction_ui(ui: &mut egui::Ui, state: &mut TransformCacheUiState) {
     ui.horizontal_centered(|ui| {
-        ui.label("Layout:");
+        ui.label("布局：");
         ui.selectable_toggle(|ui| {
             ui.selectable_value(
                 &mut state.layout_direction,
                 LayoutDirection::Horizontal,
                 "▶",
             )
-            .on_hover_text("Lay out transform frames horizontally");
+            .on_hover_text("横向排布变换坐标系");
             ui.selectable_value(&mut state.layout_direction, LayoutDirection::Vertical, "▼")
-                .on_hover_text("Lay out transform frames vertically");
+                .on_hover_text("纵向排布变换坐标系");
         })
     });
 }

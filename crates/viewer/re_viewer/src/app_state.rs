@@ -655,9 +655,9 @@ impl AppState {
                             ui.center("loading error", |ui| {
                                 ui.set_max_width(ui.available_width() * 0.75);
                                 ui.vertical_centered(|ui| {
-                                    ui.error_label(format!("Failed to load {source_name}: {err}"));
+                                    ui.error_label(format!("加载 {source_name} 失败：{err}"));
 
-                                    if ui.button("Go Back").clicked() {
+                                    if ui.button("返回").clicked() {
                                         command_sender.send_system(SystemCommand::ResetRoute);
                                     }
                                 })
