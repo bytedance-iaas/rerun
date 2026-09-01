@@ -59,7 +59,7 @@ pub fn time_range_multiline_edit_or_view_ui(
         current_time,
     }) = recording_time_context(ctx)
     else {
-        return ui.weak("No active timeline");
+        return ui.weak("没有活动时间轴");
     };
 
     let response = match value {
@@ -148,7 +148,7 @@ pub fn time_range_singleline_view_ui(
         ..
     }) = recording_time_context(ctx)
     else {
-        return ui.weak("No active timeline");
+        return ui.weak("没有活动时间轴");
     };
 
     let (text, on_hover) = relative_time_range_label_text(

@@ -9,7 +9,7 @@ pub fn singleline_view_transform_mat3x3(
     value: &mut MaybeMutRef<'_, TransformMat3x3>,
 ) -> egui::Response {
     if value.0 == Mat3x3::IDENTITY {
-        ui.label("Identity")
+        ui.label("单位变换")
     } else {
         ui.label("3x3 Matrix")
     }

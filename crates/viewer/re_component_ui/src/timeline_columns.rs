@@ -41,7 +41,7 @@ pub fn edit_or_view_columns_multiline(
                 column_timeline_name(col).map(|timeline| timeline_button(ctx, ui, &timeline))
             })
             .reduce(|a, b| a.union(b))
-            .unwrap_or_else(|| ui.weak("Empty")),
+            .unwrap_or_else(|| ui.weak("空")),
 
         MaybeMutRef::MutRef(columns) => {
             if let Some(recording) = ctx.active_recording() {

@@ -36,10 +36,10 @@ fn multiline_view_geo_line_string(
         .header(tokens.deprecated_table_header_height(), |mut header| {
             re_ui::DesignTokens::setup_table_header(&mut header);
             header.col(|ui| {
-                ui.label("Latitude");
+                ui.label("纬度");
             });
             header.col(|ui| {
-                ui.label("Longitude");
+                ui.label("经度");
             });
         })
         .body(|mut body| {

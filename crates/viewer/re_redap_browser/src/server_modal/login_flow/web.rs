@@ -76,7 +76,7 @@ impl State {
     pub fn ui(&self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.loading_indicator("Waiting for web login");
-            ui.label("Waiting for login…");
+            ui.label("正在等待登录…");
         });
     }
 

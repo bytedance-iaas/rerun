@@ -178,7 +178,7 @@ pub fn dimension_mapping_ui(
 
     ui.vertical(|ui| {
         ui.vertical(|ui| {
-            ui.label("Image");
+            ui.label("图像");
             egui::Grid::new("imagegrid").num_columns(2).show(ui, |ui| {
                 tensor_dimension_ui(
                     ui,
@@ -199,7 +199,7 @@ pub fn dimension_mapping_ui(
                             &width,
                         );
                     }
-                    ui.label("width");
+                    ui.label("宽度");
                 });
                 ui.end_row();
 
@@ -223,7 +223,7 @@ pub fn dimension_mapping_ui(
                             &height,
                         );
                     }
-                    ui.label("height");
+                    ui.label("高度");
                 });
                 ui.end_row();
             });
@@ -232,7 +232,7 @@ pub fn dimension_mapping_ui(
         ui.add_space(4.0);
 
         ui.vertical(|ui| {
-            ui.label("Selectors");
+            ui.label("选择器");
 
             // Use Grid instead of Vertical layout to match styling of the parallel Grid for
             egui::Grid::new("selectiongrid")
@@ -258,9 +258,9 @@ pub fn dimension_mapping_ui(
 
                         let response = ui.visibility_toggle_button(&mut has_slider);
                         let response = if has_slider {
-                            response.on_hover_text("Hide dimension slider")
+                            response.on_hover_text("隐藏维度滑块")
                         } else {
-                            response.on_hover_text("Show dimension slider")
+                            response.on_hover_text("显示维度滑块")
                         };
                         if response.changed() {
                             let mut slider = slice_selection.slider.clone().unwrap_or_default();

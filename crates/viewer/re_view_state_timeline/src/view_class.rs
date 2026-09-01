@@ -142,22 +142,22 @@ impl ViewClass for StateTimelineView {
             ..
         } = egui::InputOptions::default(); // This is OK, since we don't allow the user to change these modifiers.
 
-        Help::new("State timeline view")
-            .markdown("Shows state transitions as horizontal colored lanes over time.")
-            .control("Move time cursor", icons::RIGHT_MOUSE_CLICK)
+        Help::new("State timeline 视图")
+            .markdown("把状态变化显示为随时间排布的彩色横条。")
+            .control("移动时间标记", icons::RIGHT_MOUSE_CLICK)
             .control(
-                "Pan",
-                (MouseButtonText(egui::PointerButton::Primary), "+", "drag"),
+                "平移",
+                (MouseButtonText(egui::PointerButton::Primary), "+", "拖动"),
             )
             .control(
-                "Pan",
+                "平移",
                 IconText::from_modifiers_and(os, horizontal_scroll_modifier, icons::SCROLL),
             )
             .control(
-                "Zoom",
+                "缩放",
                 IconText::from_modifiers_and(os, zoom_modifier, icons::SCROLL),
             )
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control("重置视角", ("双击", icons::LEFT_MOUSE_CLICK))
     }
 
     fn on_register(
@@ -1139,7 +1139,7 @@ fn show_item_tooltip(
                 } else {
                     // No end time → open-ended last phase.
                     ui.label(
-                        egui::RichText::new("End: ongoing (no later data)")
+                        egui::RichText::new("结束：仍在进行（之后没有数据）")
                             .font(small)
                             .color(weak),
                     );

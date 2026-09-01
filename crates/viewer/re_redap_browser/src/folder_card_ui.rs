@@ -34,7 +34,7 @@ pub fn folder_cards_ui(
     let children = collect_cards(entries, path_prefix);
 
     if children.is_empty() {
-        ui.label("This folder is empty.");
+        ui.label("这个文件夹是空的。");
         return;
     }
 

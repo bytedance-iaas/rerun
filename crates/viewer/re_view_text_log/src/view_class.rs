@@ -75,12 +75,12 @@ impl ViewClass for TextView {
     }
 
     fn help(&self, _os: egui::os::OperatingSystem) -> Help {
-        Help::new("Text log view")
+        Help::new("Text log 视图")
             .docs_link("https://rerun.io/docs/reference/types/views/text_log_view")
             .markdown(
-                "TextLog entries over time.
+                "随时间排列的 TextLog 条目。
 
-Filter message types and toggle column visibility in a selection panel.",
+在 Selection 面板里过滤消息类型、切换列的显示。",
             )
     }
 
@@ -522,7 +522,7 @@ fn view_property_ui_rows(ctx: &ViewContext<'_>, ui: &mut egui::Ui) {
                     &|_| {},
                     Some(&|ui| {
                         let Ok(state) = ctx.view_state.downcast_ref::<TextViewState>() else {
-                            ui.error_label("Failed to get text log view state");
+                            ui.error_label("获取 text log 视图状态失败");
                             return;
                         };
 
@@ -530,7 +530,7 @@ fn view_property_ui_rows(ctx: &ViewContext<'_>, ui: &mut egui::Ui) {
                             ctx,
                             TextLogRows::descriptor_filter_by_log_level().component,
                         ) else {
-                            ui.error_label("Failed to query text log levels component");
+                            ui.error_label("查询 text log 级别组件失败");
                             return;
                         };
 

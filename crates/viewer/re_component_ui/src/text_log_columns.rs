@@ -38,7 +38,7 @@ pub fn edit_or_view_columns_multiline(
             .filter(|column| column.visible.into())
             .map(|column| ui.strong(column.kind.name()))
             .reduce(|a, b| a.union(b))
-            .unwrap_or_else(|| ui.weak("Empty")),
+            .unwrap_or_else(|| ui.weak("空")),
         MaybeMutRef::MutRef(columns) => visible_dnd(
             ui,
             "text_log_columns_dnd",
