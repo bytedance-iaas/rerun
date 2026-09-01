@@ -146,7 +146,7 @@ impl OpenHfModal {
                     Err(err) => Err(err),
                 };
                 if let Err(err) = &outcome {
-                    re_log::warn!("Failed to load server TOS defaults: {err}\nFile: config.json");
+                    re_log::warn!("加载服务器端默认配置失败：{err}\n文件：config.json");
                 }
                 *config.lock() = Some(outcome);
             });
@@ -193,18 +193,18 @@ impl OpenHfModal {
 
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("Open from Hugging Face"),
+            || ModalWrapper::new("从 Hugging Face 打开"),
             |ui| {
-                ui.strong("Stream a LeRobot dataset from Hugging Face.");
+                ui.strong("从 Hugging Face 流式读取 LeRobot 数据集。");
                 ui.add_space(4.0);
 
                 egui::Grid::new("hf_fields")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
-                        ui.label("Dataset:");
+                        ui.label("数据集：");
                         let edit = egui::TextEdit::singleline(&mut self.dataset)
-                            .hint_text("org/name, hf://org/name, or the dataset page URL")
+                            .hint_text("org/name、hf://org/name 或数据集页面 URL")
                             .desired_width(f32::INFINITY)
                             .show(ui);
                         if self.just_opened {
@@ -216,14 +216,14 @@ impl OpenHfModal {
                 // Token: the deployment's docker-secret default is used unless the user opts
                 // into providing their own. Public datasets need no token at all.
                 ui.add_space(2.0);
-                ui.re_checkbox(&mut self.use_custom_token, "Use non-default token");
+                ui.re_checkbox(&mut self.use_custom_token, "使用自定义 token");
 
                 if self.use_custom_token {
                     egui::Grid::new("hf_token_field")
                         .num_columns(2)
                         .spacing([8.0, 6.0])
                         .show(ui, |ui| {
-                            ui.label("Token:");
+                            ui.label("Token：");
                             egui::TextEdit::singleline(&mut self.token)
                                 .password(true)
                                 .desired_width(f32::INFINITY)
@@ -234,9 +234,8 @@ impl OpenHfModal {
 
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
-                        "Failed to load the server-side defaults (HF token, artifact-store \
-                         credentials): {err}\nFile: config.json — episodes will be \
-                         converted locally instead of loading from the artifacts store.",
+                        "加载服务器端默认配置（HF token、制品库凭证）失败：\
+                         {err}\n文件：config.json — 各集将改为本地转换，而不是从制品库加载。",
                     ));
                 }
 
@@ -247,7 +246,7 @@ impl OpenHfModal {
                     re_data_source::rrd_artifacts::parse_artifacts_url(&server_config.tos_rrd_artifacts_url)
                 {
                     let mut upload = !self.artifact_upload_disabled;
-                    ui.re_checkbox(&mut upload, "Upload converted rrd to the artifacts store")
+                    ui.re_checkbox(&mut upload, "把转换出的 rrd 上传到制品库")
                         .on_hover_text(format!("{artifacts_location}"));
                     self.artifact_upload_disabled = !upload;
                 }
@@ -257,18 +256,18 @@ impl OpenHfModal {
 
                 if !self.dataset.is_empty() && parsed.is_none() {
                     ui.error_label(
-                        "Expected org/name, hf://org/name, or a huggingface.co/datasets/… URL",
+                        "格式应为 org/name、hf://org/name 或 huggingface.co/datasets/… URL",
                     );
                 } else if let Some((repo, file_path)) = &parsed {
                     if let Some(file_path) = file_path {
-                        ui.label(format!("Loads the single file {file_path} from hf://{repo}."));
+                        ui.label(format!("将从 hf://{repo} 加载单个文件 {file_path}。"));
                     } else {
                         ui.label(format!(
-                            "Streams hf://{repo}; episodes appear immediately, click one to load it first."
+                            "将流式读取 hf://{repo}；各集（episode）会立即出现，点击某一集可以优先加载它。"
                         ));
                     }
                 } else {
-                    ui.label("Enter a Hugging Face dataset.");
+                    ui.label("请输入一个 Hugging Face 数据集。");
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -276,7 +275,7 @@ impl OpenHfModal {
 
                     let open_response = ui.add_enabled(
                         can_open,
-                        egui::Button::new("Open").min_size(egui::vec2(button_width, 0.0)),
+                        egui::Button::new("打开").min_size(egui::vec2(button_width, 0.0)),
                     );
                     if open_response.clicked()
                         || can_open && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -302,7 +301,7 @@ impl OpenHfModal {
                     }
 
                     let cancel_response =
-                        ui.add(egui::Button::new("Cancel").min_size(egui::vec2(button_width, 0.0)));
+                        ui.add(egui::Button::new("取消").min_size(egui::vec2(button_width, 0.0)));
                     if cancel_response.clicked() {
                         ui.close();
                     }

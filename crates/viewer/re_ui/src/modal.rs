@@ -345,7 +345,7 @@ impl ModalWrapper {
                     .layout(egui::Layout::right_to_left(egui::Align::Center)),
             );
             if ui
-                .small_icon_button(&crate::icons::CLOSE, "Close")
+                .small_icon_button(&crate::icons::CLOSE, "关闭")
                 .clicked()
             {
                 ui.close();

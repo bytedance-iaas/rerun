@@ -37,13 +37,11 @@ impl ContextMenuAction for CopyEntityPathToClipboard {
 
         let descriptor = match (components, entities) {
             (true, true) | (false, false) => "",
-            (true, false) => "component ",
-            (false, true) => "entity ",
+            (true, false) => "组件",
+            (false, true) => "实体",
         };
 
-        let s = if ctx.selection.len() == 1 { "" } else { "s" };
-
-        format!("Copy {descriptor}path{s}")
+        format!("复制{descriptor}路径")
     }
 
     fn process_selection(&self, ctx: &ContextMenuContext<'_>) {

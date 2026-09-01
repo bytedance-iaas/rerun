@@ -5,7 +5,7 @@ impl crate::AppUi for re_log_types::StoreId {
         if let Some(entity_db) = ctx.store_bundle().get(self) {
             entity_db.app_ui(ctx, ui, ui_layout);
         } else {
-            ui_layout.label(ui, "<unknown store>").on_hover_ui(|ui| {
+            ui_layout.label(ui, "<未知存储>").on_hover_ui(|ui| {
                 ui.label(format!("{self}"));
             });
         }

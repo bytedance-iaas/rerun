@@ -111,7 +111,7 @@ impl Alert {
                         ui.label(full_text);
                         ui.add_space(8.0);
                     }
-                    ui.label("Click to copy text.");
+                    ui.label("点击复制文本。");
                 });
             if response.clicked() {
                 ui.copy_text(full_text.unwrap_or(visible_text));

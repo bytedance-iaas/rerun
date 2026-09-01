@@ -45,7 +45,7 @@ impl Importer for ArchetypeImporter {
 
         let contents = {
             re_tracing::profile_scope!("fs::read");
-            std::fs::read(&filepath).with_context(|| format!("Failed to read file {filepath:?}"))?
+            std::fs::read(&filepath).with_context(|| format!("读取文件失败：{filepath:?}"))?
         };
         let contents = std::borrow::Cow::Owned(contents);
 
@@ -156,7 +156,7 @@ impl Importer for ArchetypeImporter {
         let num_chunks = chunks_sent.map_err(|err| err.with_path(&filepath))?;
 
         if num_chunks == 0 {
-            re_log::warn!("{} is empty", filepath.display());
+            re_log::warn!("{} 为空", filepath.display());
         }
 
         Ok(())
@@ -280,7 +280,7 @@ fn load_video(
     Ok(chunks.map_while(move |chunk| match chunk {
         Ok(chunk) => Some(chunk),
         Err(err) => {
-            re_log::warn!(?filepath, "Failed to load chunk from video: {err}");
+            re_log::warn!(?filepath, "从视频加载 chunk 失败：{err}");
             None
         }
     }))

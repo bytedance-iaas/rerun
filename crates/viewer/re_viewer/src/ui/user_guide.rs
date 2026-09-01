@@ -15,11 +15,11 @@ struct Page {
 
 const PAGES: &[Page] = &[
     Page {
-        tab: "Viewer",
+        tab: "Viewer 篇",
         markdown: include_str!("../../../../../docs/release/user-guide/01-viewer.md"),
     },
     Page {
-        tab: "Catalog server",
+        tab: "Catalog 服务器篇",
         markdown: include_str!("../../../../../docs/release/user-guide/02-catalog.md"),
     },
 ];
@@ -135,7 +135,7 @@ impl UserGuideModal {
         let commonmark_cache = &mut self.commonmark_cache;
         let mut open = self.open;
         let default_size = egui::vec2(840.0, 620.0);
-        egui::Window::new("User guide")
+        egui::Window::new("用户指南")
             .open(&mut open)
             .collapsible(false)
             .resizable(true)

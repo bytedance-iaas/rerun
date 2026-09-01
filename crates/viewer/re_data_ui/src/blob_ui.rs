@@ -51,7 +51,7 @@ impl EntityDataUi for Blob {
 
                 if let Some(media_type) = &media_type {
                     ui.label(media_type.to_string())
-                        .on_hover_text("Media type (MIME) based on magic header bytes");
+                        .on_hover_text("根据文件头魔数判断出的媒体类型（MIME）");
                 }
             });
         } else {
@@ -64,19 +64,19 @@ impl EntityDataUi for Blob {
 
             re_ui::list_item::list_item_scope(ui, "blob_info", |ui| {
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new("Size").value_text(size_string),
+                    PropertyContent::new("大小").value_text(size_string),
                 );
 
                 if let Some(media_type) = &media_type {
                     ui.list_item_flat_noninteractive(
-                        PropertyContent::new("Media type").value_text(media_type.as_str()),
+                        PropertyContent::new("媒体类型").value_text(media_type.as_str()),
                     )
-                    .on_hover_text("Media type (MIME) based on magic header bytes");
+                    .on_hover_text("根据文件头魔数判断出的媒体类型（MIME）");
                 } else {
                     ui.list_item_flat_noninteractive(
-                        PropertyContent::new("Media type").value_text("?"),
+                        PropertyContent::new("媒体类型").value_text("?"),
                     )
-                    .on_hover_text("Failed to detect media type (Mime) from magic header bytes");
+                    .on_hover_text("无法根据文件头魔数识别媒体类型（MIME）");
                 }
                 blob_ui.data_ui(ctx, ui, ui_layout, entity_path);
             });
@@ -106,7 +106,7 @@ fn exif_ui(ui: &mut egui::Ui, key: StoredBlobCacheKey, blob: &re_sdk_types::data
             list_item::list_item_scope(ui, "exif", |ui| {
                 for entry in &exif.entries {
                     let tag_string = if entry.tag == rexif::ExifTag::UnknownToMe {
-                        "<Unknown tag>".to_owned()
+                        "<未知标签>".to_owned()
                     } else {
                         entry.tag.to_string()
                     };

@@ -54,7 +54,7 @@ impl crate::Importer for RrdImporter {
                 // blocking the UI update thread indefinitely and making the viewer unresponsive (as .rbl
                 // files are sometimes read on UI update).
                 let file = std::fs::File::open(&filepath)
-                    .with_context(|| format!("Failed to open file {filepath:?}"))?;
+                    .with_context(|| format!("打开文件失败：{filepath:?}"))?;
                 let file = std::io::BufReader::new(file);
 
                 let messages = Decoder::decode_eager(file)?;
@@ -79,12 +79,12 @@ impl crate::Importer for RrdImporter {
                             );
                         }
                     })
-                    .with_context(|| format!("Failed to spawn IO thread for {filepath:?}"))?;
+                    .with_context(|| format!("启动 IO 线程失败：{filepath:?}"))?;
             }
 
             "rrd" => {
                 let file = std::fs::File::open(&filepath)
-                    .with_context(|| format!("Failed to open file {filepath:?}"))?;
+                    .with_context(|| format!("打开文件失败：{filepath:?}"))?;
                 let file = std::io::BufReader::new(file);
 
                 let messages = Decoder::decode_eager(file)?;
@@ -102,7 +102,7 @@ impl crate::Importer for RrdImporter {
                             );
                         }
                     })
-                    .with_context(|| format!("Failed to spawn IO thread for {filepath:?}"))?;
+                    .with_context(|| format!("启动 IO 线程失败：{filepath:?}"))?;
             }
             _ => unreachable!(),
         }
@@ -175,7 +175,7 @@ fn decode_and_stream(
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
-                re_log::warn!(?filepath, "Failed to decode message: {err}");
+                re_log::warn!(?filepath, "解码消息失败：{err}");
                 continue;
             }
         };

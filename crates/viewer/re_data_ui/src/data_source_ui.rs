@@ -54,7 +54,7 @@ impl crate::AppUi for re_log_channel::LogSource {
             ui.spacing_mut().item_spacing.y = 0.0;
             if !recordings.is_empty() {
                 ui.add_space(8.0);
-                ui.strong("Recordings from this data source");
+                ui.strong("来自该数据源的录制文件");
                 for db in recordings {
                     entity_db_button_ui(ctx, db, ui, ui_layout, true);
                 }
@@ -62,7 +62,7 @@ impl crate::AppUi for re_log_channel::LogSource {
 
             if !blueprints.is_empty() {
                 ui.add_space(8.0);
-                ui.strong("Blueprints from this data source");
+                ui.strong("来自该数据源的 blueprint");
                 for db in blueprints {
                     entity_db_button_ui(ctx, db, ui, ui_layout, true);
                 }

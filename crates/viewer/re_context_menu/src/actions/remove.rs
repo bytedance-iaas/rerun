@@ -21,7 +21,7 @@ impl ContextMenuAction for RemoveAction {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "Remove".to_owned()
+        "移除".to_owned()
     }
 
     fn process_container(&self, ctx: &ContextMenuContext<'_>, container_id: &ContainerId) {

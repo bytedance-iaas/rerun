@@ -1,4 +1,3 @@
-use re_format::format_plural_s;
 use re_log_types::{EntityPath, Instance};
 use re_query::LatestAllComponentResults;
 use re_sdk_types::ComponentIdentifier;
@@ -60,13 +59,12 @@ impl DataUi for LatestAllInstanceResult<'_> {
 
                 if static_message_count > 1 {
                     ui.warning_label(format!(
-                        "Logged {} as static",
-                        format_plural_s(static_message_count, "time")
+                        "已作为静态数据记录 {} 次",
+                        re_format::format_uint(static_message_count)
                     ))
                     .on_hover_text(
-                        "When a static component is logged multiple times, only the last value \
-                            is stored. Previously logged values are overwritten and not \
-                            recoverable.",
+                        "静态组件被多次记录时，只会保存最后一次的值。\
+                            之前记录的值会被覆盖，无法恢复。",
                     );
                 }
 
@@ -78,13 +76,12 @@ impl DataUi for LatestAllInstanceResult<'_> {
                     );
                 if temporal_message_count > 0 {
                     ui.error_label(format!(
-                        "Static component also has {}",
-                        re_format::format_plural_s(temporal_message_count, "temporal event")
+                        "该静态组件还有 {} 个时间轴上的事件",
+                        re_format::format_uint(temporal_message_count)
                     ))
                     .on_hover_text(
-                        "Components should be logged either as static or on timelines, but \
-                        never both. Values for static components logged to timelines cannot be \
-                        displayed.",
+                        "组件要么记录为静态数据，要么记录在时间轴上，不能两者都用。\
+                        静态组件在时间轴上记录的值无法显示。",
                     );
                 }
             } else {
@@ -93,8 +90,8 @@ impl DataUi for LatestAllInstanceResult<'_> {
                     ui.horizontal(|ui| {
                         ui.add(re_ui::icons::COMPONENT_TEMPORAL.as_image());
                         ui.label(format!(
-                            "Logged {} at {timeline_name}={formatted_time}",
-                            format_plural_s(hits.num_rows(), "time")
+                            "在 {timeline_name}={formatted_time} 处记录了 {} 次",
+                            re_format::format_uint(hits.num_rows())
                         ));
                     });
                 }
@@ -117,13 +114,13 @@ impl DataUi for LatestAllInstanceResult<'_> {
             if ui_layout.is_single_line() {
                 if time.is_static() {
                     ui.label(format!(
-                        "Logged {} as static",
-                        format_plural_s(hits.num_rows(), "time")
+                        "已作为静态数据记录 {} 次",
+                        re_format::format_uint(hits.num_rows())
                     ));
                 } else {
                     ui.label(format!(
-                        "Logged {} at {timeline_name}={formatted_time}",
-                        format_plural_s(hits.num_rows(), "time")
+                        "在 {timeline_name}={formatted_time} 处记录了 {} 次",
+                        re_format::format_uint(hits.num_rows())
                     ));
                 }
             } else {

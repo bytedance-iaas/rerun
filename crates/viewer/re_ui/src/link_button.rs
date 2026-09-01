@@ -65,7 +65,7 @@ impl LinkButton {
                     .tiny()
                     .image_tint_follows_text_color(tint_icons)
             });
-        let copy_response = copy_response.map(|r| r.on_hover_text("Copy link"));
+        let copy_response = copy_response.map(|r| r.on_hover_text("复制链接"));
 
         response.response = response
             .response
@@ -74,7 +74,7 @@ impl LinkButton {
 
         if copy_response.as_ref().is_some_and(|r| r.clicked()) {
             ui.copy_text(url.clone());
-            re_log::info!("Link copied!");
+            re_log::info!("链接已复制！");
         }
 
         if response.clicked() {

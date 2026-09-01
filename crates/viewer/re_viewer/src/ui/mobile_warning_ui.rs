@@ -22,7 +22,7 @@ pub fn mobile_warning_ui(ui: &mut egui::Ui, custom_window_decorations: bool) {
                 ui.centered_and_justified(|ui| {
                     let text = ui
                         .ctx()
-                        .warning_text("Mobile OSes are not yet supported. Click for details.");
+                        .warning_text("暂不支持移动操作系统。点击查看详情。");
                     ui.hyperlink_to(text, "https://github.com/rerun-io/rerun/issues/1672");
                 });
             });

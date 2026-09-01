@@ -37,7 +37,7 @@ impl DataUi for ComponentPath {
 
             // TODO(RR-3670): figure out how to handle missing chunks
             if any_missing_chunks && ctx.db.can_fetch_chunks_from_redap() {
-                ui.loading_indicator("Fetching chunks from redap");
+                ui.loading_indicator("正在从 Redap 获取 chunk");
             } else if engine.store().entity_has_component_on_timeline(
                 Some(&ctx.timeline_name()),
                 &entity_path,
@@ -45,10 +45,10 @@ impl DataUi for ComponentPath {
             ) {
                 ui.label("<unset>");
             } else {
-                ui.warning_label(format!("Entity {entity_path} has no component {component}"));
+                ui.warning_label(format!("实体 {entity_path} 没有组件 {component}"));
             }
         } else {
-            ui.error_label(format!("Unknown component path: {self}"));
+            ui.error_label(format!("未知的组件路径：{self}"));
         }
     }
 }

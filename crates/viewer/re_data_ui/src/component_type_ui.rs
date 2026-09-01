@@ -13,7 +13,7 @@ impl DataUi for ComponentType {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                 if ui_layout.is_selection_panel() {
-                    ui.label(format!("Full name: {}", self.full_name()));
+                    ui.label(format!("全名：{}", self.full_name()));
                 } else {
                     ui.label(self.full_name());
                 }
@@ -35,7 +35,7 @@ impl DataUi for ComponentType {
 
                 if let Some(url) = self.doc_url() {
                     // Always open in a new tab
-                    ui.re_hyperlink("Full documentation", url, true);
+                    ui.re_hyperlink("完整文档", url, true);
                 }
             });
         }

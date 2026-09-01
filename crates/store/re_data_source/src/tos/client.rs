@@ -162,11 +162,11 @@ impl TosClient {
             200 => Ok(Some(String::from_utf8_lossy(&response.bytes).into_owned())),
             404 => Ok(None), // NoSuchCORSConfiguration
             403 => anyhow::bail!(
-                "GetBucketCors denied (HTTP 403) — these credentials cannot manage this bucket's CORS\nBucket: {}",
+                "GetBucketCors 被拒绝（HTTP 403）— 这组凭证无权管理该桶的 CORS\n桶：{}",
                 self.bucket
             ),
             other => anyhow::bail!(
-                "GetBucketCors failed with HTTP {other}: {}\nBucket: {}",
+                "GetBucketCors 失败，HTTP {other}：{}\n桶：{}",
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                 self.bucket
             ),
@@ -195,11 +195,11 @@ impl TosClient {
         match response.status {
             200 | 204 => Ok(()),
             403 => anyhow::bail!(
-                "PutBucketCors denied (HTTP 403) — these credentials cannot manage this bucket's CORS\nBucket: {}",
+                "PutBucketCors 被拒绝（HTTP 403）— 这组凭证无权管理该桶的 CORS\n桶：{}",
                 self.bucket
             ),
             other => anyhow::bail!(
-                "PutBucketCors failed with HTTP {other}: {}\nBucket: {}",
+                "PutBucketCors 失败，HTTP {other}：{}\n桶：{}",
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                 self.bucket
             ),
@@ -251,7 +251,7 @@ impl TosClient {
                 empty_responses += 1;
                 if empty_responses > 3 {
                     anyhow::bail!(
-                        "Empty byte-range response at offset {pos} (wanted {pos}..{})\nObject: {key}",
+                        "偏移 {pos} 处的字节范围响应为空（期望 {pos}..{}）\n对象：{key}",
                         range.end
                     );
                 }
@@ -304,7 +304,7 @@ impl TosClient {
 
         if !(response.status == 200 || response.status == 206) {
             anyhow::bail!(
-                "GET failed with HTTP {}: {}\nObject: {key}",
+                "GET 失败，HTTP {}：{}\n对象：{key}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
             );
@@ -334,7 +334,7 @@ impl TosClient {
                 .await?;
             if response.status != 200 {
                 anyhow::bail!(
-                    "ListObjectsV2 failed with HTTP {}: {}\nBucket: {}",
+                    "ListObjectsV2 失败，HTTP {}：{}\n桶：{}",
                     response.status,
                     String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                     self.bucket,
@@ -375,7 +375,7 @@ impl TosClient {
             .await?;
         if response.status != 200 {
             anyhow::bail!(
-                "ListObjectsV2 failed with HTTP {}: {}\nBucket: {}",
+                "ListObjectsV2 失败，HTTP {}：{}\n桶：{}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                 self.bucket,
@@ -407,7 +407,7 @@ impl TosClient {
             return Ok(None);
         }
         if response.status != 200 {
-            anyhow::bail!("HEAD failed with HTTP {}\nObject: {key}", response.status);
+            anyhow::bail!("HEAD 失败，HTTP {}\n对象：{key}", response.status);
         }
 
         let size = response
@@ -461,7 +461,7 @@ impl TosClient {
 
         if response.status != 200 {
             anyhow::bail!(
-                "PUT failed with HTTP {}: {}\nObject: {key}",
+                "PUT 失败，HTTP {}：{}\n对象：{key}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
             );
@@ -485,12 +485,12 @@ impl TosClient {
         // S3 answers 204 No Content for deletions, existing key or not.
         if response.status == 403 {
             anyhow::bail!(
-                "Deletion denied (HTTP 403) — these credentials have no delete permission\nObject: {key}"
+                "删除被拒绝（HTTP 403）— 这组凭证没有删除权限\n对象：{key}"
             );
         }
         if response.status != 204 && response.status != 200 {
             anyhow::bail!(
-                "DELETE failed with HTTP {}: {}\nObject: {key}",
+                "DELETE 失败，HTTP {}：{}\n对象：{key}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
             );
@@ -597,7 +597,7 @@ impl TosClient {
                 request.method = ehttp::Method::DELETE;
                 request
             }
-            other => anyhow::bail!("Unsupported method: {other}"),
+            other => anyhow::bail!("不支持的请求方法：{other}"),
         };
         for (k, v) in &headers {
             if k != "host" {
@@ -618,7 +618,7 @@ impl TosClient {
 
         crate::http_client::fetch_async_with_timeout(request, hard_timeout)
             .await
-            .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))
+            .map_err(|err| anyhow::anyhow!("请求失败：{err}\nURL：{url}"))
     }
 }
 

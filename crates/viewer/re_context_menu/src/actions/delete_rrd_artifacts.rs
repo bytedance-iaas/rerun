@@ -19,7 +19,7 @@ impl ContextMenuAction for DeleteRrdArtifact {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "Delete rrd artifact…".to_owned()
+        "删除 rrd 转换产物…".to_owned()
     }
 
     fn process_store_id(&self, _ctx: &ContextMenuContext<'_>, store_id: &re_log_types::StoreId) {
@@ -57,7 +57,7 @@ impl ContextMenuAction for DeleteDatasetRrdArtifacts {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "Delete all rrd artifacts…".to_owned()
+        "删除全部 rrd 转换产物…".to_owned()
     }
 
     fn process_app_id(&self, _ctx: &ContextMenuContext<'_>, app_id: &re_log_types::ApplicationId) {

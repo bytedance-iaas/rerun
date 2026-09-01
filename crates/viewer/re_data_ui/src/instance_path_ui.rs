@@ -3,7 +3,6 @@ use itertools::Itertools as _;
 use re_capabilities::MainThreadToken;
 use re_chunk_store::{ChunkTrackingMode, UnitChunkShared};
 use re_entity_db::InstancePath;
-use re_format::format_plural_s;
 use re_log_types::ComponentPath;
 use re_query::{LatestAllComponentResults, LatestAllResults};
 use re_sdk_types::reflection::ComponentDescriptorExt as _;
@@ -41,7 +40,7 @@ impl DataUi for InstancePath {
             ui_layout.label(
                 ui,
                 format!(
-                    "{self} has no own components on timeline {}, but its children do",
+                    "{self} 在时间轴 {} 上没有自己的组件，但它的子级有",
                     ctx.timeline_name()
                 ),
             );
@@ -107,7 +106,7 @@ impl DataUi for InstancePath {
 
         if any_missing_chunks && ctx.db.can_fetch_chunks_from_redap() {
             // TODO(RR-3670): figure out how to handle missing chunks
-            ui.loading_indicator("Fetching chunks from redap");
+            ui.loading_indicator("正在从 Redap 获取 chunk");
         }
     }
 }
@@ -130,9 +129,9 @@ fn instance_path_ui(
             ui_layout.label(
                 ui,
                 format!(
-                    "{} with {}",
-                    format_plural_s(components_by_archetype.len(), "archetype"),
-                    format_plural_s(num_components, "total component")
+                    "{} 个 archetype，共 {} 个组件",
+                    re_format::format_uint(components_by_archetype.len()),
+                    re_format::format_uint(num_components)
                 ),
             );
         }
@@ -161,19 +160,22 @@ fn instance_path_ui(
                 if !showed_short_summary {
                     // Show just a very short summary:
                     ui.list_item_scope(instance_path, |ui| {
-                        ui.list_item_label(format_plural_s(num_components, "component"));
+                        ui.list_item_label(format!(
+                            "{} 个组件",
+                            re_format::format_uint(num_components)
+                        ));
 
                         let archetype_count = components_by_archetype.len();
                         ui.list_item_label(format!(
-                            "{}: {}",
-                            format_plural_s(archetype_count, "archetype"),
+                            "{} 个 archetype：{}",
+                            re_format::format_uint(archetype_count),
                             components_by_archetype
                                 .keys()
                                 .map(|archetype| {
                                     if let Some(archetype) = archetype {
                                         archetype.short_name()
                                     } else {
-                                        "<Without archetype>"
+                                        "<无 archetype>"
                                     }
                                 })
                                 .join(", ")
@@ -256,14 +258,7 @@ fn try_summary_ui_for_tooltip(
     );
 
     let num_skipped = num_components - num_instanced_components;
-    ui.label(format!(
-        "…plus {num_skipped} more {}",
-        if num_skipped == 1 {
-            "component"
-        } else {
-            "components"
-        }
-    ));
+    ui.label(format!("…另有 {num_skipped} 个组件"));
 
     Ok(())
 }
@@ -336,7 +331,7 @@ fn component_list_ui(
                     // Maybe there _will be_ data, once we have loaded it.
                     let any_missing_chunks = !query_results.missing_virtual.is_empty();
                     if any_missing_chunks && ctx.db.can_fetch_chunks_from_redap() {
-                        ui.loading_indicator("Fetching chunks from redap");
+                        ui.loading_indicator("正在从 Redap 获取 chunk");
                     } else {
                         ui.weak("-"); // TODO(RR-3670): figure out how to handle missing chunks
                     }
@@ -447,7 +442,7 @@ fn component_ui(
             ),
         ) {
             re_ui::list_item::list_item_scope(ui, component_descr, |ui| {
-                ui.list_item_flat_noninteractive(PropertyContent::new("Data type").value_text(
+                ui.list_item_flat_noninteractive(PropertyContent::new("数据类型").value_text(
                     // TODO(#11071): use re_arrow_ui to format the datatype here
                     column.store_datatype.to_string(),
                 ));
@@ -472,7 +467,7 @@ pub fn archetype_label_list_item_ui(ui: &mut egui::Ui, archetype: Option<&Archet
                 RichText::new(
                     archetype
                         .map(|a| a.short_name())
-                        .unwrap_or("Without archetype"),
+                        .unwrap_or("无 archetype"),
                 )
                 .size(10.0)
                 .color(design_tokens_of_visuals(ui.visuals()).list_item_strong_text),

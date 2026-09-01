@@ -150,7 +150,7 @@ impl Help {
                         let response = ui.add(
                             egui::Button::image_and_text(
                                 &icons::EXTERNAL_LINK,
-                                RichText::new("Docs").size(11.0),
+                                RichText::new("文档").size(11.0),
                             )
                             .image_tint_follows_text_color(true)
                             .frame(false),

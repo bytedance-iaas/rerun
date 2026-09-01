@@ -40,7 +40,7 @@ pub fn no_data_ui(ui: &mut egui::Ui) {
         ui.add_space(9.0);
         if ui
             .button(
-                egui::RichText::new("Go to documentation →")
+                egui::RichText::new("前往文档 →")
                     .weak()
                     .text_style(DesignTokens::welcome_screen_body()),
             )

@@ -33,12 +33,12 @@ pub fn fetch_and_load(url: &url::Url) -> LogReceiver {
                     if !response.ok {
                         re_log::error!(
                             url = url_display_name(&url_string),
-                            "Failed to fetch: {} {}",
+                            "获取失败：{} {}",
                             response.status,
                             response.status_text
                         );
                         tx.quit(Some(Box::new(std::io::Error::other(format!(
-                            "Failed to fetch file: HTTP {} {}",
+                            "获取文件失败：HTTP {} {}",
                             response.status, response.status_text
                         )))))
                         .warn_on_err_once("Failed to send quit marker");
@@ -70,7 +70,7 @@ pub fn fetch_and_load(url: &url::Url) -> LogReceiver {
                         std::borrow::Cow::Borrowed(&bytes),
                         &tx,
                     ) {
-                        re_log::error!(path = filename, "Failed to load: {err}");
+                        re_log::error!(path = filename, "加载失败：{err}");
                         tx.quit(Some(Box::new(err)))
                             .warn_on_err_once("Failed to send quit marker");
                     }
@@ -81,10 +81,10 @@ pub fn fetch_and_load(url: &url::Url) -> LogReceiver {
                 Err(err) => {
                     re_log::error!(
                         url = url_display_name(&url_string),
-                        "Failed to fetch: {err}"
+                        "获取失败：{err}"
                     );
                     tx.quit(Some(Box::new(std::io::Error::other(format!(
-                        "Failed to fetch file: {err}",
+                        "获取文件失败：{err}",
                     )))))
                     .warn_on_err_once("Failed to send quit marker");
                 }

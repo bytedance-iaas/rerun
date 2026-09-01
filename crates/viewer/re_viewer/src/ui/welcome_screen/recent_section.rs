@@ -27,7 +27,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
     let now = now_unix();
 
     ui.add(egui::Label::new(
-        egui::RichText::new("Recently opened")
+        egui::RichText::new("最近打开")
             .strong()
             .line_height(Some(32.0))
             .text_style(DesignTokens::welcome_screen_example_title()),
@@ -45,7 +45,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
         );
         if let Some(count) = recent.item_count {
             use std::fmt::Write as _;
-            write!(meta, " · {count} items").ok();
+            write!(meta, " · {count} 项").ok();
         }
 
         ui.horizontal(|ui| {
@@ -68,7 +68,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
             ));
 
             if ui
-                .small_icon_button(&icons::CLOSE, "Remove from this list")
+                .small_icon_button(&icons::CLOSE, "从这个列表中移除")
                 .clicked()
             {
                 action = Some(RecentAction::Remove(index));

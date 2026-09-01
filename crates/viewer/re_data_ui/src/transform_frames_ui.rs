@@ -139,7 +139,7 @@ impl TransformFramesUi {
         match layout {
             UiLayout::Tooltip => {} // Don't show in tooltips.
             UiLayout::List | UiLayout::SelectionPanel | UiLayout::Inline => {
-                ui.collapsing("Transform frame parents", |ui| {
+                ui.collapsing("变换坐标系的父级链", |ui| {
                     egui::Frame::new()
                         .corner_radius(ui.visuals().menu_corner_radius)
                         .fill(ui.visuals().tokens().text_edit_bg_color)
@@ -173,7 +173,7 @@ impl TransformFramesUi {
 
         if missing_chunk_reporter.any_missing() {
             if db.can_fetch_chunks_from_redap() {
-                ui.loading_indicator("Fetching chunks from redap");
+                ui.loading_indicator("正在从 Redap 获取 chunk");
             } else {
                 // TODO(RR-3670): figure out how to handle missing chunks
             }
@@ -188,7 +188,7 @@ impl TransformFramesUi {
 
             if more {
                 ui.add(egui::Label::new("…").selectable(false))
-                    .on_hover_text("There are more frames not displayed here");
+                    .on_hover_text("还有更多坐标系未在此显示");
             }
 
             for (idx, transform) in frames.iter().take(show_amount).enumerate().rev() {
@@ -197,12 +197,12 @@ impl TransformFramesUi {
                     let rect = ui.small_icon(&icons::ARROW_UP, Some(ui.visuals().text_color()));
                     ui.interact(rect, id, egui::Sense::hover())
                         .on_hover_text(format!(
-                            "{} is a child frame of {}",
+                            "{} 是 {} 的子坐标系",
                             transform.frame_id,
                             frames
                                 .get(idx + 1)
                                 .map(|transform| transform.frame_id.as_str())
-                                .unwrap_or("another frame")
+                                .unwrap_or("另一个坐标系")
                         ));
                 }
 
@@ -231,7 +231,7 @@ fn transform_ui(
                     transform.source_entity.is_some(),
                     egui::Button::selectable(is_current, transform.frame_id.as_str()),
                 )
-                .on_disabled_hover_text("No related entity found for frame");
+                .on_disabled_hover_text("没有找到与该坐标系相关的实体");
 
             if let Some(source_entity) = &transform.source_entity
                 && response.on_hover_text(source_entity.to_string()).clicked()

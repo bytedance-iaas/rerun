@@ -312,7 +312,7 @@ impl CommandPalette {
         let num_groups = groups.len();
 
         if num_groups == 0 {
-            ui.weak("No matching results");
+            ui.weak("没有匹配结果");
             return None;
         }
 
@@ -418,7 +418,7 @@ impl CommandPalette {
                 let row = CmdRow {
                     job: LayoutJob::simple(
                         format!(
-                            "+ {} more",
+                            "+ 还有 {} 条",
                             re_format::format_uint(num_truncated[group_idx])
                         ),
                         egui::TextStyle::Button.resolve(ui.style()),
@@ -426,7 +426,7 @@ impl CommandPalette {
                         f32::INFINITY,
                     ),
                     kb_shortcut: String::new(),
-                    tooltip: Some("Show all matches in this group".to_owned()),
+                    tooltip: Some("显示这一组的全部匹配项".to_owned()),
                 };
 
                 let state = if selected {

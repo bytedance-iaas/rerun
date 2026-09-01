@@ -33,9 +33,9 @@ impl ContextMenuAction for ShowAction {
 
     fn label(&self, ctx: &ContextMenuContext<'_>) -> String {
         if ctx.selection.len() > 1 {
-            "Show all".to_owned()
+            "全部显示".to_owned()
         } else {
-            "Show".to_owned()
+            "显示".to_owned()
         }
     }
 
@@ -93,9 +93,9 @@ impl ContextMenuAction for HideAction {
 
     fn label(&self, ctx: &ContextMenuContext<'_>) -> String {
         if ctx.selection.len() > 1 {
-            "Hide all".to_owned()
+            "全部隐藏".to_owned()
         } else {
-            "Hide".to_owned()
+            "隐藏".to_owned()
         }
     }
 

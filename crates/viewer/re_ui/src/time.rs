@@ -1,6 +1,5 @@
 use std::ops::Sub as _;
 
-use re_format::format_plural_s;
 use re_log_types::{Timestamp, TimestampFormat};
 
 /// Formats a duration in a short, readable format, e.g. ("1 hour ago" or "2 minutes ago")
@@ -15,21 +14,21 @@ pub fn format_duration_short(timestamp: Timestamp, fallback_format: TimestampFor
     let duration = Timestamp::now().sub(timestamp);
     let seconds = duration.as_secs_f64() as u64;
 
-    let format_plural = |n: u64, unit: &'static str| format!("{} ago", format_plural_s(n, unit));
+    let format_plural = |n: u64, unit: &'static str| format!("{n} {unit}前");
 
     if seconds < 10 {
-        "just now".to_owned()
+        "刚刚".to_owned()
     } else if seconds < 60 {
-        "less than a minute ago".to_owned()
+        "不到一分钟前".to_owned()
     } else if seconds < 3600 {
         let minutes = seconds / 60;
-        format_plural(minutes, "minute")
+        format_plural(minutes, "分钟")
     } else if seconds < 24 * 3600 {
         let hours = seconds / 3600;
-        format_plural(hours, "hour")
+        format_plural(hours, "小时")
     } else if seconds < 7 * 24 * 3600 {
         let days = seconds / 86400;
-        format_plural(days, "day")
+        format_plural(days, "天")
     } else {
         timestamp.format(fallback_format)
     }

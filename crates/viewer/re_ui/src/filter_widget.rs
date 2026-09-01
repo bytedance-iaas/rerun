@@ -174,9 +174,9 @@ impl FilterState {
                             &icons::SEARCH
                         },
                         if is_searching {
-                            "Stop search"
+                            "停止搜索"
                         } else {
-                            "Search"
+                            "搜索"
                         },
                         || {
                             toggle_search_clicked = true;
@@ -230,11 +230,11 @@ impl FilterState {
                 ui.horizontal(|ui| {
                     ui.set_height(19.0);
 
-                    ui.add_enabled_ui(false, |ui| ui.small_icon_button(&icons::SEARCH, "Search"));
+                    ui.add_enabled_ui(false, |ui| ui.small_icon_button(&icons::SEARCH, "搜索"));
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if !inner_state.filter_query.is_empty()
-                            && ui.small_icon_button(&icons::CLOSE, "Close").clicked()
+                            && ui.small_icon_button(&icons::CLOSE, "关闭").clicked()
                         {
                             *inner_state = Default::default();
                         }

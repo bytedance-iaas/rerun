@@ -1,11 +1,11 @@
 use re_ui::DesignTokens;
 
 pub(super) const DOCS_URL: &str = "https://www.rerun.io/docs";
-pub(super) const WELCOME_SCREEN_TITLE: &str = "The data layer for physical AI";
+pub(super) const WELCOME_SCREEN_TITLE: &str = "具身智能的数据底座";
 pub(super) const WELCOME_SCREEN_BULLET_TEXT: &[&str] = &[
-    "Log multi-rate, multimodal data with the Rerun SDK in C++, Python, or Rust",
-    "Visualize and explore live or recorded data across the pipeline",
-    "Query with dataframes or SQL, and stream directly to training",
+    "用 C++、Python 或 Rust 的 Rerun SDK 记录多频率、多模态数据",
+    "可视化并探索管线各环节的实时或已录制数据",
+    "用 dataframe 或 SQL 查询，并直接流式接入训练",
 ];
 
 /// Show the welcome section.

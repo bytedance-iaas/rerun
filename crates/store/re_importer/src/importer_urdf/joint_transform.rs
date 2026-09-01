@@ -106,7 +106,7 @@ pub mod internal {
                     && !(limit.lower <= value && value <= limit.upper)
                 {
                     warning = Some(format!(
-                        "Joint '{}' angle {:.4} rad is outside limits [{:.4}, {:.4}] rad. Clamping.",
+                        "关节 '{}' 的角度 {:.4} rad 超出限位 [{:.4}, {:.4}] rad，已截断到限位内。",
                         name, value, limit.lower, limit.upper
                     ));
                     value = value.clamp(limit.lower, limit.upper);
@@ -133,7 +133,7 @@ pub mod internal {
 
                 if clamp && !(limit.lower <= value && value <= limit.upper) {
                     warning = Some(format!(
-                        "Joint '{}' distance {:.4} m is outside limits [{:.4}, {:.4}] m. Clamping.",
+                        "关节 '{}' 的位移 {:.4} m 超出限位 [{:.4}, {:.4}] m，已截断到限位内。",
                         name, value, limit.lower, limit.upper
                     ));
                     value = value.clamp(limit.lower, limit.upper);

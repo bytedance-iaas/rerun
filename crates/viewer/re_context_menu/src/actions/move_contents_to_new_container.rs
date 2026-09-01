@@ -48,7 +48,12 @@ impl ContextMenuAction for MoveContentsToNewContainerAction {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        format!("{:?}", self.0)
+        match self.0 {
+            ContainerKind::Tabs => "标签页".to_owned(),
+            ContainerKind::Horizontal => "水平排列".to_owned(),
+            ContainerKind::Vertical => "垂直排列".to_owned(),
+            ContainerKind::Grid => "网格".to_owned(),
+        }
     }
 
     fn process_selection(&self, ctx: &ContextMenuContext<'_>) {

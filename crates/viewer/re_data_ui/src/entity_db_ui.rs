@@ -56,7 +56,7 @@ impl crate::AppUi for EntityDb {
                             (true, false) => {
                                 ui.add_space(8.0);
                                 ui.label(
-                                    "This is the default blueprint for the current application.",
+                                    "这是当前应用的默认 blueprint。",
                                 );
 
                                 if let Some(active_blueprint) =
@@ -66,25 +66,25 @@ impl crate::AppUi for EntityDb {
                                     // The active blueprint is a clone of the selected blueprint.
                                     if self.latest_row_id() == active_blueprint.latest_row_id() {
                                         ui.label(
-                                            "The active blueprint is a clone of this blueprint.",
+                                            "当前生效的 blueprint 是这个 blueprint 的克隆。",
                                         );
                                     } else {
-                                        ui.label("The active blueprint is a modified clone of this blueprint.");
+                                        ui.label("当前生效的 blueprint 是这个 blueprint 的克隆，并有改动。");
                                     }
                                 }
                             }
                             (false, true) => {
                                 ui.add_space(8.0);
-                                ui.label(format!("This is the active blueprint for the current application, '{active_app_id}'"));
+                                ui.label(format!("这是当前应用 '{active_app_id}' 正在生效的 blueprint"));
                             }
                             (true, true) => {
                                 ui.add_space(8.0);
-                                ui.label(format!("This is both the active and default blueprint for the current application, '{active_app_id}'"));
+                                ui.label(format!("这既是当前应用 '{active_app_id}' 正在生效的 blueprint，也是其默认 blueprint"));
                             }
                         }
                     } else {
                         ui.add_space(8.0);
-                        ui.label("This blueprint is not for the active application");
+                        ui.label("这个 blueprint 不属于当前活跃的应用");
                     }
                 }
             }
@@ -114,7 +114,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         ..
     }) = &db.data_source
     {
-        ui.grid_left_hand_label("Segment ID");
+        ui.grid_left_hand_label("片段 ID");
         ui.label(segment_id.to_string());
         ui.end_row();
     }
@@ -130,28 +130,28 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         } = store_info;
 
         if let Some(cloned_from) = cloned_from {
-            ui.grid_left_hand_label("Clone of");
+            ui.grid_left_hand_label("克隆自");
             crate::item_ui::store_id_button_ui(ctx, ui, cloned_from, ui_layout);
             ui.end_row();
         }
 
-        ui.grid_left_hand_label("Application ID");
+        ui.grid_left_hand_label("应用 ID");
         app_id_button_ui(ctx, ui, store_id.application_id());
         ui.end_row();
 
-        ui.grid_left_hand_label("Source");
+        ui.grid_left_hand_label("来源");
         ui.label(store_source.to_string());
         ui.end_row();
 
         if let Some(store_version) = store_version {
-            ui.grid_left_hand_label("Source RRD version");
+            ui.grid_left_hand_label("来源 RRD 版本");
             ui.label(store_version.to_string());
             ui.end_row();
         } else {
             re_log::trace_once!("store version is undefined for this recording, this is a bug");
         }
 
-        ui.grid_left_hand_label("Kind");
+        ui.grid_left_hand_label("类型");
         ui.label(store_id.kind().to_string());
         ui.end_row();
     }
@@ -163,7 +163,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         && let Ok(nanos_since_epoch) = i64::try_from(latest_row_id.nanos_since_epoch())
     {
         let time = re_log_types::Timestamp::from_nanos_since_epoch(nanos_since_epoch);
-        ui.grid_left_hand_label("Modified");
+        ui.grid_left_hand_label("修改时间");
         ui.label(time.format(ctx.app_options.timestamp_format));
         ui.end_row();
     }
@@ -184,14 +184,14 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 
         let pretty = printer.duration_to_string(&duration);
 
-        ui.grid_left_hand_label("Duration");
+        ui.grid_left_hand_label("时长");
         ui.label(pretty)
-            .on_hover_text("Duration between earliest and latest log_time.");
+            .on_hover_text("最早与最晚 log_time 之间的时长。");
         ui.end_row();
     }
 
     {
-        ui.grid_left_hand_label("Size");
+        ui.grid_left_hand_label("大小");
 
         let current_size_bytes = db.byte_size_of_physical_chunks();
         let full_size_bytes = if db.rrd_manifest_index().has_manifest() {
@@ -203,14 +203,14 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         };
 
         ui.label(format_bytes(full_size_bytes as _)).on_hover_text(
-            "Approximate size in RAM (decompressed).\n\
-            If you hover an entity in the streams view (bottom panel) you can see the \
-            size of individual entities.",
+            "在内存中的大致占用（解压后）。\n\
+            在下方 Streams 面板中把鼠标悬停到某个实体上，\
+            可以查看单个实体的大小。",
         );
         ui.end_row();
 
         if db.rrd_manifest_index().has_manifest() {
-            ui.grid_left_hand_label("Downloaded");
+            ui.grid_left_hand_label("已下载");
 
             let memory_limit = ctx.app_options.memory_limit;
             let max_downloaded_bytes = if db.rrd_manifest_index().is_fully_loaded() {
@@ -234,7 +234,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
             ui.horizontal(|ui| {
                 if db.redap_connection_state() == RedapConnectionState::PartialManifest {
                     ui.label(format!("{current_size} / ?"));
-                    ui.label(format!("({} / ? chunks)", format_uint(num_fully_loaded)));
+                    ui.label(format!("（{} / ? 个 chunk）", format_uint(num_fully_loaded)));
                     ui.end_row();
                 } else if num_fully_loaded == num_root_chunks {
                     ui.label("100%");
@@ -247,12 +247,12 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 
                         ui.allocate_rect(rect, egui::Sense::hover())
                             .on_hover_text(format!(
-                                "Download limited to {memory_limit} memory budget"
+                                "受 {memory_limit} 内存预算限制，不会全部下载"
                             ));
                     }
 
                     ui.label(format!(
-                        "({} / {} chunks)",
+                        "（{} / {} 个 chunk）",
                         format_uint(num_fully_loaded),
                         format_uint(num_root_chunks)
                     ));
@@ -265,8 +265,8 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
             // ----
 
             if 0 < num_root_chunks {
-                ui.grid_left_hand_label("Avg chunk size")
-                    .on_hover_text("On remote");
+                ui.grid_left_hand_label("平均 chunk 大小")
+                    .on_hover_text("远端上的大小");
                 let avg_chunk_size_bytes = full_size_bytes as f64 / num_root_chunks as f64;
                 ui.label(format_bytes(avg_chunk_size_bytes));
                 ui.end_row();
@@ -281,20 +281,20 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         let store = storage_engine.store();
         let schema = store.schema().chunk_column_descriptors();
 
-        ui.grid_left_hand_label("Entities")
-            .on_hover_text("In the ChunkStore");
+        ui.grid_left_hand_label("实体")
+            .on_hover_text("位于 ChunkStore 中的实体数");
         ui.label(re_format::format_uint(store.all_entities().len()));
         ui.end_row();
 
-        ui.grid_left_hand_label("Timeline columns");
+        ui.grid_left_hand_label("时间轴列");
         ui.label(re_format::format_uint(schema.indices.len()));
         ui.end_row();
 
-        ui.grid_left_hand_label("Data columns");
+        ui.grid_left_hand_label("数据列");
         ui.label(re_format::format_uint(schema.components.len()));
         ui.end_row();
 
-        ui.grid_left_hand_label("Rows");
+        ui.grid_left_hand_label("行数");
         ui.label(re_format::format_uint(store.stats().total().num_rows));
         ui.end_row();
     }
@@ -307,39 +307,36 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
             chunk_max_rows_if_unsorted,
         } = db.storage_engine().store().config();
 
-        ui.grid_left_hand_label("Compaction config");
+        ui.grid_left_hand_label("chunk 合并配置");
         ui.label(format!(
-            "{} rows ({} if unsorted) or {}",
+            "{} 行（未排序时 {} 行）或 {}",
             re_format::format_uint(chunk_max_rows),
             re_format::format_uint(chunk_max_rows_if_unsorted),
             re_format::format_bytes(chunk_max_bytes as _),
         ))
             .on_hover_text(
                 unindent::unindent(&format!("\
-                    The current compaction configuration for this recording is to merge chunks until they \
-                    reach either a maximum of {chunk_max_rows} rows ({chunk_max_rows_if_unsorted} if unsorted) or {chunk_max_bytes}, whichever comes first.
+                    当前录制文件的 chunk 合并配置为：不断合并 chunk，\
+                    直到达到 {chunk_max_rows} 行（未排序时 {chunk_max_rows_if_unsorted} 行）或 {chunk_max_bytes} 上限，以先到者为准。
 
-                    The viewer compacts chunks together as they come in, in order to find the right \
-                    balance between space and compute overhead.
-                    This is not to be confused with the SDK's batcher, which does a similar job, with \
-                    different goals and constraints, on the logging side (SDK).
-                    These two functions (SDK batcher & viewer compactor) complement each other.
+                    Viewer 会在数据到达时把 chunk 合并到一起，\
+                    以便在存储空间和计算开销之间取得平衡。
+                    这与 SDK 的批处理器（batcher）不同：后者在记录端（SDK）做类似的工作，\
+                    但目标和约束不一样。
+                    这两个功能（SDK 批处理器和 Viewer 合并器）互为补充。
 
-                    Higher thresholds generally translate to better space overhead, but require more compute \
-                    for both ingestion and queries.
-                    Lower thresholds generally translate to worse space overhead, but faster ingestion times
-                    and more responsive queries.
-                    This is a broad oversimplification -- use the defaults if unsure, they fit most workfloads well.
+                    阈值越高，通常空间开销越小，但摄入和查询都需要更多计算。
+                    阈值越低，通常空间开销越大，但摄入更快、查询响应更及时。
+                    以上只是粗略的概括 — 拿不准就用默认值，默认值适合大多数场景。
 
-                    To modify the current configuration, set these environment variables before starting the viewer:
+                    要修改当前配置，请在启动 Viewer 前设置以下环境变量：
                     * {ENV_CHUNK_MAX_ROWS}
                     * {ENV_CHUNK_MAX_ROWS_IF_UNSORTED}
                     * {ENV_CHUNK_MAX_BYTES}
 
-                    This compaction process is an ephemeral, in-memory optimization of the Rerun viewer.\
-                    It will not modify the recording itself: use the `Save` command of the viewer, or the \
-                    `rerun rrd optimize` CLI tool if you wish to persist the compacted results, which will \
-                    make future runs cheaper.
+                    这个合并过程只是 Rerun Viewer 在内存中的临时优化，\
+                    不会改动录制文件本身：如果想持久化合并结果（让后续打开更快），\
+                    请使用 Viewer 的“保存”命令或 `rerun rrd optimize` 命令行工具。
                     ",
                         chunk_max_rows = re_format::format_uint(chunk_max_rows),
                         chunk_max_rows_if_unsorted = re_format::format_uint(chunk_max_rows_if_unsorted),
@@ -355,7 +352,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
     if let Some(data_source) = &db.data_source
         && ui_layout.is_selection_panel()
     {
-        ui.grid_left_hand_label("Data source");
+        ui.grid_left_hand_label("数据源");
         data_source_button_ui(ctx, ui, data_source);
         ui.end_row();
     }

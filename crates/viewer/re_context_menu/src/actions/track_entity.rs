@@ -32,7 +32,7 @@ impl ContextMenuAction for TrackEntity {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "Set as eye tracked".to_owned()
+        "设为视角跟踪目标".to_owned()
     }
 
     fn process_data_result(

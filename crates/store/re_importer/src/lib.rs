@@ -398,13 +398,13 @@ pub enum ImporterError {
     #[error(transparent)]
     Decode(#[from] re_log_encoding::DecodeError),
 
-    #[error("No importer support for {0:?}")]
+    #[error("没有支持 {0:?} 的导入器")]
     Incompatible(std::path::PathBuf),
 
     #[error(transparent)]
     Mcap(#[from] ::mcap::McapError),
 
-    #[error("Failed to import mp4 video: {source}\nFile path: {path:?}")]
+    #[error("导入 mp4 视频失败：{source}\n文件路径：{path:?}")]
     Mp4 {
         path: std::path::PathBuf,
         source: re_mp4_reader::Mp4Error,
@@ -413,7 +413,7 @@ pub enum ImporterError {
     #[error("{}", re_error::format(.0))]
     Other(#[from] anyhow::Error),
 
-    #[error("{source}\nFile path: {path}")]
+    #[error("{source}\n文件路径：{path}")]
     File {
         path: String,
         #[source]

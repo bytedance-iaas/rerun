@@ -87,7 +87,7 @@ impl DatasetStore for TosStore {
                 // The listing itself succeeded, so the object definitively does not exist —
                 // callers use the typed 404 to tell this apart from transient fetch trouble.
                 anyhow::Error::new(crate::lerobot_remote::HttpStatusError(404))
-                    .context(format!("No such object: {key}"))
+                    .context(format!("对象不存在：{key}"))
             })
     }
 

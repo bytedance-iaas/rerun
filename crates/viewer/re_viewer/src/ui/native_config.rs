@@ -21,7 +21,7 @@ pub fn load_local_config_bytes() -> Option<Vec<u8>> {
         Err(err) => {
             if err.kind() != std::io::ErrorKind::NotFound {
                 re_log::warn!(
-                    "Failed to read local viewer config: {err}\nFile path: {}",
+                    "读取本地 Viewer 配置失败：{err}\n文件路径：{}",
                     path.display()
                 );
             }

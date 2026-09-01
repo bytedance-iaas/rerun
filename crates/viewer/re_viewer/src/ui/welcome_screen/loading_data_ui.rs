@@ -7,7 +7,7 @@ use re_ui::{DesignTokens, UiExt as _};
 pub fn loading_data_ui(ui: &mut egui::Ui, loading_text: &str) {
     ui.center("loading_data_ui_contents", |ui| {
         ui.vertical_centered(|ui| {
-            ui.loading_indicator("Connecting to data source");
+            ui.loading_indicator("正在连接数据源");
 
             ui.add_space(50.0);
 
@@ -26,7 +26,7 @@ pub fn loading_text_for_data_sources(log_sources: &[Arc<LogSource>]) -> Option<S
     // If there's several data sources that should show a loading text, pick the first one.
     for source in log_sources {
         if let Some(loading_name) = source.loading_name() {
-            return Some(format!("Loading {loading_name}"));
+            return Some(format!("正在加载 {loading_name}"));
         }
     }
 

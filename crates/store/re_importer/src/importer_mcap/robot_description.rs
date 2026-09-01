@@ -60,7 +60,7 @@ pub(crate) fn extract_urdf_from_robot_descriptions(
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) if recover => {
-                re_log::warn!("Stopping URDF scan at a truncated/corrupt MCAP tail: {err}");
+                re_log::warn!("MCAP 尾部不完整或已损坏，停止扫描 URDF：{err}");
                 break;
             }
             Err(err) => return Err(err.into()),
@@ -89,7 +89,7 @@ pub(crate) fn extract_urdf_from_robot_descriptions(
                 }
             }
             Err(err) => {
-                re_log::warn_once!("Failed to parse URDF from robot_description topic: {err}");
+                re_log::warn_once!("从 robot_description 话题解析 URDF 失败：{err}");
             }
         }
     }

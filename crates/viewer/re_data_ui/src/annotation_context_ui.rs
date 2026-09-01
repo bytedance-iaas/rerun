@@ -133,7 +133,7 @@ impl DataUi for AnnotationContext {
                     let descr = &self.0[0].class_description;
 
                     format!(
-                        "One class containing {} keypoints and {} connections",
+                        "一个类别，包含 {} 个关键点和 {} 条连接",
                         descr.keypoint_annotations.len(),
                         descr.keypoint_connections.len()
                     )
@@ -144,7 +144,7 @@ impl DataUi for AnnotationContext {
             }
             UiLayout::SelectionPanel => {
                 ui.vertical(|ui| {
-                    ui.maybe_collapsing_header(true, "Classes", true, |ui| {
+                    ui.maybe_collapsing_header(true, "类别", true, |ui| {
                         let annotation_infos = self
                             .0
                             .iter()
@@ -189,7 +189,7 @@ fn class_description_ui(
     if !class.keypoint_annotations.is_empty() {
         ui.maybe_collapsing_header(
             use_collapsible,
-            &format!("Keypoints Annotation for Class {}", id.0),
+            &format!("类别 {} 的关键点标注", id.0),
             true,
             |ui| {
                 let annotation_infos = class
@@ -207,7 +207,7 @@ fn class_description_ui(
     if !class.keypoint_connections.is_empty() {
         ui.maybe_collapsing_header(
             use_collapsible,
-            &format!("Keypoint Connections for Class {}", id.0),
+            &format!("类别 {} 的关键点连接", id.0),
             true,
             |ui| {
                 use egui_extras::Column;
@@ -222,10 +222,10 @@ fn class_description_ui(
                     .header(tokens.deprecated_table_header_height(), |mut header| {
                         re_ui::DesignTokens::setup_table_header(&mut header);
                         header.col(|ui| {
-                            ui.strong("From");
+                            ui.strong("起点");
                         });
                         header.col(|ui| {
-                            ui.strong("To");
+                            ui.strong("终点");
                         });
                     })
                     .body(|mut body| {
@@ -294,13 +294,13 @@ fn annotation_info_table_ui(
         .header(tokens.deprecated_table_header_height(), |mut header| {
             re_ui::DesignTokens::setup_table_header(&mut header);
             header.col(|ui| {
-                ui.strong("Class Id");
+                ui.strong("类别 ID");
             });
             header.col(|ui| {
-                ui.strong("Label");
+                ui.strong("标签");
             });
             header.col(|ui| {
-                ui.strong("Color");
+                ui.strong("颜色");
             });
         })
         .body(|mut body| {
@@ -334,8 +334,8 @@ fn color_ui(ui: &mut egui::Ui, info: &AnnotationInfo, size: Vec2) {
             .map_or_else(|| auto_color_egui(info.id), |color| color.into());
         color_picker::show_color(ui, color, size);
         if info.color.is_none() {
-            ui.weak("(auto)")
-                .on_hover_text("Color chosen automatically, since it was not logged");
+            ui.weak("（自动）")
+                .on_hover_text("未记录颜色，此颜色为自动选取");
         }
     });
 }
@@ -355,6 +355,6 @@ fn small_color_ui(ui: &mut egui::Ui, info: &AnnotationInfo) {
     let response = color_picker::show_color(ui, color, size);
 
     if info.color.is_none() {
-        response.on_hover_text("Color chosen automatically, since it was not logged");
+        response.on_hover_text("未记录颜色，此颜色为自动选取");
     }
 }

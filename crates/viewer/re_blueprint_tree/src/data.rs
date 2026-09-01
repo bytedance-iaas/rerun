@@ -125,7 +125,7 @@ impl ContainerData {
                         .map(ContentsData::Container)
                     } else {
                         re_log::warn_once!(
-                            "Failed to find container {container_id} in ViewportBlueprint"
+                            "在 ViewportBlueprint 中找不到容器 {container_id}"
                         );
                         None
                     }
@@ -135,7 +135,7 @@ impl ContainerData {
                         ViewData::from_blueprint_and_filter(ctx, view_blueprint, filter_matcher)
                             .map(ContentsData::View)
                     } else {
-                        re_log::warn_once!("Failed to find view {view_id} in ViewportBlueprint");
+                        re_log::warn_once!("在 ViewportBlueprint 中找不到视图 {view_id}");
                         None
                     }
                 }

@@ -45,8 +45,8 @@ impl ContextMenuAction for ScreenshotAction {
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
         match self {
-            Self::CopyScreenshot => "Copy screenshot".to_owned(),
-            Self::SaveScreenshot => "Save screenshot…".to_owned(),
+            Self::CopyScreenshot => "复制截图".to_owned(),
+            Self::SaveScreenshot => "保存截图…".to_owned(),
         }
     }
 

@@ -61,7 +61,7 @@ pub fn add_to_registry<C: EntityDataUi + re_sdk_types::Component>(
                         ),
                     },
                     Err(err) => {
-                        ui.error_with_details_on_hover("(failed to deserialize)")
+                        ui.error_with_details_on_hover("（反序列化失败）")
                             .on_hover_text(err.to_string());
                     }
                 }

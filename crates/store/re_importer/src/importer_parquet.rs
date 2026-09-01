@@ -45,7 +45,7 @@ impl Importer for ParquetImporter {
             .spawn(
                 move || match re_parquet::load_parquet(&path, &config, &prefix) {
                     Ok(chunks) => forward_chunks(chunks, &tx, &store_id),
-                    Err(err) => re_log::error!("Failed to load Parquet: {err}"),
+                    Err(err) => re_log::error!("加载 Parquet 失败：{err}"),
                 },
             )
             .map_err(|err| ImporterError::Other(err.into()))?;
@@ -79,7 +79,7 @@ impl Importer for ParquetImporter {
             .spawn(
                 move || match re_parquet::load_parquet_from_bytes(&contents, &config, &prefix) {
                     Ok(chunks) => forward_chunks(chunks, &tx, &store_id),
-                    Err(err) => re_log::error!("Failed to load Parquet: {err}"),
+                    Err(err) => re_log::error!("加载 Parquet 失败：{err}"),
                 },
             )
             .map_err(|err| ImporterError::Other(err.into()))?;
@@ -120,7 +120,7 @@ fn forward_chunks(
                 }
             }
             Err(err) => {
-                re_log::error!("Parquet error: {err}");
+                re_log::error!("Parquet 错误：{err}");
             }
         }
     }

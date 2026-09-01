@@ -91,7 +91,7 @@ impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Deserialize(err) => {
-                write!(f, "manifest is invalid, it may be outdated: {err}")
+                write!(f, "manifest 无效，可能已过期：{err}")
             }
             Self::Fetch(err) => f.write_str(err),
         }
@@ -274,7 +274,7 @@ impl ExampleSection {
                     // Still waiting for example to load
                     ui.separator();
 
-                    ui.loading_indicator("Fetching example list"); // Placeholder for the examples
+                    ui.loading_indicator("正在获取示例列表"); // Placeholder for the examples
                     return;
                 };
 
@@ -282,19 +282,19 @@ impl ExampleSection {
                     Ok(examples) => examples,
                     Err(err) => {
                         // Examples failed to load.
-                        re_log::warn_once!("Failed to load examples: {err}");
+                        re_log::warn_once!("加载示例失败：{err}");
 
                         return;
                     }
                 };
 
                 if examples.is_empty() {
-                    ui.label("No examples found.");
+                    ui.label("没有找到示例。");
                     return;
                 }
 
                 ui.add(egui::Label::new(
-                    egui::RichText::new("View example recordings")
+                    egui::RichText::new("查看示例录制文件")
                         .strong()
                         .line_height(Some(32.0))
                         .text_style(DesignTokens::welcome_screen_h2()),
@@ -518,10 +518,10 @@ impl ExampleDescLayout {
                 if ui
                     .add_enabled(
                         source_url.is_some(),
-                        re_ui::icons::GITHUB.as_button_with_label(ui.tokens(), "Source code"),
+                        re_ui::icons::GITHUB.as_button_with_label(ui.tokens(), "源代码"),
                     )
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .on_disabled_hover_text("Source code is not available for this example")
+                    .on_disabled_hover_text("这个示例没有提供源代码")
                     .clicked()
                     && let Some(source_url) = source_url
                 {

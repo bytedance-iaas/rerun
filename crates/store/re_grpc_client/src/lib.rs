@@ -82,7 +82,7 @@ impl std::error::Error for TonicStatusError {
 pub enum StreamError {
     /// Native connection error
     #[cfg(not(target_arch = "wasm32"))]
-    #[error("connection failed: {0}")]
+    #[error("连接失败：{0}")]
     Transport(#[from] tonic::transport::Error),
 
     #[error(transparent)]

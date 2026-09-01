@@ -143,7 +143,7 @@ impl OpenTosModal {
                     Err(err) => Err(err),
                 };
                 if let Err(err) = &outcome {
-                    re_log::warn!("Failed to load server TOS defaults: {err}\nFile: config.json");
+                    re_log::warn!("加载服务器端 TOS 默认配置失败：{err}\n文件：config.json");
                 }
                 *config.lock() = Some(outcome);
             });
@@ -195,16 +195,16 @@ impl OpenTosModal {
 
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("Open from Volcengine TOS"),
+            || ModalWrapper::new("从火山引擎 TOS 打开"),
             |ui| {
-                ui.strong("Stream a LeRobot dataset from a TOS bucket.");
+                ui.strong("从 TOS 桶流式读取 LeRobot 数据集。");
                 ui.add_space(4.0);
 
                 let url_response = egui::Grid::new("tos_fields")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
-                        ui.label("Dataset URL:");
+                        ui.label("数据集 URL：");
                         let url_edit = egui::TextEdit::singleline(&mut self.url)
                             .hint_text("tos://bucket/path/to/dataset/")
                             .desired_width(f32::INFINITY)
@@ -217,7 +217,7 @@ impl OpenTosModal {
                         // Region: free text with a dropdown of known values. The list may lag
                         // behind newly opened regions, so typing always works. The endpoint is
                         // derived from the region, so there is nothing else to fill.
-                        ui.label("Region:");
+                        ui.label("地域（Region）：");
                         ui.horizontal(|ui| {
                             let menu_width = 20.0;
                             egui::TextEdit::singleline(&mut self.region)
@@ -249,21 +249,21 @@ impl OpenTosModal {
                 // Credentials: the deployment's (docker secrets on the web, config.json
                 // natively) are used unless the user opts into entering their own.
                 ui.add_space(2.0);
-                ui.re_checkbox(&mut self.use_custom_credentials, "Use non-default credentials");
+                ui.re_checkbox(&mut self.use_custom_credentials, "使用自定义凭证");
 
                 if self.use_custom_credentials {
                     egui::Grid::new("tos_credentials_fields")
                         .num_columns(2)
                         .spacing([8.0, 6.0])
                         .show(ui, |ui| {
-                            ui.label("Access key:");
+                            ui.label("Access key：");
                             egui::TextEdit::singleline(&mut self.access_key)
                                 .hint_text("AK…")
                                 .desired_width(f32::INFINITY)
                                 .show(ui);
                             ui.end_row();
 
-                            ui.label("Secret key:");
+                            ui.label("Secret key：");
                             egui::TextEdit::singleline(&mut self.secret_key)
                                 .password(true)
                                 .desired_width(f32::INFINITY)
@@ -277,16 +277,15 @@ impl OpenTosModal {
                 #[cfg(target_arch = "wasm32")]
                 if resolved_endpoint.contains(".ivolces.com") {
                     ui.warning_label(
-                        "This is an internal endpoint (.ivolces.com), only reachable from \
-                         inside the Volcengine network. In a browser you most likely need \
-                         the public endpoint (.volces.com).",
+                        "这是内网 endpoint（.ivolces.com），只能在火山引擎内网访问。\
+                         在浏览器里你多半需要公网 endpoint（.volces.com）。",
                     );
                 }
 
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
-                        "Failed to load the deployment's TOS settings (endpoint, credentials): \
-                         {err}\nFile: config.json — opening datasets needs this fixed.",
+                        "加载部署的 TOS 设置（endpoint、凭证）失败：\
+                         {err}\n文件：config.json — 不修复就无法打开数据集。",
                     ));
                 }
 
@@ -296,7 +295,7 @@ impl OpenTosModal {
                     re_data_source::rrd_artifacts::parse_artifacts_url(&server_config.tos_rrd_artifacts_url)
                 {
                     let mut upload = !self.artifact_upload_disabled;
-                    ui.re_checkbox(&mut upload, "Upload converted rrd to the artifacts store")
+                    ui.re_checkbox(&mut upload, "把转换出的 rrd 上传到制品库")
                         .on_hover_text(format!("{artifacts_location}"));
                     self.artifact_upload_disabled = !upload;
                 }
@@ -321,28 +320,28 @@ impl OpenTosModal {
                             .url_last_edited
                             .is_some_and(|t| now - t < URL_ERROR_DELAY.as_secs_f64());
                     if still_typing {
-                        ui.label("The dataset URL should look like tos://bucket/prefix/");
+                        ui.label("数据集 URL 应形如 tos://bucket/prefix/");
                         // Wake up when the pause elapses, so the error can appear
                         // without waiting for the next keystroke or mouse move.
                         ui.ctx().request_repaint_after(URL_ERROR_DELAY);
                     } else {
-                        ui.error_label("The dataset URL should look like tos://bucket/prefix/");
+                        ui.error_label("数据集 URL 应形如 tos://bucket/prefix/");
                     }
                 } else if !connection_ok {
                     ui.label(if !config_resolved {
-                        "Loading the deployment's TOS settings…"
+                        "正在加载部署的 TOS 设置…"
                     } else if self.region.trim().is_empty() {
-                        "Region is required."
+                        "地域（Region）必填。"
                     } else if self.use_custom_credentials {
-                        "Enter the access key and secret key."
+                        "请输入 access key 和 secret key。"
                     } else {
-                        "This deployment has no TOS credentials configured (config.json) — \
-                         check \"Use non-default credentials\" to enter your own."
+                        "这个部署没有配置 TOS 凭证（config.json）— \
+                         勾选“使用自定义凭证”后输入你自己的。"
                     });
                 } else {
                     ui.label(
-                        "Episodes appear immediately and stream in one by one; \
-                         click an episode to load it first.",
+                        "各集（episode）会立即出现在列表里并逐个流式加载；\
+                         点击某一集可以优先加载它。",
                     );
                 }
 
@@ -351,7 +350,7 @@ impl OpenTosModal {
 
                     let open_response = ui.add_enabled(
                         can_open,
-                        egui::Button::new("Open").min_size(egui::vec2(button_width, 0.0)),
+                        egui::Button::new("打开").min_size(egui::vec2(button_width, 0.0)),
                     );
                     if open_response.clicked()
                         || can_open && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -421,7 +420,7 @@ impl OpenTosModal {
                     }
 
                     let cancel_response =
-                        ui.add(egui::Button::new("Cancel").min_size(egui::vec2(button_width, 0.0)));
+                        ui.add(egui::Button::new("取消").min_size(egui::vec2(button_width, 0.0)));
                     if cancel_response.clicked() {
                         ui.close();
                     }

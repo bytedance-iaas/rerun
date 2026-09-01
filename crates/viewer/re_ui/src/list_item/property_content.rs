@@ -157,7 +157,7 @@ impl<'a> PropertyContent<'a> {
             #[expect(clippy::disallowed_methods)] // This is not a hard-coded color.
             let color = egui::Color32::from_rgba_unmultiplied(*r, *g, *b, *a);
             let response = egui::color_picker::show_color(ui, color, ui.spacing().interact_size);
-            response.on_hover_text(format!("Color #{r:02x}{g:02x}{b:02x}{a:02x}"));
+            response.on_hover_text(format!("颜色 #{r:02x}{g:02x}{b:02x}{a:02x}"));
         })
     }
 

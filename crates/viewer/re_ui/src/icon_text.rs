@@ -92,9 +92,9 @@ impl From<MouseButtonText> for Atom<'_> {
         match value.0 {
             egui::PointerButton::Primary => icons::LEFT_MOUSE_CLICK.into(),
             egui::PointerButton::Secondary => icons::RIGHT_MOUSE_CLICK.into(),
-            egui::PointerButton::Middle => "middle mouse button".into(),
-            egui::PointerButton::Extra1 => "extra 1 mouse button".into(),
-            egui::PointerButton::Extra2 => "extra 2 mouse button".into(),
+            egui::PointerButton::Middle => "鼠标中键".into(),
+            egui::PointerButton::Extra1 => "鼠标附加键 1".into(),
+            egui::PointerButton::Extra2 => "鼠标附加键 2".into(),
         }
     }
 }

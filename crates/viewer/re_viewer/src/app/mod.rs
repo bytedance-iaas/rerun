@@ -275,7 +275,7 @@ impl App {
                     match ron::from_str(&value) {
                         Ok(value) => Some(value),
                         Err(err) => {
-                            re_log::warn!("Failed to restore application state. This is expected if you have just upgraded Rerun versions.");
+                            re_log::warn!("恢复应用状态失败。如果你刚升级过 Rerun 版本，这是正常现象。");
                             re_log::debug!("Failed to decode RON for app state: {err}");
                             None
                         }
@@ -364,7 +364,7 @@ impl App {
             &mut component_fallback_registry,
         )
         .unwrap_or_else(|err| {
-            re_log::error!("Failed to create view class registry: {err}");
+            re_log::error!("创建视图类注册表失败：{err}");
             Default::default()
         });
 
@@ -638,7 +638,7 @@ impl App {
                 if err.to_string().contains(url) {
                     re_log::error!("{err}");
                 } else {
-                    re_log::error!(?url, "Failed to open URL: {err}");
+                    re_log::error!(?url, "打开 URL 失败：{err}");
                 }
             }
         }
@@ -1119,7 +1119,7 @@ impl App {
                             image::ExtendedColorType::Rgba8,
                         )
                     {
-                        re_log::error!("Failed to encode screenshot as PNG: {err}");
+                        re_log::error!("把截图编码为 PNG 失败：{err}");
                     } else {
                         let file_name = format!("{name}.png");
                         self.command_sender.save_file_dialog(
@@ -1146,7 +1146,7 @@ impl App {
                                 rgba.height() as _,
                                 bytemuck::pod_collect_to_vec(&rgba.pixels),
                             ) else {
-                                re_log::error!("Failed to create image from screenshot data");
+                                re_log::error!("从截图数据创建图片失败");
                                 if let Some(notifier) = notifier {
                                     notifier
                                         .unbounded_send(Err(SaveScreenshotError::InvalidImageData))
@@ -1163,14 +1163,14 @@ impl App {
                                 Ok(()) => {
                                     // Only show a user-facing toast for user-initiated screenshots.
                                     if notify {
-                                        re_log::info!("Saved screenshot to {file_path:?}");
+                                        re_log::info!("截图已保存到 {file_path:?}");
                                     } else {
                                         re_log::debug!("Saved screenshot to {file_path:?}");
                                     }
                                     Ok(())
                                 }
                                 Err(err) => {
-                                    re_log::error!(?file_path, "Failed to save screenshot: {err}");
+                                    re_log::error!(?file_path, "保存截图失败：{err}");
                                     // Image library has the bad habit of creating the file even when it fails e.g. due to unsupported format. Remove it again.
                                     std::fs::remove_file(&file_path).ok();
                                     Err(SaveScreenshotError::SaveToPathFailed {
@@ -1250,10 +1250,10 @@ impl eframe::App for App {
             }
 
             if let Err(err) = hub.save_app_blueprints() {
-                re_log::error!("Saving blueprints failed: {err}");
+                re_log::error!("保存 blueprint 失败：{err}");
             }
         } else {
-            re_log::error!("Could not save blueprints: the store hub is not available");
+            re_log::error!("无法保存 blueprint：store hub 不可用");
         }
     }
 
@@ -1272,7 +1272,7 @@ impl eframe::App for App {
                 if let Some(capture) = self.profile_capture.take()
                     && let Err(err) = save_profile_trace(&capture.finish())
                 {
-                    re_log::error!("Failed to save profile trace: {err}");
+                    re_log::error!("保存性能分析记录失败：{err}");
                 }
             } else {
                 ui.ctx().request_repaint();
@@ -1720,7 +1720,7 @@ fn save_profile_trace(view: &re_tracing::reexports::puffin::FrameView) -> anyhow
         .add_filter("Puffin profile", &["puffin"])
         .save_file()
     else {
-        re_log::info!("Profile trace capture cancelled by user.");
+        re_log::info!("用户已取消性能分析记录采集。");
         return Ok(());
     };
 
@@ -1728,7 +1728,7 @@ fn save_profile_trace(view: &re_tracing::reexports::puffin::FrameView) -> anyhow
     let mut writer = std::io::BufWriter::new(file);
     view.write(&mut writer)?;
 
-    re_log::info!("Saved profile trace to {}", path.display());
+    re_log::info!("性能分析记录已保存到 {}", path.display());
     Ok(())
 }
 

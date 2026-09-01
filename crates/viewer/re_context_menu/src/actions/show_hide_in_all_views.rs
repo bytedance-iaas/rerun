@@ -50,8 +50,8 @@ impl ContextMenuAction for ShowHideInAllViewsAction {
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
         match self {
-            Self::Show => "Show in all views".to_owned(),
-            Self::Hide => "Hide in all views".to_owned(),
+            Self::Show => "在所有视图中显示".to_owned(),
+            Self::Hide => "在所有视图中隐藏".to_owned(),
         }
     }
 

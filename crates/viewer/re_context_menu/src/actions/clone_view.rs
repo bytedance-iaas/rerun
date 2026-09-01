@@ -11,7 +11,7 @@ impl ContextMenuAction for CloneViewAction {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "Clone".to_owned()
+        "克隆".to_owned()
     }
 
     fn process_view(&self, ctx: &ContextMenuContext<'_>, view_id: &ViewId) {

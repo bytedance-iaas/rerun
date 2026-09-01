@@ -17,7 +17,7 @@ pub fn stream_from_http_to_channel(url: String) -> re_log_channel::LogReceiver {
                 if tx.send(msg.into()).is_ok() {
                     ControlFlow::Continue(())
                 } else {
-                    re_log::info_once!("Closing connection to {url}");
+                    re_log::info_once!("已关闭连接：{url}");
                     ControlFlow::Break(())
                 }
             }

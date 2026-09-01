@@ -38,7 +38,7 @@ pub fn server_streaming_tab_ui(
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         if streaming_recordings.is_empty() {
-                            ui.label("No active server streaming connections.");
+                            ui.label("没有活跃的服务器流式读取连接。");
                         } else {
                             list_item::list_item_scope(ui, "streaming_recordings", |ui| {
                                 for recording in &streaming_recordings {
@@ -77,7 +77,7 @@ fn recording_ui(
                     rect,
                     1.0,
                     Some(visuals.text_color()),
-                    "Downloading chunks",
+                    "正在下载 chunk",
                 );
             } else {
                 ui.painter()
@@ -111,10 +111,10 @@ fn recording_details_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, i
 
 fn status_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
     ui.list_item_flat_noninteractive(
-        list_item::PropertyContent::new("Connection")
+        list_item::PropertyContent::new("连接")
             .value_text(format!("{:?}", recording.redap_connection_state())),
     )
-    .on_hover_text("Connection state to the redap server");
+    .on_hover_text("与 Redap 服务器的连接状态");
 }
 
 #[derive(Default)]
@@ -145,7 +145,7 @@ impl Progress {
             "—".to_owned()
         };
         format!(
-            "{} / {} ({pct}, {} / {} chunks)",
+            "{} / {}（{pct}，{} / {} 个 chunk）",
             format_bytes(self.loaded_bytes as _),
             format_bytes(self.total_bytes as _),
             format_uint(self.loaded_count),
@@ -165,10 +165,10 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
             overall.add(uncompressed_sizes[info.row_id], info.is_fully_loaded());
         }
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Overall").value_text(overall.value_text()),
+            list_item::PropertyContent::new("总体").value_text(overall.value_text()),
         )
         .on_hover_text(
-            "Fully-loaded root chunks vs. the whole recording advertised by the manifest.",
+            "已完整加载的根 chunk 相对于 manifest 声明的整个录制文件的占比。",
         );
 
         let protected_roots = &manifest_index.chunk_prioritizer().protected_chunks().roots;
@@ -181,10 +181,10 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
                 }
             }
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("Loaded protected roots")
+                list_item::PropertyContent::new("已加载的受保护根 chunk")
                     .value_text(target.value_text()),
             )
-            .on_hover_text("Protected root chunks are root chunks that won't be GC'd. A chunk is typically protected if it's actively in use.");
+            .on_hover_text("受保护的根 chunk 不会被垃圾回收。chunk 通常在被活跃使用时受保护。");
         }
     }
 
@@ -193,9 +193,9 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         .bandwidth()
         .map_or_else(|| "—".to_owned(), |bw| format!("{}/s", format_bytes(bw)));
     ui.list_item_flat_noninteractive(
-        list_item::PropertyContent::new("Bandwidth").value_text(bw_text),
+        list_item::PropertyContent::new("带宽").value_text(bw_text),
     )
-    .on_hover_text("Recent average download speed (compressed on-wire bytes)");
+    .on_hover_text("近期平均下载速度（按传输中的压缩字节计）");
 }
 
 fn chunks_removed_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
@@ -211,32 +211,32 @@ fn chunks_removed_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
             ui,
             ui.make_persistent_id(("chunks_removed", recording.store_id())),
             false,
-            list_item::PropertyContent::new("Chunks removed")
+            list_item::PropertyContent::new("已移除的 chunk")
                 .value_text(format_uint(total_removed)),
             |ui| {
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("Garbage collection")
+                    list_item::PropertyContent::new("垃圾回收")
                         .value_text(format_uint(stats.num_chunks_gc)),
                 )
-                .on_hover_text("Memory pressure eviction");
+                .on_hover_text("因内存压力被清理");
 
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("Split cleanup")
+                    list_item::PropertyContent::new("拆分清理")
                         .value_text(format_uint(stats.num_chunks_split_cleanup)),
                 )
-                .on_hover_text("Old split chunks removed when their root chunk was re-downloaded");
+                .on_hover_text("根 chunk 重新下载后，被移除的旧拆分 chunk");
 
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("Compaction")
+                    list_item::PropertyContent::new("压实（compaction）")
                         .value_text(format_uint(stats.num_chunks_compacted)),
                 )
-                .on_hover_text("Chunk replaced by a compacted version");
+                .on_hover_text("chunk 被压实后的版本替换");
 
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("Overwrite")
+                    list_item::PropertyContent::new("覆盖")
                         .value_text(format_uint(stats.num_chunks_overwritten)),
                 )
-                .on_hover_text("Static chunk overwritten by a newer value");
+                .on_hover_text("静态 chunk 被更新的值覆盖");
             },
         );
 }
@@ -247,7 +247,7 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         return;
     };
 
-    ui.list_item_collapsible_noninteractive_label("Manifest", false, |ui| {
+    ui.list_item_collapsible_noninteractive_label("Manifest（chunk 清单）", false, |ui| {
         let num_chunks = manifest.num_chunks();
         let num_static = manifest.col_chunk_is_static().filter(|s| *s).count();
         let num_temporal = num_chunks.saturating_sub(num_static);
@@ -257,14 +257,14 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
                 ui,
                 ui.make_persistent_id(("manifest_chunks", recording.store_id())),
                 false,
-                list_item::PropertyContent::new("Chunks").value_text(format_uint(num_chunks)),
+                list_item::PropertyContent::new("Chunk 数").value_text(format_uint(num_chunks)),
                 |ui| {
                     ui.list_item_flat_noninteractive(
-                        list_item::PropertyContent::new("Static")
+                        list_item::PropertyContent::new("静态")
                             .value_text(format_uint(num_static)),
                     );
                     ui.list_item_flat_noninteractive(
-                        list_item::PropertyContent::new("Temporal")
+                        list_item::PropertyContent::new("时序")
                             .value_text(format_uint(num_temporal)),
                     );
                 },
@@ -277,26 +277,26 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
             .collect::<BTreeSet<_>>()
             .len();
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Entities").value_text(format_uint(num_entities)),
+            list_item::PropertyContent::new("实体数").value_text(format_uint(num_entities)),
         );
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Manifest size (in memory)")
+            list_item::PropertyContent::new("Manifest 大小（内存中）")
                 .value_text(format_bytes(manifest.total_size_bytes() as _)),
         )
-        .on_hover_text("In-memory size of the manifest (the index of all chunks)");
+        .on_hover_text("manifest（所有 chunk 的索引）在内存中的大小");
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Index size (in memory)")
+            list_item::PropertyContent::new("索引大小（内存中）")
                 .value_text(format_bytes(manifest_index.total_size_bytes() as _)),
         )
         .on_hover_text(
-            "In-memory size of the manifest plus derived indices (sorted chunks, loaded ranges, prioritizer state, …)",
+            "manifest 加上派生索引（排序后的 chunk、已加载范围、优先级器状态等）在内存中的大小",
         );
 
         let compressed: u64 = manifest.col_chunk_byte_size().iter().sum();
         let uncompressed: u64 = manifest.col_chunk_byte_size_uncompressed().iter().sum();
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Recording uncompressed/compressed size").value_text(
+            list_item::PropertyContent::new("录制文件未压缩/压缩大小").value_text(
                 format!(
                     "{} / {}",
                     format_bytes(uncompressed as _),
@@ -305,8 +305,8 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
             ),
         )
         .on_hover_text(
-            "Sum of chunk sizes advertised by the manifest, uncompressed vs. on-storage. \
-             The on-storage size equals the uncompressed size when the backend does not compress chunks.",
+            "manifest 声明的 chunk 大小之和，未压缩与存储中大小的对比。\
+             后端不压缩 chunk 时，存储中大小等于未压缩大小。",
         );
     });
 }
@@ -314,45 +314,44 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
 fn prioritization_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, is_preview: bool) {
     let manifest_index = recording.rrd_manifest_index();
 
-    ui.list_item_collapsible_noninteractive_label("Prioritization", false, |ui| {
+    ui.list_item_collapsible_noninteractive_label("优先级", false, |ui| {
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Preview").value_bool(is_preview),
+            list_item::PropertyContent::new("预览").value_bool(is_preview),
         )
         .on_hover_text(
-            "Whether this recording was rendered as a preview in the previous frame — \
-             previews use a stricter GC budget",
+            "上一帧中这个录制文件是否以预览形式渲染 — 预览使用更严格的垃圾回收预算",
         );
 
         if let Some(prio) = manifest_index.chunk_prioritizer().latest_result() {
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("Transit budget filled")
+                list_item::PropertyContent::new("传输预算已满")
                     .value_text(prio.transit_budget_filled.to_string()),
             )
             .on_hover_text(
-                "On-wire budget exhausted for this recording — no more concurrent downloads",
+                "这个录制文件的在途传输预算已耗尽 — 无法再增加并发下载",
             );
 
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("Memory budget filled")
+                list_item::PropertyContent::new("内存预算已满")
                     .value_text(prio.memory_budget_filled.to_string()),
             )
             .on_hover_text(
-                "Memory budget exhausted for this recording — cannot load more chunks without eviction",
+                "这个录制文件的内存预算已耗尽 — 不清理就无法加载更多 chunk",
             );
 
             let all_required = match prio.all_required_are_loaded {
                 Some(v) => v.to_string(),
-                None => "unknown".to_owned(),
+                None => "未知".to_owned(),
             };
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("All required loaded").value_text(all_required),
+                list_item::PropertyContent::new("必需项已全部加载").value_text(all_required),
             )
             .on_hover_text(
-                "Whether all required chunks (static, missing, high-priority) are loaded or in transit",
+                "所有必需 chunk（静态、缺失、高优先级）是否都已加载或在传输中",
             );
         } else {
             ui.list_item_flat_noninteractive(
-                list_item::LabelContent::new("No fetch data yet").weak(true),
+                list_item::LabelContent::new("还没有获取数据").weak(true),
             );
         }
 
@@ -377,11 +376,11 @@ fn prioritization_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, is_p
             format_uint(protected.roots.len())
         };
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Protected roots").value_text(roots_text),
+            list_item::PropertyContent::new("受保护的根 chunk").value_text(roots_text),
         )
         .on_hover_text(
-            "Root chunks protected from download cancellation (currently needed by queries) \
-             vs. all root chunks in the manifest. Uncompressed arrow bytes.",
+            "不会被取消下载的根 chunk（当前查询需要）相对于 manifest 中所有根 chunk 的占比。\
+             按未压缩的 Arrow 字节计。",
         );
 
         let store = recording.storage_engine();
@@ -400,12 +399,12 @@ fn prioritization_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, is_p
             total_count: recording.num_physical_chunks(),
         };
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Protected physical")
+            list_item::PropertyContent::new("受保护的物理 chunk")
                 .value_text(physical_progress.value_text()),
         )
         .on_hover_text(
-            "Physical chunks protected from garbage collection (actively used by queries) \
-             vs. all physical chunks loaded in memory. In-memory Chunk size.",
+            "不会被垃圾回收的物理 chunk（正被查询使用）相对于内存中所有已加载物理 chunk 的占比。\
+             按内存中 Chunk 大小计。",
         );
     });
 }
@@ -420,22 +419,22 @@ fn pending_requests_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         .map(|(_t, count)| count)
         .sum();
 
-    ui.list_item_collapsible_noninteractive_label("Pending requests", false, |ui| {
+    ui.list_item_collapsible_noninteractive_label("待处理请求", false, |ui| {
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Batches").value_text(format_uint(pending.len())),
+            list_item::PropertyContent::new("批次数").value_text(format_uint(pending.len())),
         )
-        .on_hover_text("Number of in-flight request batches to the server");
+        .on_hover_text("发往服务器、仍在途中的请求批次数量");
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Chunks").value_text(format_uint(num_chunks)),
+            list_item::PropertyContent::new("Chunk 数").value_text(format_uint(num_chunks)),
         )
-        .on_hover_text("Total number of chunks across all pending batches");
+        .on_hover_text("所有待处理批次包含的 chunk 总数");
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Recently canceled")
+            list_item::PropertyContent::new("最近取消")
                 .value_text(format_uint(recently_canceled)),
         )
-        .on_hover_text("Batches canceled in the last second (e.g. due to time cursor movement)");
+        .on_hover_text("最近一秒内取消的批次（例如因为时间标记移动）");
     });
 }
 
@@ -461,7 +460,7 @@ fn in_flight_entities_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) 
             ui,
             ui.make_persistent_id(("entities", recording.store_id())),
             false,
-            list_item::LabelContent::new(format!("In-flight entities ({})", entities.len())),
+            list_item::LabelContent::new(format!("传输中的实体（{}）", entities.len())),
             |ui| {
                 for entity in &entities {
                     ui.list_item_flat_noninteractive(list_item::LabelContent::new(
@@ -526,7 +525,7 @@ fn streaming_plots(ui: &mut egui::Ui, history: &StreamingHistory) {
     }
 
     ui.columns(3, |columns| {
-        columns[0].label("Progress");
+        columns[0].label("进度");
         show_plot(
             base_plot("streaming_progress", axis_group, cursor_group)
                 .label_formatter(|hover_position| match hover_position {
@@ -542,16 +541,16 @@ fn streaming_plots(ui: &mut egui::Ui, history: &StreamingHistory) {
             &mut following,
             now,
             |plot_ui| {
-                plot_ui.line(history_to_plot("Loaded", &history.loaded_bytes).width(1.5));
+                plot_ui.line(history_to_plot("已加载", &history.loaded_bytes).width(1.5));
                 plot_ui.line(
-                    history_to_plot("Manifest advertised", &history.total_manifest_bytes)
+                    history_to_plot("Manifest 声明总量", &history.total_manifest_bytes)
                         .width(1.5)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
             },
         );
 
-        columns[1].label("Throughput");
+        columns[1].label("吞吐量");
         show_plot(
             base_plot("streaming_throughput", axis_group, cursor_group)
                 .label_formatter(|hover_position| match hover_position {
@@ -568,13 +567,13 @@ fn streaming_plots(ui: &mut egui::Ui, history: &StreamingHistory) {
             now,
             |plot_ui| {
                 plot_ui.line(
-                    history_to_plot("Bandwidth (B/s)", &history.bandwidth_bytes_per_sec).width(1.5),
+                    history_to_plot("带宽（B/s）", &history.bandwidth_bytes_per_sec).width(1.5),
                 );
-                plot_ui.line(history_to_plot("Pending bytes", &history.pending_bytes).width(1.5));
+                plot_ui.line(history_to_plot("待下载字节", &history.pending_bytes).width(1.5));
             },
         );
 
-        columns[2].label("Counts");
+        columns[2].label("计数");
         show_plot(
             base_plot("streaming_counts", axis_group, cursor_group).label_formatter(
                 |hover_position| match hover_position {
@@ -591,17 +590,17 @@ fn streaming_plots(ui: &mut egui::Ui, history: &StreamingHistory) {
             now,
             |plot_ui| {
                 plot_ui.line(
-                    history_to_plot("Chunks in flight", &history.chunks_in_flight)
+                    history_to_plot("传输中的 chunk", &history.chunks_in_flight)
                         .width(1.5)
                         .color(inflight_color),
                 );
                 plot_ui.line(
-                    history_to_plot("Cancellations", &history.batch_cancellations)
+                    history_to_plot("取消数", &history.batch_cancellations)
                         .width(1.5)
                         .color(cancel_color),
                 );
                 plot_ui.line(
-                    history_to_plot("Chunks GC'd", &history.chunks_gc_per_frame)
+                    history_to_plot("被垃圾回收的 chunk", &history.chunks_gc_per_frame)
                         .width(1.5)
                         .color(removed_color),
                 );

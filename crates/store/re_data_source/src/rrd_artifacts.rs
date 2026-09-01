@@ -199,7 +199,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
                     .target_url
                     .strip_prefix(&bucket_prefix)
                     .ok_or_else(|| {
-                        anyhow::anyhow!("Artifact URL is not in the configured bucket")
+                        anyhow::anyhow!("工件 URL 不在配置的桶内")
                     })?;
                 client.delete_object(key).await?;
                 anyhow::Ok(1usize)
@@ -219,7 +219,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
         match result {
             Ok(deleted) => {
                 re_log::info!(
-                    "Deleted {deleted} rrd artifact(s) from the store\nTarget: {}",
+                    "已从存储中删除 {deleted} 个 rrd 工件\n目标：{}",
                     request.target_url
                 );
                 crate::lerobot_remote::forget_rrd_artifact_urls(
@@ -229,7 +229,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
             }
             Err(err) => {
                 re_log::warn!(
-                    "Failed to delete rrd artifact(s): {err:#}\nTarget: {}",
+                    "删除 rrd 工件失败：{err:#}\n目标：{}",
                     request.target_url
                 );
             }
@@ -325,7 +325,7 @@ pub fn parse_artifacts_url(configured: &str) -> Option<TosLocation> {
     let location = TosLocation::parse(trimmed);
     if location.is_none() {
         re_log::warn_once!(
-            "Ignoring invalid rrd-artifacts URL (expected tos://bucket/prefix/): {trimmed}"
+            "已忽略无效的 rrd 工件存储 URL（应形如 tos://bucket/prefix/）：{trimmed}"
         );
     }
     location
