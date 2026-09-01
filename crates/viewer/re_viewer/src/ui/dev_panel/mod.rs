@@ -5,13 +5,13 @@ mod server_streaming_tab;
 mod streaming_history;
 mod transform_cache_ui;
 
-use re_i18n::{tr, trf};
 use ahash::HashMap;
 use egui_plot::HoverPosition;
 use plot_utils::history_to_plot;
 use re_chunk_store::{ChunkStoreChunkStats, ChunkStoreConfig, ChunkStoreStats};
 use re_entity_db::StoreBundle;
 use re_format::{format_bytes, format_uint};
+use re_i18n::{tr, trf};
 use re_log_types::StoreId;
 use re_memory::MemoryLimit;
 use re_memory::util::sec_since_start;
@@ -131,8 +131,11 @@ impl DevPanel {
                 }
             },
             |ui| {
-                ui.small_icon_button(&re_ui::icons::CLOSE, tr("Close dev panel", "关闭开发者面板"))
-                    .clicked()
+                ui.small_icon_button(
+                    &re_ui::icons::CLOSE,
+                    tr("Close dev panel", "关闭开发者面板"),
+                )
+                .clicked()
             },
         );
 
@@ -148,7 +151,10 @@ impl DevPanel {
                 );
             }
             DevPanelTab::TimeGraph => {
-                ui.label(tr("🗠 Rerun Viewer memory use over time", "🗠 Rerun Viewer 内存占用随时间的变化"));
+                ui.label(tr(
+                    "🗠 Rerun Viewer memory use over time",
+                    "🗠 Rerun Viewer 内存占用随时间的变化",
+                ));
                 self.plot(ui, limit);
             }
             DevPanelTab::Stores => {
@@ -205,7 +211,10 @@ impl DevPanel {
         ui.set_min_height(ui.available_height());
 
         let Some(store_context) = store_context else {
-            ui.warning_label(tr("No active recording selected for the transform cache.", "没有选中活跃的录制文件，无法查看变换缓存。"));
+            ui.warning_label(tr(
+                "No active recording selected for the transform cache.",
+                "没有选中活跃的录制文件，无法查看变换缓存。",
+            ));
             return;
         };
 
@@ -263,7 +272,10 @@ impl DevPanel {
                 });
             }
         } else {
-            ui.label(tr("No store statistics available.", "没有可用的存储统计信息。"));
+            ui.label(tr(
+                "No store statistics available.",
+                "没有可用的存储统计信息。",
+            ));
         }
     }
 
@@ -271,7 +283,10 @@ impl DevPanel {
         let mut is_tracking_callstacks = re_memory::accounting_allocator::is_tracking_callstacks();
         ui.re_checkbox(
             &mut is_tracking_callstacks,
-            tr("Enable detailed allocation tracking", "启用详细的内存分配追踪"),
+            tr(
+                "Enable detailed allocation tracking",
+                "启用详细的内存分配追踪",
+            ),
         )
         .on_hover_text(tr("This will slow down the program", "这会拖慢程序"));
         re_memory::accounting_allocator::set_tracking_callstacks(is_tracking_callstacks);
@@ -362,7 +377,10 @@ impl DevPanel {
                 ui.label(tr("Chunks", "Chunk 数"));
                 ui.label(tr("Rows (total)", "行数（总计）"));
                 ui.label(tr("Events (total)", "事件数（总计）"))
-                    .on_hover_text(tr("Number of non-null component batches (cells)", "非空组件批次（单元格）的数量"));
+                    .on_hover_text(tr(
+                        "Number of non-null component batches (cells)",
+                        "非空组件批次（单元格）的数量",
+                    ));
                 ui.label(tr("Size (total)", "大小（总计）"));
                 ui.end_row();
 
@@ -504,7 +522,10 @@ impl DevPanel {
             format_bytes(tracking_stats.overhead.size as _),
             format_uint(tracking_stats.overhead.count),
         ))
-        .on_hover_text(tr("Used for the book-keeping of the allocation tracker", "分配追踪器自身记账所用的内存"));
+        .on_hover_text(tr(
+            "Used for the book-keeping of the allocation tracker",
+            "分配追踪器自身记账所用的内存",
+        ));
 
         egui::CollapsingHeader::new(tr("Top memory consumers", "内存占用大户"))
             .default_open(true)
@@ -529,20 +550,28 @@ impl DevPanel {
                                 if stochastic_rate <= 1 {
                                     String::new()
                                 } else {
-                                    trf!(" ({} stochastic samples)", "（{} 个随机采样）", callstack.extant.count)
+                                    trf!(
+                                        " ({} stochastic samples)",
+                                        "（{} 个随机采样）",
+                                        callstack.extant.count
+                                    )
                                 },
                                 summarize_callstack(&callstack.readable_backtrace.to_string())
                             );
 
                             if ui
                                 .button(text)
-                                .on_hover_text(tr("Click to copy callstack to clipboard", "点击把调用栈复制到剪贴板"))
+                                .on_hover_text(tr(
+                                    "Click to copy callstack to clipboard",
+                                    "点击把调用栈复制到剪贴板",
+                                ))
                                 .clicked()
                             {
                                 let mut text = callstack.readable_backtrace.to_string();
                                 if text.is_empty() {
                                     // This is weird
-                                    text = tr("No callstack available", "没有可用的调用栈").to_owned();
+                                    text =
+                                        tr("No callstack available", "没有可用的调用栈").to_owned();
                                 }
                                 ui.copy_text(text);
                             }
@@ -574,8 +603,10 @@ impl DevPanel {
             // TODO(emilk): turn off plot interaction, and always do auto-sizing
             .show(ui, |plot_ui| {
                 if limit.is_limited() {
-                    plot_ui
-                        .hline(egui_plot::HLine::new(tr("Limit", "上限"), limit.as_bytes() as f64).width(2.0));
+                    plot_ui.hline(
+                        egui_plot::HLine::new(tr("Limit", "上限"), limit.as_bytes() as f64)
+                            .width(2.0),
+                    );
                 }
 
                 for &time in &self.memory_purge_times {
@@ -596,16 +627,27 @@ impl DevPanel {
                     counted_table_stores,
                 } = &self.history;
 
-                plot_ui.line(history_to_plot(tr("Resident", "常驻内存（RSS）"), resident).width(1.5));
-                plot_ui.line(history_to_plot(tr("Allocator", "分配器统计"), counted_allocator).width(1.5));
+                plot_ui
+                    .line(history_to_plot(tr("Resident", "常驻内存（RSS）"), resident).width(1.5));
+                plot_ui.line(
+                    history_to_plot(tr("Allocator", "分配器统计"), counted_allocator).width(1.5),
+                );
                 plot_ui.line(history_to_plot(tr("VRAM", "显存（VRAM）"), counted_vram).width(1.5));
-                plot_ui.line(history_to_plot(tr("Recordings", "录制文件"), counted_recordings).width(1.5));
+                plot_ui.line(
+                    history_to_plot(tr("Recordings", "录制文件"), counted_recordings).width(1.5),
+                );
 
                 if false {
                     // Intentionally omitted because they are uninteresting and clutter things up too much
                     plot_ui.line(history_to_plot("Blueprint", counted_blueprints).width(1.5));
-                    plot_ui.line(history_to_plot(tr("Query caches", "查询缓存"), counted_query_caches).width(1.5));
-                    plot_ui.line(history_to_plot(tr("Table stores", "表格存储"), counted_table_stores).width(1.5));
+                    plot_ui.line(
+                        history_to_plot(tr("Query caches", "查询缓存"), counted_query_caches)
+                            .width(1.5),
+                    );
+                    plot_ui.line(
+                        history_to_plot(tr("Table stores", "表格存储"), counted_table_stores)
+                            .width(1.5),
+                    );
                 }
             });
     }
@@ -659,7 +701,10 @@ pub fn memory_tree_ui(
 ) {
     // Add explanation at the top
     ui.horizontal(|ui| {
-        ui.label(tr("Memory flamegraph visualizing the memory usage tree.", "内存火焰图，可视化内存占用树。"));
+        ui.label(tr(
+            "Memory flamegraph visualizing the memory usage tree.",
+            "内存火焰图，可视化内存占用树。",
+        ));
         ui.hyperlink_to(
             tr("Learn more", "了解更多"),
             "https://docs.rs/re_byte_size/latest/re_byte_size/trait.MemUsageTreeCapture.html",
@@ -671,7 +716,10 @@ pub fn memory_tree_ui(
         }
     });
 
-    ui.label(tr("Double-click to reset view, scroll to zoom, drag to pan.", "双击重置视图，滚轮缩放，拖动平移。"));
+    ui.label(tr(
+        "Double-click to reset view, scroll to zoom, drag to pan.",
+        "双击重置视图，滚轮缩放，拖动平移。",
+    ));
 
     ui.re_checkbox(include_rss, tr("Include RSS", "包含 RSS"))
         .on_hover_text(tr("Include Resident Set Size (RSS) in the flamegraph. This shows total memory use as reported by the OS. This may be a lot bigger than what is actually _used_ because our allocator (mimalloc) retains pages in case they are needed again.", "在火焰图中包含常驻内存（RSS），即操作系统报告的总内存占用。它可能远大于实际使用量，因为我们的分配器（mimalloc）会保留内存页以备复用。"));
@@ -679,7 +727,10 @@ pub fn memory_tree_ui(
     ui.separator();
 
     let Some(mut tree) = tree else {
-        ui.label(tr("No memory usage tree available.", "没有可用的内存占用树。"));
+        ui.label(tr(
+            "No memory usage tree available.",
+            "没有可用的内存占用树。",
+        ));
         return;
     };
 

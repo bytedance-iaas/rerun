@@ -522,7 +522,7 @@ impl ImageInfo {
             }
             Ok(png_bytes)
         } else {
-            anyhow::bail!("无效的图片");
+            anyhow::bail!(trf!("Invalid image", "无效的图片"));
         }
     }
 }

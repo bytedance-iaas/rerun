@@ -396,7 +396,13 @@ fn add_new_default(
                 ));
         }
         Err(err) => {
-            re_log::warn!("{}", trf!("Failed to create Chunk for blueprint component: {err}", "创建 blueprint 组件的 Chunk 失败：{err}"));
+            re_log::warn!(
+                "{}",
+                trf!(
+                    "Failed to create Chunk for blueprint component: {err}",
+                    "创建 blueprint 组件的 Chunk 失败：{err}"
+                )
+            );
         }
     }
 }

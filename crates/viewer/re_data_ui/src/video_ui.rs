@@ -164,7 +164,7 @@ fn video_data_ui(
 
     if let Some(fps) = video_descr.average_fps() {
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("平均帧率").value_text(format!("{fps:.2}")),
+            PropertyContent::new(tr("Average FPS", "平均帧率")).value_text(format!("{fps:.2}")),
         )
         .on_hover_text(trf!(
             "Average frames per second (FPS) of the {}",

@@ -1,6 +1,6 @@
-use re_i18n::{tr, trf};
 use eframe::epaint::Margin;
 use egui::{Button, Frame, RichText, TextStyle, Theme, Ui};
+use re_i18n::{tr, trf};
 use re_ui::egui_ext::card_layout::{CardLayout, CardLayoutItem};
 use re_ui::{ReButtonExt as _, UICommand, UICommandSender as _, UiExt as _, design_tokens_of};
 use re_uri::Origin;
@@ -54,8 +54,20 @@ pub enum IntroItem {
 /// The user guides for this fork's features: label and in-app guide page index.
 fn guide_pages() -> [(&'static str, usize); 2] {
     [
-        (tr("Viewer — open, visualize & explore datasets", "Viewer 篇 — 浏览和探索数据集"), 0),
-        (tr("Catalog server — query & train on TOS datasets", "Catalog server 篇 — 查询 TOS 数据集并用于训练"), 1),
+        (
+            tr(
+                "Viewer — open, visualize & explore datasets",
+                "Viewer 篇 — 浏览和探索数据集",
+            ),
+            0,
+        ),
+        (
+            tr(
+                "Catalog server — query & train on TOS datasets",
+                "Catalog server 篇 — 查询 TOS 数据集并用于训练",
+            ),
+            1,
+        ),
     ]
 }
 
@@ -67,7 +79,10 @@ impl IntroItem {
                 title: tr("Curate data", "数据质检"),
                 link_label: tr("Open", "打开"),
                 url,
-                body: tr("Run quality checks on your Volcengine TOS datasets in the curation console.", "在质检台里对火山引擎 TOS 数据集做质量检查。"),
+                body: tr(
+                    "Run quality checks on your Volcengine TOS datasets in the curation console.",
+                    "在质检台里对火山引擎 TOS 数据集做质量检查。",
+                ),
             });
         }
         if let Some(url) = re_viewer_context::daft_link::downloads_url() {
@@ -305,7 +320,10 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
     if let Some(auth) = ctx.auth_context {
         ui.strong(RichText::new(trf!("Hi, {}!", "你好，{}！", auth.email)).size(15.0));
 
-        if ui.add(Button::new(tr("Log out", "退出登录")).secondary().small()).clicked() {
+        if ui
+            .add(Button::new(tr("Log out", "退出登录")).secondary().small())
+            .clicked()
+        {
             ctx.command_sender.send_system(SystemCommand::Logout);
         }
 

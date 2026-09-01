@@ -213,7 +213,11 @@ impl WebHandle {
                 );
             }
             Err(err) => {
-                re_log::warn!(?url, "{}", trf!("Failed to open URL: {err}", "打开 URL 失败：{err}"));
+                re_log::warn!(
+                    ?url,
+                    "{}",
+                    trf!("Failed to open URL: {err}", "打开 URL 失败：{err}")
+                );
             }
         }
     }
@@ -242,7 +246,14 @@ impl WebHandle {
         };
 
         if self.log_senders.contains_key(id) {
-            re_log::warn!("{}", trf!("Channel with id '{}' already exists.", "ID 为 '{}' 的通道已存在。", id));
+            re_log::warn!(
+                "{}",
+                trf!(
+                    "Channel with id '{}' already exists.",
+                    "ID 为 '{}' 的通道已存在。",
+                    id
+                )
+            );
             return;
         }
 
@@ -743,7 +754,13 @@ fn create_app(
         match re_auth::Jwt::try_from(fallback_token) {
             Ok(token) => connection_registry.set_fallback_token(token),
             Err(err) => {
-                re_log::warn!("{}", trf!("Failed to parse JWT token: {err}", "解析 JWT token 失败：{err}"));
+                re_log::warn!(
+                    "{}",
+                    trf!(
+                        "Failed to parse JWT token: {err}",
+                        "解析 JWT token 失败：{err}"
+                    )
+                );
             }
         }
     }
@@ -840,7 +857,11 @@ fn create_app(
                     );
                 }
                 Err(err) => {
-                    re_log::warn!(?url, "{}", trf!("Failed to open URL: {err}", "打开 URL 失败：{err}"));
+                    re_log::warn!(
+                        ?url,
+                        "{}",
+                        trf!("Failed to open URL: {err}", "打开 URL 失败：{err}")
+                    );
                 }
             }
         }

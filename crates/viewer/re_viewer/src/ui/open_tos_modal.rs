@@ -49,27 +49,34 @@ impl ServerTosConfig {
     }
 }
 
-/// Volcengine TOS regions, for the Region dropdown — the list and order mirror the
-/// volcengine console's create-bucket region picker (2026-08-18). The list may lag
-/// behind newly opened regions, so free-text entry stays available.
-/// Known TOS regions: the code sent to TOS, paired with its Chinese display name.
-/// The UI only shows the Chinese name; the code stays internal.
-const TOS_REGIONS: &[(&str, &str)] = &[
-    ("cn-beijing", "华北2（北京）"),
-    ("ap-southeast-1", "亚太东南（柔佛）"),
-    ("ap-southeast-3", "亚太东南（雅加达）"),
-    ("cn-guangzhou", "华南1（广州）"),
-    ("cn-hongkong", "中国香港"),
-    ("cn-shanghai", "华东2（上海）"),
+/// Known TOS regions, for the Region dropdown — the list and order mirror the
+/// volcengine console's create-bucket region picker (2026-08-18). Each entry pairs the
+/// code sent to TOS with its English and Chinese display names; the UI shows the
+/// localized name, the code stays internal.
+const TOS_REGIONS: &[(&str, &str, &str)] = &[
+    ("cn-beijing", "North China 2 (Beijing)", "华北2（北京）"),
+    (
+        "ap-southeast-1",
+        "Asia Pacific Southeast (Johor)",
+        "亚太东南（柔佛）",
+    ),
+    (
+        "ap-southeast-3",
+        "Asia Pacific Southeast (Jakarta)",
+        "亚太东南（雅加达）",
+    ),
+    ("cn-guangzhou", "South China 1 (Guangzhou)", "华南1（广州）"),
+    ("cn-hongkong", "Hong Kong (China)", "中国香港"),
+    ("cn-shanghai", "East China 2 (Shanghai)", "华东2（上海）"),
 ];
 
-/// The Chinese display name for a region code, falling back to the code itself
+/// The localized display name for a region code, falling back to the code itself
 /// for anything not in [`TOS_REGIONS`].
 fn tos_region_label(code: &str) -> &str {
     TOS_REGIONS
         .iter()
-        .find(|(c, _)| *c == code)
-        .map_or(code, |(_, name)| name)
+        .find(|(c, _, _)| *c == code)
+        .map_or(code, |(_, en, zh)| tr(en, zh))
 }
 
 /// How long after the last keystroke the malformed-URL error may turn red.
@@ -155,7 +162,13 @@ impl OpenTosModal {
                     Err(err) => Err(err),
                 };
                 if let Err(err) = &outcome {
-                    re_log::warn!("{}", trf!("Failed to load server TOS defaults: {err}\nFile: config.json", "加载服务器端 TOS 默认配置失败：{err}\n文件：config.json"));
+                    re_log::warn!(
+                        "{}",
+                        trf!(
+                            "Failed to load server TOS defaults: {err}\nFile: config.json",
+                            "加载服务器端 TOS 默认配置失败：{err}\n文件：config.json"
+                        )
+                    );
                 }
                 *config.lock() = Some(outcome);
             });
@@ -229,9 +242,9 @@ impl OpenTosModal {
                         // Region: a dropdown of known regions shown by their Chinese name.
                         // The code (e.g. "cn-beijing") is what we send to TOS, and the endpoint
                         // is derived from it, so there is nothing else to fill.
-                        ui.label("地区：");
+                        ui.label(tr("Region:", "地区："));
                         let selected_label = if self.region.trim().is_empty() {
-                            "请选择地区"
+                            tr("Select a region", "请选择地区")
                         } else {
                             tos_region_label(&self.region)
                         };
@@ -239,11 +252,11 @@ impl OpenTosModal {
                             .selected_text(selected_label)
                             .width(ui.available_width())
                             .show_ui(ui, |ui| {
-                                for (code, name) in TOS_REGIONS {
+                                for (code, en, zh) in TOS_REGIONS {
                                     ui.selectable_value(
                                         &mut self.region,
                                         (*code).to_owned(),
-                                        *name,
+                                        tr(en, zh),
                                     );
                                 }
                             });
@@ -261,7 +274,7 @@ impl OpenTosModal {
                 // Credentials: the deployment's (docker secrets on the web, config.json
                 // natively) are used unless the user opts into entering their own.
                 ui.add_space(2.0);
-                ui.re_checkbox(&mut self.use_custom_credentials, "使用自带 AK/SK");
+                ui.re_checkbox(&mut self.use_custom_credentials, tr("Use non-default credentials", "使用自带 AK/SK"));
 
                 if self.use_custom_credentials {
                     egui::Grid::new("tos_credentials_fields")
@@ -288,14 +301,19 @@ impl OpenTosModal {
                 // endpoints (only routable inside the Volcengine network) won't work.
                 #[cfg(target_arch = "wasm32")]
                 if resolved_endpoint.contains(".ivolces.com") {
-                    ui.warning_label(
+                    ui.warning_label(tr(
+                        "This is an internal endpoint (.ivolces.com), only reachable from \
+                         inside the Volcengine network. In a browser you most likely need \
+                         the public endpoint (.volces.com).",
                         "这是内网 endpoint（.ivolces.com），只能在火山引擎内网访问。\
-                         在浏览器里你多半需要公网 endpoint（.volces.com）。",
-                    );
+                         在浏览器里你多半需要公网 endpoint（.volces.com）。"
+                    ));
                 }
 
                 if let Some(err) = &config_error {
-                    ui.warning_label(format!(
+                    ui.warning_label(trf!(
+                        "Failed to load the deployment's TOS settings (endpoint, credentials): \
+                         {err}\nFile: config.json — datasets cannot be opened until this is fixed.",
                         "加载部署的 TOS 设置（endpoint、凭证）失败：\
                          {err}\n文件：config.json — 不修复就无法打开数据集。",
                     ));
@@ -307,7 +325,7 @@ impl OpenTosModal {
                     re_data_source::rrd_artifacts::parse_artifacts_url(&server_config.tos_rrd_artifacts_url)
                 {
                     let mut upload = !self.artifact_upload_disabled;
-                    ui.re_checkbox(&mut upload, "把转换出的 rrd 上传到制品库")
+                    ui.re_checkbox(&mut upload, tr("Upload converted rrd to the artifacts store", "把转换出的 rrd 上传到缓存桶"))
                         .on_hover_text(format!("{artifacts_location}"));
                     self.artifact_upload_disabled = !upload;
                 }
@@ -332,29 +350,47 @@ impl OpenTosModal {
                             .url_last_edited
                             .is_some_and(|t| now - t < URL_ERROR_DELAY.as_secs_f64());
                     if still_typing {
-                        ui.label("数据集 URL 应形如 tos://bucket/prefix/");
+                        ui.label(tr(
+                            "The dataset URL should look like tos://bucket/prefix/",
+                            "数据集 URL 应形如 tos://bucket/prefix/",
+                        ));
                         // Wake up when the pause elapses, so the error can appear
                         // without waiting for the next keystroke or mouse move.
                         ui.ctx().request_repaint_after(URL_ERROR_DELAY);
                     } else {
-                        ui.error_label("数据集 URL 应形如 tos://bucket/prefix/");
+                        ui.error_label(tr(
+                            "The dataset URL should look like tos://bucket/prefix/",
+                            "数据集 URL 应形如 tos://bucket/prefix/",
+                        ));
                     }
                 } else if !connection_ok {
                     ui.label(if !config_resolved {
-                        "正在加载部署的 TOS 设置…"
+                        tr(
+                            "Loading the deployment's TOS settings…",
+                            "正在加载部署的 TOS 设置…",
+                        )
                     } else if self.region.trim().is_empty() {
-                        "请选择地区。"
+                        tr("Region is required.", "请选择地区。")
                     } else if self.use_custom_credentials {
-                        "请输入 access key 和 secret key。"
+                        tr(
+                            "Enter the access key and secret key.",
+                            "请输入 access key 和 secret key。",
+                        )
                     } else {
-                        "这个部署没有配置 TOS 凭证（config.json）— \
-                         勾选“使用自带 AK/SK”后输入你自己的。"
+                        tr(
+                            "This deployment has no TOS credentials configured (config.json) — \
+                             check \"Use non-default credentials\" to enter your own.",
+                            "这个部署没有配置 TOS 凭证（config.json）— \
+                             勾选“使用自带 AK/SK”后输入你自己的。",
+                        )
                     });
                 } else {
-                    ui.label(
+                    ui.label(tr(
+                        "Episodes appear immediately and stream in one by one; \
+                         click an episode to load it first.",
                         "各集（episode）会立即出现在列表里并逐个流式加载；\
                          点击某一集可以优先加载它。",
-                    );
+                    ));
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -362,7 +398,7 @@ impl OpenTosModal {
 
                     let open_response = ui.add_enabled(
                         can_open,
-                        egui::Button::new("打开").min_size(egui::vec2(button_width, 0.0)),
+                        egui::Button::new(tr("Open", "打开")).min_size(egui::vec2(button_width, 0.0)),
                     );
                     if open_response.clicked()
                         || can_open && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -432,7 +468,7 @@ impl OpenTosModal {
                     }
 
                     let cancel_response =
-                        ui.add(egui::Button::new("取消").min_size(egui::vec2(button_width, 0.0)));
+                        ui.add(egui::Button::new(tr("Cancel", "取消")).min_size(egui::vec2(button_width, 0.0)));
                     if cancel_response.clicked() {
                         ui.close();
                     }

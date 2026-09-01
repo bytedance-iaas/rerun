@@ -73,5 +73,8 @@ async fn async_save_dialog(file_name: &str, title: &str, data: Vec<u8>) -> anyho
         return Ok(()); // aborted
     };
 
-    file_handle.write(data.as_slice()).await.context("保存失败")
+    file_handle
+        .write(data.as_slice())
+        .await
+        .context(trf!("Failed to save", "保存失败"))
 }

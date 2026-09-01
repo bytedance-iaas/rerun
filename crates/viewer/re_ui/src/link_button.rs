@@ -75,7 +75,7 @@ impl LinkButton {
 
         if copy_response.as_ref().is_some_and(|r| r.clicked()) {
             ui.copy_text(url.clone());
-            re_log::info!("链接已复制！");
+            re_log::info!("{}", tr("Link copied!", "链接已复制！"));
         }
 
         if response.clicked() {

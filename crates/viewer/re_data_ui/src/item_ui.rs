@@ -696,12 +696,12 @@ pub fn entity_db_button_ui(
         title = format!("{app_id_prefix}{short_name}");
         match progress.phase {
             LoadPhase::Converting => {
-                write!(title, " · 正在转换…").ok();
+                write!(title, " · {}", tr("converting…", "正在转换…")).ok();
             }
             LoadPhase::Downloading => {
                 // Name the file type ("downloading parquet"): it tells apart fetching
                 // sources for a conversion from fetching a ready-made rrd artifact.
-                write!(title, " · 正在下载").ok();
+                write!(title, " · {}", tr("downloading", "正在下载")).ok();
                 if let Some(kind) = progress.kind.label() {
                     write!(title, " {kind}").ok();
                 }
@@ -918,7 +918,7 @@ pub fn entity_db_button_ui(
 
     if let Some(progress) = &download_progress {
         let total = progress.bytes_total.map_or_else(
-            || "大小未知".to_owned(),
+            || tr("unknown size", "大小未知").to_owned(),
             |total| re_format::format_bytes(total as _),
         );
         response = response.on_hover_text(trf!(

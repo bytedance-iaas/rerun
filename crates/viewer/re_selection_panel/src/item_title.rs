@@ -1,8 +1,8 @@
-use re_i18n::{tr, trf};
 use egui::WidgetText;
 use re_chunk::EntityPath;
 use re_data_ui::item_ui::guess_instance_path_icon;
 use re_entity_db::InstancePath;
+use re_i18n::{tr, trf};
 use re_log_types::{ComponentPath, TableId};
 use re_sdk_types::archetypes::RecordingInfo;
 use re_sdk_types::components::Timestamp;
@@ -173,7 +173,11 @@ impl ItemTitle {
         .with_tooltip(trf!(
             "{} component {} of entity '{}'",
             "{}组件 {}，属于实体 '{}'",
-            if is_static { tr("Static", "静态") } else { tr("Temporal", "时间轴") },
+            if is_static {
+                tr("Static", "静态")
+            } else {
+                tr("Temporal", "时间轴")
+            },
             component,
             entity_path
         ))
@@ -199,7 +203,11 @@ impl ItemTitle {
                     container_blueprint.container_kind,
                 )
             } else {
-                trf!("{:?} container", "{:?} 容器", container_blueprint.container_kind)
+                trf!(
+                    "{:?} container",
+                    "{:?} 容器",
+                    container_blueprint.container_kind
+                )
             };
 
             let container_name = container_blueprint.display_name_or_default();
@@ -211,10 +219,16 @@ impl ItemTitle {
             .with_tooltip(hover_text)
         } else {
             Self::new(
-                trf!("Unknown container {container_id}", "未知容器 {container_id}"),
+                trf!(
+                    "Unknown container {container_id}",
+                    "未知容器 {container_id}"
+                ),
                 &icons::VIEW_UNKNOWN,
             )
-            .with_tooltip(tr("Failed to find container in blueprint", "在 blueprint 中找不到这个容器"))
+            .with_tooltip(tr(
+                "Failed to find container in blueprint",
+                "在 blueprint 中找不到这个容器",
+            ))
         }
     }
 
@@ -227,7 +241,11 @@ impl ItemTitle {
             let view_class = view.class(ctx.view_class_registry());
 
             let hover_text = if let Some(display_name) = view.display_name.as_ref() {
-                trf!("{} view {display_name:?}", "{} 视图 {display_name:?}", view_class.display_name())
+                trf!(
+                    "{} view {display_name:?}",
+                    "{} 视图 {display_name:?}",
+                    view_class.display_name()
+                )
             } else {
                 trf!("{} view", "{} 视图", view_class.display_name())
             };
@@ -241,8 +259,14 @@ impl ItemTitle {
             .with_label_style(contents_name_style(&view_name))
             .with_tooltip(hover_text)
         } else {
-            Self::new(trf!("Unknown view {view_id}", "未知视图 {view_id}"), &icons::VIEW_UNKNOWN)
-                .with_tooltip(tr("Failed to find view in blueprint", "在 blueprint 中找不到这个视图"))
+            Self::new(
+                trf!("Unknown view {view_id}", "未知视图 {view_id}"),
+                &icons::VIEW_UNKNOWN,
+            )
+            .with_tooltip(tr(
+                "Failed to find view in blueprint",
+                "在 blueprint 中找不到这个视图",
+            ))
         }
     }
 

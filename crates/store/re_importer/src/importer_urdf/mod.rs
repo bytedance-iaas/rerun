@@ -93,7 +93,7 @@ impl Importer for UrdfImporter {
             &settings.timepoint.clone().unwrap_or_default(),
             true,
         )
-        .with_context(|| "加载 URDF 文件失败！")?;
+        .with_context(|| trf!("Failed to load URDF file!", "加载 URDF 文件失败！"))?;
 
         if let Some(err) = send_error {
             return Err(anyhow::anyhow!(err.to_string()).into());
@@ -138,7 +138,7 @@ impl Importer for UrdfImporter {
             &settings.timepoint.clone().unwrap_or_default(),
             true,
         )
-        .with_context(|| "加载 URDF 文件失败！")?;
+        .with_context(|| trf!("Failed to load URDF file!", "加载 URDF 文件失败！"))?;
 
         if let Some(err) = send_error {
             return Err(anyhow::anyhow!(err.to_string()).into());
@@ -157,7 +157,7 @@ pub(crate) fn emit_robot(
     include_joint_transforms: bool,
 ) -> anyhow::Result<()> {
     let urdf_tree = UrdfTree::new(robot, urdf_dir, entity_path_prefix.cloned())
-        .with_context(|| "构建 URDF 树失败！")?;
+        .with_context(|| trf!("Failed to build URDF tree!", "构建 URDF 树失败！"))?;
 
     urdf_tree.emit(emit, timepoint, include_joint_transforms)
 }

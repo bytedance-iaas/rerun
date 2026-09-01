@@ -228,7 +228,10 @@ impl ViewerOpenUrl {
                 }
 
                 #[cfg(not(target_arch = "wasm32"))]
-                LogDataSource::Stdin => Err(anyhow::anyhow!("`-` 不是有效的 URL。")),
+                LogDataSource::Stdin => Err(anyhow::anyhow!(trf!(
+                    "`-` is not a valid URL.",
+                    "`-` 不是有效的 URL。"
+                ))),
 
                 LogDataSource::RedapDatasetSegment {
                     uri,
@@ -441,18 +444,26 @@ impl ViewerOpenUrl {
                 let recording = store_hub
                     .store_bundle()
                     .get(recording_id)
-                    .ok_or_else(|| anyhow::anyhow!("当前录制文件没有数据"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(trf!(
+                            "No data for active recording",
+                            "当前录制文件没有数据"
+                        ))
+                    })?;
                 let data_source = recording
                     .data_source
                     .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("没有数据源"))?;
+                    .ok_or_else(|| anyhow::anyhow!(trf!("No data source", "没有数据源")))?;
 
                 Self::from_data_source(data_source)
             }
 
             Route::LocalTable(_table_id) => {
                 // We can't share links to local tables, so can't update the url.
-                Err(anyhow::anyhow!("无法分享本地表格的链接。"))
+                Err(anyhow::anyhow!(trf!(
+                    "Can't share links to local tables.",
+                    "无法分享本地表格的链接。"
+                )))
             }
 
             Route::RedapEntry { origin, kind } => match kind {
@@ -492,7 +503,10 @@ impl ViewerOpenUrl {
             Self::IntraRecordingSelection(item) => {
                 let data_path = item.to_data_path().ok_or_else(|| {
                     // See also `Item::from_str`
-                    anyhow::anyhow!("只能分享实体和组件的链接")
+                    anyhow::anyhow!(trf!(
+                        "Can only share links to entities & components",
+                        "只能分享实体和组件的链接"
+                    ))
                 })?;
                 let data_path_str = data_path.to_string();
                 vec1![format!(
@@ -890,7 +904,10 @@ fn parse_chunk_store_browser_url(url: &str) -> anyhow::Result<Option<ViewerOpenU
             recording_id,
         )),
         (None, None) => None,
-        _ => anyhow::bail!("chunk store browser URL 必须同时包含 app_id 和 recording_id"),
+        _ => anyhow::bail!(trf!(
+            "Chunk store browser URL must include both app_id and recording_id",
+            "chunk store browser URL 必须同时包含 app_id 和 recording_id"
+        )),
     };
 
     Ok(Some(ViewerOpenUrl::ChunkStoreBrowser {

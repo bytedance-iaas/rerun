@@ -442,9 +442,9 @@ impl ImageUi {
                 bytemuck::cast_slice(rgba.as_raw()),
             );
             ctx.egui_ctx.copy_image(egui_image);
-            re_log::info!("已复制图像到剪贴板");
+            re_log::info!("{}", tr("Copied image to clipboard", "已复制图像到剪贴板"));
         } else {
-            re_log::error!("图像无效");
+            re_log::error!("{}", tr("Invalid image", "图像无效"));
         }
     }
 

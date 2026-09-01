@@ -93,7 +93,10 @@ impl BlueprintTree {
                     list_item::CustomContent::new(|ui, _| {
                         let title_response = self
                             .filter_state
-                            .section_title_ui(ui, egui::RichText::new("Blueprint").strong());
+                            .section_title_ui(
+                                ui,
+                                egui::RichText::new(re_i18n::tr("Blueprint", "蓝图")).strong(),
+                            );
 
                         if let Some(title_response) = title_response {
                             title_response.on_hover_text(tr(
@@ -383,16 +386,12 @@ impl BlueprintTree {
 
         viewport_blueprint.set_content_visibility(ctx, &content, visible);
         let kind_name = match container_data.kind {
-            egui_tiles::ContainerKind::Tabs => "标签页",
-            egui_tiles::ContainerKind::Horizontal => "水平排列",
-            egui_tiles::ContainerKind::Vertical => "垂直排列",
-            egui_tiles::ContainerKind::Grid => "网格",
+            egui_tiles::ContainerKind::Tabs => tr("Tabs", "标签页"),
+            egui_tiles::ContainerKind::Horizontal => tr("Horizontal", "水平排列"),
+            egui_tiles::ContainerKind::Vertical => tr("Vertical", "垂直排列"),
+            egui_tiles::ContainerKind::Grid => tr("Grid", "网格"),
         };
-        let response = response.on_hover_text(if re_i18n::is_chinese() {
-            format!("{kind_name}容器")
-        } else {
-            format!("{:?} container", container_data.kind)
-        });
+        let response = response.on_hover_text(trf!("{kind_name} container", "{kind_name}容器"));
 
         self.handle_interactions_for_item(
             ctx,
@@ -451,7 +450,9 @@ impl BlueprintTree {
             .with_buttons(|ui| {
                 visibility_button_ui(ui, container_visible, &mut visible);
 
-                if remove_button_ui(ui, "从视口中移除视图").clicked() {
+                if remove_button_ui(ui, tr("Remove view from the viewport", "从视口中移除视图"))
+                    .clicked()
+                {
                     viewport_blueprint.mark_user_interaction(ctx);
                     viewport_blueprint.remove_contents(Contents::View(view_data.id));
                 }
@@ -629,7 +630,10 @@ impl BlueprintTree {
                             .italics(true)
                             .with_icon(&re_ui::icons::INTERNAL_LINK),
                     )
-                    .on_hover_text("该子树对应视图的原点，显示在\"投影\"部分上方。点击可选中它。")
+                    .on_hover_text(tr(
+                        "This subtree corresponds to the view's origin, and is displayed above the 'Projections' section. Click to select it.",
+                        "该子树对应视图的原点，显示在\"投影\"部分上方。点击可选中它。",
+                    ))
                     .clicked()
                 {
                     ctx.command_sender()
@@ -699,7 +703,10 @@ impl BlueprintTree {
                 data_result_data.kind,
                 DataResultKind::EmptyOriginPlaceholder
             ) {
-                ui.label(ui.warning_text("该视图的查询在空间原点下没有匹配到任何数据"));
+                ui.label(ui.warning_text(tr(
+                    "This view's query did not match any data under the space origin",
+                    "该视图的查询在空间原点下没有匹配到任何数据",
+                )));
             }
         });
 
@@ -1256,14 +1263,17 @@ fn set_blueprint_to_default_menu_buttons(ctx: &ViewerContext<'_>, ui: &mut egui:
     let default_blueprint = default_blueprint_id.and_then(|id| ctx.store_bundle().get(id));
 
     let disabled_reason = match default_blueprint {
-        None => Some("该应用没有设置默认 blueprint"),
+        None => Some(tr(
+            "No default blueprint is set for this app",
+            "该应用没有设置默认 blueprint",
+        )),
         Some(default_blueprint) => {
             let active_is_clone_of_default =
                 Some(default_blueprint.store_id()) == ctx.store_context.blueprint.cloned_from();
             let last_modified_at_the_same_time =
                 default_blueprint.latest_row_id() == ctx.store_context.blueprint.latest_row_id();
             if active_is_clone_of_default && last_modified_at_the_same_time {
-                Some("尚未做任何修改")
+                Some(tr("No modifications have been made", "尚未做任何修改"))
             } else {
                 None // it is valid to reset to default
             }
@@ -1328,8 +1338,8 @@ fn remove_button_ui(ui: &mut Ui, alt_text_and_tooltip: &str) -> Response {
 fn visibility_button_ui(ui: &mut egui::Ui, enabled: bool, visible: &mut bool) -> egui::Response {
     ui.add_enabled_ui(enabled, |ui| {
         ui.visibility_toggle_button(visible)
-            .on_hover_text("切换可见性")
-            .on_disabled_hover_text("上级项处于隐藏状态")
+            .on_hover_text(tr("Toggle visibility", "切换可见性"))
+            .on_disabled_hover_text(tr("A parent is invisible", "上级项处于隐藏状态"))
     })
     .inner
 }

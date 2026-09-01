@@ -1,5 +1,5 @@
-use re_i18n::tr;
 use egui::Ui;
+use re_i18n::tr;
 use re_ui::{DesignTokens, UiExt as _};
 
 /// Show a minimal welcome section.
@@ -7,7 +7,7 @@ pub fn no_data_ui(ui: &mut egui::Ui) {
     ui.center("no_data_ui_contents", |ui| {
         ui.add(
             egui::Label::new(
-                egui::RichText::new(super::welcome_section::WELCOME_SCREEN_TITLE)
+                egui::RichText::new(super::welcome_section::welcome_screen_title())
                     .weak()
                     .line_height(Some(36.0))
                     .text_style(DesignTokens::welcome_screen_h2()),
@@ -34,7 +34,7 @@ pub fn no_data_ui(ui: &mut egui::Ui) {
             ui.add_space(4.0);
         };
 
-        for text in super::welcome_section::WELCOME_SCREEN_BULLET_TEXT {
+        for text in super::welcome_section::welcome_screen_bullet_text() {
             bullet_text(ui, text);
         }
 

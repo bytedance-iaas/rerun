@@ -1,8 +1,8 @@
-use re_i18n::{tr, trf};
 use egui_plot::HoverPosition;
 use re_byte_size::SizeBytes as _;
 use re_chunk_store::Chunk;
 use re_format::{format_bytes, format_uint};
+use re_i18n::{tr, trf};
 use re_log_types::EntityPath;
 use re_ui::UiExt as _;
 use re_ui::list_item;
@@ -39,7 +39,10 @@ pub fn server_streaming_tab_ui(
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         if streaming_recordings.is_empty() {
-                            ui.label(tr("No active server streaming connections.", "没有活跃的服务器流式读取连接。"));
+                            ui.label(tr(
+                                "No active server streaming connections.",
+                                "没有活跃的服务器流式读取连接。",
+                            ));
                         } else {
                             list_item::list_item_scope(ui, "streaming_recordings", |ui| {
                                 for recording in &streaming_recordings {
@@ -115,7 +118,10 @@ fn status_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         list_item::PropertyContent::new(tr("Connection", "连接"))
             .value_text(format!("{:?}", recording.redap_connection_state())),
     )
-    .on_hover_text(tr("Connection state to the redap server", "与 Redap 服务器的连接状态"));
+    .on_hover_text(tr(
+        "Connection state to the redap server",
+        "与 Redap 服务器的连接状态",
+    ));
 }
 
 #[derive(Default)]
@@ -169,9 +175,10 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         ui.list_item_flat_noninteractive(
             list_item::PropertyContent::new(tr("Overall", "总体")).value_text(overall.value_text()),
         )
-        .on_hover_text(
-            tr("Fully-loaded root chunks vs. the whole recording advertised by the manifest.", "已完整加载的根 chunk 相对于 manifest 声明的整个录制文件的占比。"),
-        );
+        .on_hover_text(tr(
+            "Fully-loaded root chunks vs. the whole recording advertised by the manifest.",
+            "已完整加载的根 chunk 相对于 manifest 声明的整个录制文件的占比。",
+        ));
 
         let protected_roots = &manifest_index.chunk_prioritizer().protected_chunks().roots;
         if !protected_roots.is_empty() {
@@ -197,7 +204,10 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
     ui.list_item_flat_noninteractive(
         list_item::PropertyContent::new(tr("Bandwidth", "带宽")).value_text(bw_text),
     )
-    .on_hover_text(tr("Recent average download speed (compressed on-wire bytes)", "近期平均下载速度（按传输中的压缩字节计）"));
+    .on_hover_text(tr(
+        "Recent average download speed (compressed on-wire bytes)",
+        "近期平均下载速度（按传输中的压缩字节计）",
+    ));
 }
 
 fn chunks_removed_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
@@ -226,19 +236,28 @@ fn chunks_removed_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
                     list_item::PropertyContent::new(tr("Split cleanup", "拆分清理"))
                         .value_text(format_uint(stats.num_chunks_split_cleanup)),
                 )
-                .on_hover_text(tr("Old split chunks removed when their root chunk was re-downloaded", "根 chunk 重新下载后，被移除的旧拆分 chunk"));
+                .on_hover_text(tr(
+                    "Old split chunks removed when their root chunk was re-downloaded",
+                    "根 chunk 重新下载后，被移除的旧拆分 chunk",
+                ));
 
                 ui.list_item_flat_noninteractive(
                     list_item::PropertyContent::new(tr("Compaction", "压实（compaction）"))
                         .value_text(format_uint(stats.num_chunks_compacted)),
                 )
-                .on_hover_text(tr("Chunk replaced by a compacted version", "chunk 被压实后的版本替换"));
+                .on_hover_text(tr(
+                    "Chunk replaced by a compacted version",
+                    "chunk 被压实后的版本替换",
+                ));
 
                 ui.list_item_flat_noninteractive(
                     list_item::PropertyContent::new(tr("Overwrite", "覆盖"))
                         .value_text(format_uint(stats.num_chunks_overwritten)),
                 )
-                .on_hover_text(tr("Static chunk overwritten by a newer value", "静态 chunk 被更新的值覆盖"));
+                .on_hover_text(tr(
+                    "Static chunk overwritten by a newer value",
+                    "静态 chunk 被更新的值覆盖",
+                ));
             },
         );
 }
@@ -320,26 +339,20 @@ fn prioritization_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, is_p
         ui.list_item_flat_noninteractive(
             list_item::PropertyContent::new("预览").value_bool(is_preview),
         )
-        .on_hover_text(
-            "上一帧中这个录制文件是否以预览形式渲染 — 预览使用更严格的垃圾回收预算",
-        );
+        .on_hover_text("上一帧中这个录制文件是否以预览形式渲染 — 预览使用更严格的垃圾回收预算");
 
         if let Some(prio) = manifest_index.chunk_prioritizer().latest_result() {
             ui.list_item_flat_noninteractive(
                 list_item::PropertyContent::new("传输预算已满")
                     .value_text(prio.transit_budget_filled.to_string()),
             )
-            .on_hover_text(
-                "这个录制文件的在途传输预算已耗尽 — 无法再增加并发下载",
-            );
+            .on_hover_text("这个录制文件的在途传输预算已耗尽 — 无法再增加并发下载");
 
             ui.list_item_flat_noninteractive(
                 list_item::PropertyContent::new("内存预算已满")
                     .value_text(prio.memory_budget_filled.to_string()),
             )
-            .on_hover_text(
-                "这个录制文件的内存预算已耗尽 — 不清理就无法加载更多 chunk",
-            );
+            .on_hover_text("这个录制文件的内存预算已耗尽 — 不清理就无法加载更多 chunk");
 
             let all_required = match prio.all_required_are_loaded {
                 Some(v) => v.to_string(),
@@ -348,9 +361,7 @@ fn prioritization_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, is_p
             ui.list_item_flat_noninteractive(
                 list_item::PropertyContent::new("必需项已全部加载").value_text(all_required),
             )
-            .on_hover_text(
-                "所有必需 chunk（静态、缺失、高优先级）是否都已加载或在传输中",
-            );
+            .on_hover_text("所有必需 chunk（静态、缺失、高优先级）是否都已加载或在传输中");
         } else {
             ui.list_item_flat_noninteractive(
                 list_item::LabelContent::new("还没有获取数据").weak(true),
@@ -433,8 +444,7 @@ fn pending_requests_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         .on_hover_text("所有待处理批次包含的 chunk 总数");
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("最近取消")
-                .value_text(format_uint(recently_canceled)),
+            list_item::PropertyContent::new("最近取消").value_text(format_uint(recently_canceled)),
         )
         .on_hover_text("最近一秒内取消的批次（例如因为时间标记移动）");
     });
@@ -462,7 +472,11 @@ fn in_flight_entities_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) 
             ui,
             ui.make_persistent_id(("entities", recording.store_id())),
             false,
-            list_item::LabelContent::new(trf!("In-flight entities ({})", "传输中的实体（{}）", entities.len())),
+            list_item::LabelContent::new(trf!(
+                "In-flight entities ({})",
+                "传输中的实体（{}）",
+                entities.len()
+            )),
             |ui| {
                 for entity in &entities {
                     ui.list_item_flat_noninteractive(list_item::LabelContent::new(

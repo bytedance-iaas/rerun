@@ -109,7 +109,7 @@ impl DataUi for InstancePath {
 
         if any_missing_chunks && ctx.db.can_fetch_chunks_from_redap() {
             // TODO(RR-3670): figure out how to handle missing chunks
-            ui.loading_indicator("正在从 Redap 获取 chunk");
+            ui.loading_indicator(tr("Fetching chunks from redap", "正在从 Redap 获取 chunk"));
         }
     }
 }

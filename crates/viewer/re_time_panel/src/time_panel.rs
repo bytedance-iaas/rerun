@@ -595,9 +595,9 @@ impl TimePanel {
                     self.filter_state.section_title_ui(
                         ui,
                         egui::RichText::new(if self.source == TimePanelSource::Blueprint {
-                            "Blueprint Streams"
+                            re_i18n::tr("Blueprint Streams", "蓝图数据流")
                         } else {
-                            "Streams"
+                            re_i18n::tr("Streams", "数据流")
                         })
                         .strong(),
                     );

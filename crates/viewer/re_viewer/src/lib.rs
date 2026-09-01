@@ -25,7 +25,7 @@
 //!
 //! See [`re_viewer_context::VisualizerInstructionReport`] for how these break down further.
 
-use re_i18n::trf;
+use re_i18n::{tr, trf};
 mod app;
 mod app_blueprint;
 mod app_state;
@@ -301,7 +301,10 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
         }
         _ => {
             let Some(data_dir) = eframe::storage_dir(native::APP_ID) else {
-                anyhow::bail!("无法确定 Rerun 的数据存储位置。")
+                anyhow::bail!(tr(
+                    "Failed to figure out where Rerun stores its data.",
+                    "无法确定 Rerun 的数据存储位置。"
+                ))
             };
 
             // Note: `remove_dir_all` fails if the directory doesn't exist.
@@ -322,7 +325,10 @@ pub fn reset_viewer_persistence() -> anyhow::Result<()> {
                     std::fs::write(&analytics_file_path, analytics).ok();
                 }
             } else {
-                re_log::info!("Rerun 状态已被清除。");
+                re_log::info!(
+                    "{}",
+                    tr("Rerun state was already cleared.", "Rerun 状态已被清除。")
+                );
             }
 
             // Clear the default cache directory if it exists

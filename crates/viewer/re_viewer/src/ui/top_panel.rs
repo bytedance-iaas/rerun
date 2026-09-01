@@ -227,11 +227,14 @@ fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppE
         show_warning(ui, &mut has_shown_warning, |ui| {
             // Warn if in debug build
             ui.label(
-                egui::RichText::new("⚠ Debug 构建")
+                egui::RichText::new(tr("⚠ Debug build", "⚠ Debug 构建"))
                     .small()
                     .color(ui.visuals().warn_fg_color),
             )
-            .on_hover_text("Rerun 编译时启用了 debug assertions。");
+            .on_hover_text(tr(
+                "Rerun was compiled with debug assertions enabled.",
+                "Rerun 编译时启用了 debug assertions。",
+            ));
         });
     }
 
@@ -267,8 +270,14 @@ fn software_rasterizer_warning_ui(ui: &mut egui::Ui, info: &wgpu::AdapterInfo) {
         "https://www.rerun.io/docs/overview/installing-rerun/troubleshooting#graphics-issues",
     )
     .on_hover_ui(|ui| {
-        ui.label(tr("Software rasterizer detected - expect poor performance.", "检测到软件光栅化 — 性能会很差。"));
-        ui.label(tr("Rerun requires hardware accelerated graphics (i.e. a GPU) for good performance.", "Rerun 需要硬件图形加速（即 GPU）才能获得好的性能。"));
+        ui.label(tr(
+            "Software rasterizer detected - expect poor performance.",
+            "检测到软件光栅化 — 性能会很差。",
+        ));
+        ui.label(tr(
+            "Rerun requires hardware accelerated graphics (i.e. a GPU) for good performance.",
+            "Rerun 需要硬件图形加速（即 GPU）才能获得好的性能。",
+        ));
         ui.label(tr("Click for troubleshooting.", "点击查看排查方法。"));
         ui.add_space(8.0);
         ui.label(format!(
@@ -387,14 +396,14 @@ fn panel_buttons_r2l(
     #[cfg(target_arch = "wasm32")]
     if app.is_fullscreen_allowed() {
         let (icon, label) = if app.is_fullscreen_mode() {
-            (&re_ui::icons::MINIMIZE, "还原")
+            (&re_ui::icons::MINIMIZE, tr("Minimize", "还原"))
         } else {
-            (&re_ui::icons::MAXIMIZE, "最大化")
+            (&re_ui::icons::MAXIMIZE, tr("Maximize", "最大化"))
         };
 
         if ui
             .medium_icon_toggle_button(icon, label, &mut true)
-            .on_hover_text("切换全屏")
+            .on_hover_text(tr("Toggle fullscreen", "切换全屏"))
             .clicked()
         {
             app.toggle_fullscreen();
@@ -507,7 +516,11 @@ fn panel_buttons_r2l(
                 if !ui.is_sizing_pass() {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
-                            .add(re_ui::ReButton::new("退出登录").small().primary())
+                            .add(
+                                re_ui::ReButton::new(tr("Log out", "退出登录"))
+                                    .small()
+                                    .primary(),
+                            )
                             .clicked()
                         {
                             app.command_sender.send_system(SystemCommand::Logout);
@@ -550,7 +563,10 @@ fn frame_time_label_ui(ui: &mut egui::Ui, app: &App) {
         // we use monospace so the width doesn't fluctuate as the numbers change.
         let text = format!("{ms:.1} ms");
         ui.label(egui::RichText::new(text).monospace().color(color))
-            .on_hover_text("Rerun Viewer 每帧占用的 CPU 时间。越低越好。");
+            .on_hover_text(tr(
+                "CPU time used by Rerun Viewer each frame. Lower is better.",
+                "Rerun Viewer 每帧占用的 CPU 时间。越低越好。",
+            ));
     }
 }
 
@@ -714,7 +730,11 @@ fn latency_snapshot_button_ui(
         return None; // Probably an old recording and not live data.
     }
 
-    let text = trf!("Latency: {}", "延迟：{}", latency_text(ui.visuals(), e2e).text());
+    let text = trf!(
+        "Latency: {}",
+        "延迟：{}",
+        latency_text(ui.visuals(), e2e).text()
+    );
     let response = ui.weak(text);
 
     let response = response.on_hover_ui(|ui| {

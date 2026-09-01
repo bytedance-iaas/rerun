@@ -1,9 +1,9 @@
-use re_i18n::{tr, trf};
 use anyhow::Context as _;
 use itertools::Itertools as _;
 use re_build_info::CrateVersion;
 use re_chunk::TimelineName;
 use re_entity_db::{EntityDb, LogSource};
+use re_i18n::{tr, trf};
 use re_log_channel::RecordingOpenBehavior;
 use re_log_types::{ApplicationId, LogMsg, RecordingId, StoreId, StoreKind};
 use re_sdk_types::blueprint::components::PlayState;
@@ -214,7 +214,13 @@ impl App {
                         .replace(Route::LocalRecording { recording_id });
                 } else {
                     // TODO(RR-3713): show a blueprint for it anyway
-                    re_log::warn_once!("{}", tr("Can't switch app-id - we have no recording for it", "无法切换应用 ID — 没有对应的录制文件"));
+                    re_log::warn_once!(
+                        "{}",
+                        tr(
+                            "Can't switch app-id - we have no recording for it",
+                            "无法切换应用 ID — 没有对应的录制文件"
+                        )
+                    );
                     // If we can't go where we want to go, then go nowhere.
                 }
             }
@@ -489,7 +495,10 @@ impl App {
                     }
                     re_ui::RedapServerCommandKind::CopyUrl => {
                         let url = origin.to_string();
-                        re_log::info!("{}", trf!("Copied {url:?} to clipboard", "已复制 {url:?} 到剪贴板"));
+                        re_log::info!(
+                            "{}",
+                            trf!("Copied {url:?} to clipboard", "已复制 {url:?} 到剪贴板")
+                        );
                         egui_ctx.copy_text(url);
                     }
                     re_ui::RedapServerCommandKind::Remove => {
@@ -581,7 +590,10 @@ impl App {
                     match db.add_chunk(&Arc::new(chunk)) {
                         Ok(_store_events) => {}
                         Err(err) => {
-                            re_log::warn_once!("{}", trf!("Failed to append chunk: {err}", "追加 chunk 失败：{err}"));
+                            re_log::warn_once!(
+                                "{}",
+                                trf!("Failed to append chunk: {err}", "追加 chunk 失败：{err}")
+                            );
                         }
                     }
                 }
@@ -699,7 +711,10 @@ impl App {
             #[cfg(not(target_arch = "wasm32"))]
             SystemCommand::FileSaver(file_saver) => {
                 if let Err(err) = self.background_tasks.spawn_file_saver(file_saver) {
-                    re_log::error!("{}", trf!("Failed to save file: {err}", "保存文件失败：{err}"));
+                    re_log::error!(
+                        "{}",
+                        trf!("Failed to save file: {err}", "保存文件失败：{err}")
+                    );
                 }
             }
 
@@ -715,12 +730,18 @@ impl App {
                     match re_auth::oauth::Credentials::try_new(access_token, None, email) {
                         Ok(credentials) => credentials,
                         Err(err) => {
-                            re_log::error!("{}", trf!("Failed to create credentials: {err}", "创建凭证失败：{err}"));
+                            re_log::error!(
+                                "{}",
+                                trf!("Failed to create credentials: {err}", "创建凭证失败：{err}")
+                            );
                             return;
                         }
                     };
                 if let Err(err) = credentials.ensure_stored() {
-                    re_log::error!("{}", trf!("Failed to store credentials: {err}", "保存凭证失败：{err}"));
+                    re_log::error!(
+                        "{}",
+                        trf!("Failed to store credentials: {err}", "保存凭证失败：{err}")
+                    );
                 }
             }
             SystemCommand::Logout => {
@@ -743,7 +764,10 @@ impl App {
                         re_log::debug!("No session to logout from");
                     }
                     Err(err) => {
-                        re_log::error!("{}", trf!("Failed to logout: {err}", "退出登录失败：{err}"));
+                        re_log::error!(
+                            "{}",
+                            trf!("Failed to logout: {err}", "退出登录失败：{err}")
+                        );
                     }
                 }
                 let logged_out_origins = self.state.redap_servers.logout();
@@ -785,7 +809,10 @@ impl App {
                         let re_viewer_context::PublishedViewInfo { name, rect } = view_info;
                         let rect = rect.shrink(2.5); // Hacky: Shrink so we don't accidentally include the border of the view.
                         if !rect.is_positive() {
-                            re_log::warn!("视图太小，无法截图");
+                            re_log::warn!(
+                                "{}",
+                                tr("View too small for a screenshot", "视图太小，无法截图")
+                            );
                             return;
                         }
 
@@ -800,7 +827,13 @@ impl App {
                                 }),
                             ));
                     } else {
-                        re_log::warn!("{}", trf!("View {view_id} not found for screenshot", "找不到要截图的视图 {view_id}"));
+                        re_log::warn!(
+                            "{}",
+                            trf!(
+                                "View {view_id} not found for screenshot",
+                                "找不到要截图的视图 {view_id}"
+                            )
+                        );
                     }
                 } else {
                     // Screenshot the entire viewer
@@ -1099,7 +1132,13 @@ impl App {
                         .share_modal
                         .open(storage_context.hub, route, rec_cfg, selection)
                 {
-                    re_log::error!("{}", trf!("Cannot share link to current screen: {err}", "无法分享当前界面的链接：{err}"));
+                    re_log::error!(
+                        "{}",
+                        trf!(
+                            "Cannot share link to current screen: {err}",
+                            "无法分享当前界面的链接：{err}"
+                        )
+                    );
                 }
             }
             UICommand::CopyDirectLink => {
@@ -1126,12 +1165,18 @@ impl App {
                                     range: time_selection.to_int(),
                                 });
                             } else {
-                                re_log::warn!("没有可复制的时间轴选区");
+                                re_log::warn!(
+                                    "{}",
+                                    tr("No timeline selection to copy", "没有可复制的时间轴选区")
+                                );
                             }
                         } else {
                             re_log::warn!(
                                 "{}",
-                                tr("The current recording doesn't support sharing a time range", "当前录制文件不支持分享时间范围")
+                                tr(
+                                    "The current recording doesn't support sharing a time range",
+                                    "当前录制文件不支持分享时间范围"
+                                )
                             );
                         }
 
@@ -1218,7 +1263,10 @@ impl App {
                 #[cfg(target_arch = "wasm32")] // Web
                 {
                     if let Err(err) = save_active_recording(self, store_context) {
-                        re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
+                        re_log::error!(
+                            "{}",
+                            trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                        );
                     }
                 }
 
@@ -1250,13 +1298,19 @@ impl App {
 
                     if selected_stores.is_empty() {
                         if let Err(err) = save_active_recording(self, store_context) {
-                            re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
+                            re_log::error!(
+                                "{}",
+                                trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                            );
                         }
                     } else if selected_stores.len() == 1 {
                         // Common case: saving a single recording.
                         // In this case we want the user to be able to pick a file name (not just a folder):
                         if let Err(err) = save_recording(self, selected_stores[0], None) {
-                            re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
+                            re_log::error!(
+                                "{}",
+                                trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                            );
                         }
                     } else {
                         // Save all selected recordings to a folder:
@@ -1266,20 +1320,35 @@ impl App {
                         {
                             self.save_many_recordings(&selected_stores, &folder);
                         } else {
-                            re_log::info!("未选择文件夹 — 录制文件未保存。");
+                            re_log::info!(
+                                "{}",
+                                tr(
+                                    "No folder selected - recordings not saved.",
+                                    "未选择文件夹 — 录制文件未保存。"
+                                )
+                            );
                         }
                     }
                 }
             }
             RecordingCommandKind::SaveTimeSelection => {
                 if let Err(err) = save_active_recording(self, store_context) {
-                    re_log::error!("{}", trf!("Failed to save recording: {err}", "保存录制文件失败：{err}"));
+                    re_log::error!(
+                        "{}",
+                        trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                    );
                 }
             }
 
             RecordingCommandKind::SaveBlueprint => {
                 if let Err(err) = save_blueprint(self, store_context) {
-                    re_log::error!("{}", trf!("Failed to save blueprint: {err}", "保存 blueprint 失败：{err}"));
+                    re_log::error!(
+                        "{}",
+                        trf!(
+                            "Failed to save blueprint: {err}",
+                            "保存 blueprint 失败：{err}"
+                        )
+                    );
                 }
             }
 
@@ -1422,7 +1491,14 @@ impl App {
         let any_error = Arc::new(AtomicBool::new(false));
         let num_remaining = Arc::new(AtomicUsize::new(stores.len()));
 
-        re_log::info!("{}", trf!("Saving {num_stores} recordings to {}…", "正在保存 {num_stores} 个录制文件到 {}…", folder.display()));
+        re_log::info!(
+            "{}",
+            trf!(
+                "Saving {num_stores} recordings to {}…",
+                "正在保存 {num_stores} 个录制文件到 {}…",
+                folder.display()
+            )
+        );
 
         for store in stores {
             let messages = store.to_messages(None).collect_vec();
@@ -1459,9 +1535,18 @@ impl App {
 
                     if num_remaining == 0 {
                         if any_error.load(Ordering::Relaxed) {
-                            re_log::error!("部分录制文件保存失败。");
+                            re_log::error!(
+                                "{}",
+                                tr("Some recordings failed to save.", "部分录制文件保存失败。")
+                            );
                         } else {
-                            re_log::info!("{}", trf!("{num_stores} recordings successfully saved to {folder}", "已成功保存 {num_stores} 个录制文件到 {folder}"));
+                            re_log::info!(
+                                "{}",
+                                trf!(
+                                    "{num_stores} recordings successfully saved to {folder}",
+                                    "已成功保存 {num_stores} 个录制文件到 {folder}"
+                                )
+                            );
                         }
                     }
 
@@ -1486,8 +1571,10 @@ impl App {
 
     /// Copies text to the clipboard, and gives a notification about it.
     fn copy_text(&mut self, url: String) {
-        self.notifications
-            .success(trf!("Copied {url:?} to clipboard", "已复制 {url:?} 到剪贴板"));
+        self.notifications.success(trf!(
+            "Copied {url:?} to clipboard",
+            "已复制 {url:?} 到剪贴板"
+        ));
         self.egui_ctx.copy_text(url);
     }
 
@@ -1497,7 +1584,13 @@ impl App {
         store_context: Option<&ActiveStoreContext<'_>>,
     ) {
         let Some(entity_db) = store_context.as_ref().map(|ctx| ctx.recording) else {
-            re_log::warn!("无法复制实体层级：没有活动的录制文件");
+            re_log::warn!(
+                "{}",
+                tr(
+                    "Could not copy entity hierarchy: No active recording",
+                    "无法复制实体层级：没有活动的录制文件"
+                )
+            );
             return;
         };
 
@@ -1521,8 +1614,13 @@ impl App {
         }
 
         egui_ctx.copy_text(hierarchy_text.clone());
-        self.notifications
-            .success(tr("Copied entity hierarchy with schema to clipboard", "已复制实体层级（含 schema）到剪贴板").to_owned());
+        self.notifications.success(
+            tr(
+                "Copied entity hierarchy with schema to clipboard",
+                "已复制实体层级（含 schema）到剪贴板",
+            )
+            .to_owned(),
+        );
     }
 
     /// Reset the viewer to how it looked the first time you ran it.
@@ -1538,7 +1636,10 @@ impl App {
         re_ui::apply_style_and_install_loaders(egui_ctx);
 
         if let Err(err) = crate::reset_viewer_persistence() {
-            re_log::warn!("{}", trf!("Failed to reset viewer: {err}", "重置 Viewer 失败：{err}"));
+            re_log::warn!(
+                "{}",
+                trf!("Failed to reset viewer: {err}", "重置 Viewer 失败：{err}")
+            );
         }
     }
 
@@ -1821,7 +1922,7 @@ fn save_active_recording(
 ) -> anyhow::Result<()> {
     let Some(store_context) = store_context else {
         // NOTE: Can only happen if saving through the command palette.
-        anyhow::bail!("没有可保存的录制数据");
+        anyhow::bail!(tr("No recording data to save", "没有可保存的录制数据"));
     };
 
     save_recording(app, store_context.recording, store_context.loop_selection())
@@ -1866,7 +1967,7 @@ fn save_blueprint(
     store_context: Option<&ActiveStoreContext<'_>>,
 ) -> anyhow::Result<()> {
     let Some(store_context) = store_context else {
-        anyhow::bail!("没有可保存的 blueprint");
+        anyhow::bail!(tr("No blueprint to save", "没有可保存的 blueprint"));
     };
 
     re_tracing::profile_function!();
@@ -1891,7 +1992,7 @@ fn save_blueprint(
     let mut saved_blueprint = store_context
         .blueprint
         .clone_with_new_id(new_store_id)
-        .context("克隆当前 blueprint 失败")?;
+        .context(tr("Cloning current blueprint", "克隆当前 blueprint 失败"))?;
 
     if let Some(undo_state) = app
         .state
@@ -1989,5 +2090,8 @@ async fn async_save_dialog(
     let options = re_log_encoding::rrd::EncodingOptions::PROTOBUF_COMPRESSED;
     let mut bytes = Vec::new();
     re_log_encoding::Encoder::encode_into(rrd_version, options, messages, &mut bytes)?;
-    file_handle.write(&bytes).await.context("保存失败")
+    file_handle
+        .write(&bytes)
+        .await
+        .context(tr("Failed to save", "保存失败"))
 }

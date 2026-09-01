@@ -1,4 +1,5 @@
 use re_i18n::{tr, trf};
+
 use egui::{NumExt as _, TextBuffer, WidgetInfo, WidgetType};
 use egui_tiles::ContainerKind;
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item};
@@ -71,9 +72,12 @@ impl SelectionPanel {
 
         panel.show_collapsible(ui, expanded, |ui: &mut egui::Ui| {
             ui.panel_content(|ui| {
-                let hover = tr(";
-                ui.panel_title_bar(", "Selection 面板显示当前选中对象的信息和相关选项");
-                ui.panel_title_bar("Selection", Some(hover));
+                let title = tr("Selection", "选择");
+                let hover = tr(
+                    "The selection view contains information and options about the currently selected object(s)",
+                    "选择面板显示当前选中对象的信息和相关选项",
+                );
+                ui.panel_title_bar(title, Some(hover));
             });
 
             // move the vertical spacing between the title and the content to _inside_ the scroll
@@ -188,17 +192,17 @@ impl SelectionPanel {
                 let is_static = engine
                     .store()
                     .entity_has_static_component(entity_path, component_descriptor.component);
-                ui.list_item_flat_noninteractive(PropertyContent::new("父实体").value_fn(
-                    |ui, _| {
+                ui.list_item_flat_noninteractive(
+                    PropertyContent::new(tr("Parent entity", "父实体")).value_fn(|ui, _| {
                         item_ui::entity_path_parts_buttons(&store_view_ctx, ui, None, entity_path);
-                    },
-                ));
+                    }),
+                );
 
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new("索引类型").value_text(if is_static {
-                        "静态"
+                    PropertyContent::new(tr("Index type", "索引类型")).value_text(if is_static {
+                        tr("Static", "静态")
                     } else {
-                        "时间轴"
+                        tr("Temporal", "时间轴")
                     }),
                 );
 
@@ -217,7 +221,11 @@ impl SelectionPanel {
                                 ui.strong(archetype_name.full_name());
 
                                 if let Some(doc_url) = archetype_name.doc_url() {
-                                    ui.re_hyperlink(tr(", doc_url, true);
+                                    ui.re_hyperlink(
+                                        tr("Full documentation", "完整文档"),
+                                        doc_url,
+                                        true,
+                                    );
                                 }
                             });
                         },
@@ -225,20 +233,12 @@ impl SelectionPanel {
                 }
 
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new(", "完整文档"), doc_url, true);
-                                }
-                            });
-                        },
-                    ));
-                }
-
-                ui.list_item_flat_noninteractive(
-                    PropertyContent::new("组件").value_text(component.as_str()),
+                    PropertyContent::new(tr("Component", "组件")).value_text(component.as_str()),
                 );
 
                 if let Some(component_type) = component_type {
                     ui.list_item_flat_noninteractive(
-                        PropertyContent::new("组件类型").value_fn(|ui, _| {
+                        PropertyContent::new(tr("Component type", "组件类型")).value_fn(|ui, _| {
                             ui.label(component_type.short_name()).on_hover_ui(|ui| {
                                 ui.spacing_mut().item_spacing.y = 12.0;
 
@@ -255,7 +255,11 @@ impl SelectionPanel {
                                 }
 
                                 if let Some(doc_url) = component_type.doc_url() {
-                                    ui.re_hyperlink("完整文档", doc_url, true);
+                                    ui.re_hyperlink(
+                                        tr("Full documentation", "完整文档"),
+                                        doc_url,
+                                        true,
+                                    );
                                 }
                             });
                         }),
@@ -269,20 +273,20 @@ impl SelectionPanel {
                 let store_view_ctx =
                     ctx.guess_store_view_context_for_entity(&instance_path.entity_path);
 
-                ui.list_item_flat_noninteractive(PropertyContent::new("实体路径").value_fn(
-                    |ui, _| {
+                ui.list_item_flat_noninteractive(
+                    PropertyContent::new(tr("Entity path", "实体路径")).value_fn(|ui, _| {
                         item_ui::entity_path_parts_buttons(
                             &store_view_ctx,
                             ui,
                             None,
                             &instance_path.entity_path,
                         );
-                    },
-                ));
+                    }),
+                );
 
                 if instance_path.instance.is_specific() {
                     ui.list_item_flat_noninteractive(
-                        PropertyContent::new("实例")
+                        PropertyContent::new(tr("Instance", "实例"))
                             .value_text(instance_path.instance.to_string()),
                     );
                 }
@@ -308,28 +312,28 @@ impl SelectionPanel {
             }) => {
                 let store_view_ctx =
                     ctx.guess_store_view_context_for_entity(&instance_path.entity_path);
-                ui.list_item_flat_noninteractive(PropertyContent::new("数据流实体").value_fn(
-                    |ui, _| {
+                ui.list_item_flat_noninteractive(
+                    PropertyContent::new(tr("Stream entity", "数据流实体")).value_fn(|ui, _| {
                         item_ui::entity_path_parts_buttons(
                             &store_view_ctx,
                             ui,
                             None,
                             &instance_path.entity_path,
                         );
-                    },
-                ));
+                    }),
+                );
 
                 if instance_path.instance.is_specific() {
-                    ui.list_item_flat_noninteractive(PropertyContent::new("实例").value_fn(
-                        |ui, _| {
+                    ui.list_item_flat_noninteractive(
+                        PropertyContent::new(tr("Instance", "实例")).value_fn(|ui, _| {
                             let response = ui.button(instance_path.instance.to_string());
                             cursor_interact_with_selectable(
                                 &ctx.app_ctx,
                                 response,
                                 Item::from(instance_path.clone()),
                             );
-                        },
-                    ));
+                        }),
+                    );
                 }
 
                 if instance_path.is_all() {
@@ -365,18 +369,20 @@ impl SelectionPanel {
         };
 
         if let Some(data_ui_item) = data_section_ui(item) {
-            ui.section_collapsing_header("数据").show(ui, |ui| {
-                // TODO(#6075): Because `list_item_scope` changes it. Temporary until everything is `ListItem`.
-                ui.spacing_mut().item_spacing.y = ui.global_style().spacing.item_spacing.y;
-                data_ui_item.data_ui(&store_view_ctx, ui, ui_layout);
-            });
+            ui.section_collapsing_header(tr("Data", "数据"))
+                .show(ui, |ui| {
+                    // TODO(#6075): Because `list_item_scope` changes it. Temporary until everything is `ListItem`.
+                    ui.spacing_mut().item_spacing.y = ui.global_style().spacing.item_spacing.y;
+                    data_ui_item.data_ui(&store_view_ctx, ui, ui_layout);
+                });
         }
 
         match item {
             Item::StoreId(_) => {
-                ui.section_collapsing_header("Properties").show(ui, |ui| {
-                    show_recording_properties(&store_view_ctx, ui, ui_layout);
-                });
+                ui.section_collapsing_header(tr("Properties", "属性"))
+                    .show(ui, |ui| {
+                        show_recording_properties(&store_view_ctx, ui, ui_layout);
+                    });
             }
 
             Item::View(view_id) => {
@@ -407,7 +413,8 @@ impl SelectionPanel {
         view_id: &ViewId,
         view_states: &mut ViewStates,
     ) {
-        let markdown = r#"
+        let markdown = if re_i18n::is_chinese() {
+            r#"
 # 实体路径查询语法
 
 实体路径查询由一组作用在路径上的包含/排除规则组成：
@@ -442,6 +449,43 @@ impl SelectionPanel {
 匹配 `/world` 的最后一条规则是 `- /world`，因此它被排除。
 匹配 `/world/house` 的最后一条规则是 `+ /world/**`，因此它被包含。
     "#
+        } else {
+            r#"
+# Entity path query syntax
+
+Entity path queries are described as a list of include/exclude rules that act on paths:
+
+```diff
++ /world/**           # add everything…
+- /world/roads/**     # …but remove all roads…
++ /world/roads/main   # …but show main road
+```
+
+If there are multiple matching rules, the most specific rule wins.
+If there are multiple rules of the same specificity, the last one wins.
+If no rules match, the path is excluded.
+
+The `/**` suffix matches the whole subtree, i.e. self and any child, recursively
+(`/world/**` matches both `/world` and `/world/car/driver`).
+Other uses of `*` are not (yet) supported.
+
+`EntityPathFilter` sorts the rule by entity path, with recursive coming before non-recursive.
+This means the last matching rule is also the most specific one.
+For instance:
+
+```diff
++ /world/**
+- /world
+- /world/car/**
++ /world/car/driver
+```
+
+The last rule matching `/world/car/driver` is `+ /world/car/driver`, so it is included.
+The last rule matching `/world/car/hood` is `- /world/car/**`, so it is excluded.
+The last rule matching `/world` is `- /world`, so it is excluded.
+The last rule matching `/world/house` is `+ /world/**`, so it is included.
+    "#
+        }
         .trim();
 
         clone_view_button_ui(ctx, ui, viewport, *view_id);
@@ -449,24 +493,17 @@ impl SelectionPanel {
         if let Some(view) = viewport.view(view_id) {
             if view.class(ctx.view_class_registry()).is_experimental() {
                 ui.add_space(6.0);
-                ui.info_label(
-                    tr(",
-                );
+                ui.info_label(tr(
+                    "This view is experimental: its API, behavior, and on-disk format may change without notice.",
+                    "这是实验性视图：其 API、行为和存储格式可能随时变化，恕不另行通知。",
+                ));
                 ui.add_space(8.0);
             }
 
-            ui.section_collapsing_header(", "这是实验性视图：其 API、行为和存储格式可能随时变化，恕不另行通知。"),
-                );
-                ui.add_space(8.0);
-            }
-
-            ui.section_collapsing_header(tr(")
+            ui.section_collapsing_header(tr("Entity path filter", "实体路径过滤器"))
                 .with_action_button(
                     &re_ui::icons::EDIT,
-                    ", "实体路径过滤器"))
-                .with_action_button(
-                    &re_ui::icons::EDIT,
-                    "在编辑器中修改实体查询",
+                    tr("Modify the entity query using the editor", "在编辑器中修改实体查询"),
                     || {
                         self.view_entity_modal.open(*view_id);
                     },
@@ -489,10 +526,10 @@ impl SelectionPanel {
                     }
                 })
                 .header_response
-                .on_hover_text(
-                    "实体路径查询由一组包含/排除规则组成，\
-                决定哪些实体属于这个视图",
-                );
+                .on_hover_text(tr(
+                    "The entity path query consists of a list of include/exclude rules that determines what entities are part of this view",
+                    "实体路径查询由一组包含/排除规则组成，决定哪些实体属于这个视图",
+                ));
         }
 
         if let Some(view) = viewport.view(view_id) {
@@ -507,7 +544,7 @@ impl SelectionPanel {
                 });
             }
 
-            ui.section_collapsing_header("视图属性")
+            ui.section_collapsing_header(tr("View properties", "视图属性"))
                 .show(ui, |ui| {
                     // TODO(#6075): Because `list_item_scope` changes it. Temporary until everything is `ListItem`.
                     ui.spacing_mut().item_spacing.y = ui.global_style().spacing.item_spacing.y;
@@ -529,7 +566,7 @@ impl SelectionPanel {
                     }
 
                     if cursor == ui.cursor() {
-                        ui.weak("（无）");
+                        ui.weak(tr("(none)", "（无）"));
                     }
                 });
 
@@ -542,10 +579,6 @@ impl SelectionPanel {
     }
 }
 
-const VISUALIZERS_SECTION_HELP: &str = "# 可视化器
-
-这里列出该视图中所有已启用的可视化器。";
-
 fn show_visualizers_section(
     ctx: &ViewerContext<'_>,
     ui: &mut egui::Ui,
@@ -553,11 +586,16 @@ fn show_visualizers_section(
     add_options: Vec<(EntityPath, RecommendedVisualizers)>,
     body: &dyn Fn(&mut egui::Ui),
 ) {
-    ui.section_collapsing_header("可视化器")
+    let help = if re_i18n::is_chinese() {
+        "# 可视化器\n\n这里列出该视图中所有已启用的可视化器。"
+    } else {
+        "# Visualizers\n\nThis section lists all active visualizers in this view."
+    };
+    ui.section_collapsing_header(tr("Visualizers", "可视化器"))
         .with_button(move |ui: &mut egui::Ui| {
             visualizer_section_plus_button(ctx, view_id, add_options, ui)
         })
-        .with_help_markdown(VISUALIZERS_SECTION_HELP)
+        .with_help_markdown(help)
         .show(ui, |ui| {
             // TODO(#6075): Because `list_item_scope` changes it. Temporary until everything is `ListItem`.
             ui.spacing_mut().item_spacing.y = ui.global_style().spacing.item_spacing.y;
@@ -577,16 +615,25 @@ fn visualizer_section_plus_button(
 
     ui.spacing_mut().menu_margin = egui::Margin::same(0);
     ui.add(
-        ui.small_icon_button_widget(&re_ui::icons::ADD, "添加新的可视化器…")
-            .enabled(!options.is_empty())
-            .on_custom_menu(
-                move |popup| popup.style(re_ui::menu::menu_style()),
-                move |ui| {
-                    menu_add_new_visualizer_for_view(viewer_ctx, view_id, options, ui);
-                },
-            )
-            .on_hover_text("给当前视图添加一个新的可视化器。")
-            .on_disabled_hover_text("没有可添加到这个视图的可视化器。"),
+        ui.small_icon_button_widget(
+            &re_ui::icons::ADD,
+            tr("Add new visualizer…", "添加新的可视化器…"),
+        )
+        .enabled(!options.is_empty())
+        .on_custom_menu(
+            move |popup| popup.style(re_ui::menu::menu_style()),
+            move |ui| {
+                menu_add_new_visualizer_for_view(viewer_ctx, view_id, options, ui);
+            },
+        )
+        .on_hover_text(tr(
+            "Add a new visualizer to the current view.",
+            "给当前视图添加一个新的可视化器。",
+        ))
+        .on_disabled_hover_text(tr(
+            "There are no visualizers available to add to this view.",
+            "没有可添加到这个视图的可视化器。",
+        )),
     )
 }
 
@@ -790,7 +837,7 @@ fn coordinate_frame_ui(ui: &mut egui::Ui, ctx: &ViewContext<'_>, data_result: &D
     };
 
     let mut frame_id = frame_id_before.clone();
-    let property_content = list_item::PropertyContent::new("坐标系")
+    let property_content = list_item::PropertyContent::new(tr("Coordinate frame", "坐标系"))
         .value_fn(|ui, _| {
             // Show matching, non-entity-path-derived frame IDs as suggestions when the user edits the frame name.
             let suggestions = {
@@ -814,22 +861,29 @@ fn coordinate_frame_ui(ui: &mut egui::Ui, ctx: &ViewContext<'_>, data_result: &D
                 None::<&str>,
             );
         })
-        .with_menu_button(&re_ui::icons::MORE, "更多选项", |ui: &mut egui::Ui| {
-            crate::visualizer_ui::reset_override_button(
-                ctx,
-                ui,
-                component_descr.clone(),
-                data_result.override_base_path(),
-            );
-        });
+        .with_menu_button(
+            &re_ui::icons::MORE,
+            tr("More options", "更多选项"),
+            |ui: &mut egui::Ui| {
+                crate::visualizer_ui::reset_override_button(
+                    ctx,
+                    ui,
+                    component_descr.clone(),
+                    data_result.override_base_path(),
+                );
+            },
+        );
 
     ui.list_item_flat_noninteractive(property_content)
         .on_hover_ui(|ui| {
-            ui.markdown_ui(
+            ui.markdown_ui(&tr(
+                "The coordinate frame this entity is associated with.
+
+To learn more about coordinate frames, see the [Spaces & Transforms](https://rerun.io/docs/concepts/logging-and-ingestion/transforms) in the manual.",
                 "该实体关联的坐标系。
 
 想进一步了解坐标系，请参阅手册中的 [Spaces & Transforms](https://rerun.io/docs/concepts/logging-and-ingestion/transforms)。",
-            );
+            ));
         });
 
     if frame_id_before.is_empty() {
@@ -865,7 +919,10 @@ fn show_recording_properties(
     property_entities.sort();
 
     if property_entities.is_empty() {
-        ui.label("这个录制文件没有任何属性。");
+        ui.label(tr(
+            "No properties found for this recording.",
+            "这个录制文件没有任何属性。",
+        ));
     } else {
         list_item::list_item_scope(ui, "recording_properties", |ui| {
             for suffix_path in property_entities {
@@ -935,7 +992,7 @@ fn clone_view_button_ui(
     view_id: ViewId,
 ) {
     ui.list_item_flat_noninteractive(
-        list_item::ButtonContent::new("克隆这个视图")
+        list_item::ButtonContent::new(tr("Clone this view", "克隆这个视图"))
             .on_click(|| {
                 if let Some(new_view_id) = viewport.duplicate_view(&view_id, ctx) {
                     ctx.command_sender()
@@ -943,7 +1000,10 @@ fn clone_view_button_ui(
                     viewport.mark_user_interaction(ctx);
                 }
             })
-            .hover_text("创建这个视图的完整副本，包括所有 blueprint 设置"),
+            .hover_text(tr(
+                "Create an exact duplicate of this view including all blueprint settings",
+                "创建这个视图的完整副本，包括所有 blueprint 设置",
+            )),
     );
 }
 
@@ -1028,18 +1088,23 @@ fn entity_path_filter_ui(
     // Show some statistics about the query, print a warning text if something seems off.
     let query = ctx.lookup_query_result(view_id);
     if query.num_matching_entities == 0 {
-        ui.warning_label("没有匹配到任何实体");
+        ui.warning_label(tr("Does not match any entity", "没有匹配到任何实体"));
     } else if query.num_matching_entities == 1 {
-        ui.label("匹配到 1 个实体");
+        ui.label(tr("Matches 1 entity", "匹配到 1 个实体"));
     } else {
-        ui.label(trf!("Matches {} entities", "匹配到 {} 个实体", query.num_matching_entities));
+        ui.label(trf!(
+            "Matches {} entities",
+            "匹配到 {} 个实体",
+            query.num_matching_entities
+        ));
     }
     if query.num_matching_entities != 0 && query.num_visualized_entities == 0 {
         // TODO(andreas): Talk about this root bit only if it's a spatial view.
         // `NOLINT`: `EntityPath`'s debug impl doesn't quote the result.
-        ui.warning_label(
-            trf!("This view is not able to visualize any of the matched entities using the current root \"{origin:?}\".", "在当前根路径 \"{origin:?}\" 下，这个视图无法可视化任何匹配到的实体。"), // NOLINT
-        );
+        ui.warning_label(trf!(
+            "This view is not able to visualize any of the matched entities using the current root \"{origin:?}\".",
+            "在当前根路径 \"{origin:?}\" 下，这个视图无法可视化任何匹配到的实体。"
+        )); // NOLINT
     }
 
     // Apply the edit.
@@ -1069,9 +1134,12 @@ fn container_children(
 
         if !has_child {
             ui.list_item_flat_noninteractive(
-                list_item::LabelContent::new(tr("empty — use the + button to add content", "空 — 点 + 按钮添加内容"))
-                    .weak(true)
-                    .italics(true),
+                list_item::LabelContent::new(tr(
+                    "empty — use the + button to add content",
+                    "空 — 点 + 按钮添加内容",
+                ))
+                .weak(true)
+                .italics(true),
             );
         }
     };
@@ -1079,7 +1147,10 @@ fn container_children(
     ui.section_collapsing_header(tr("Contents", "内容"))
         .with_action_button(
             &re_ui::icons::ADD,
-            tr("Add a new view or container to this container", "在这个容器里添加新的视图或容器"),
+            tr(
+                "Add a new view or container to this container",
+                "在这个容器里添加新的视图或容器",
+            ),
             || {
                 show_add_view_or_container_modal(*container_id);
             },
@@ -1193,25 +1264,26 @@ fn view_top_level_properties(
         view.set_display_name(ctx, if name.is_empty() { None } else { Some(name) });
     }));
 
-    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Space origin", "空间原点")).value_fn(|ui, _| {
-        ui.spacing_mut().text_edit_width = ui
-            .spacing_mut()
-            .text_edit_width
-            .at_least(ui.available_width());
+    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Space origin", "空间原点")).value_fn(
+        |ui, _| {
+            ui.spacing_mut().text_edit_width = ui
+                .spacing_mut()
+                .text_edit_width
+                .at_least(ui.available_width());
 
-        super::view_space_origin_ui::view_space_origin_widget_ui(ui, ctx, view);
-    }))
-    .on_hover_text(
-        "这个视图的原点实体。对空间类视图而言，\
-                    视图空间的原点就是该实体的原点，\
-                    所有变换都相对于它。",
-    );
+            super::view_space_origin_ui::view_space_origin_widget_ui(ui, ctx, view);
+        },
+    ))
+    .on_hover_text(tr(
+        "The origin entity for this view. For spatial views, the space view's origin is the same as this entity's origin and all transforms are relative to it.",
+        "这个视图的原点实体。对空间类视图而言，视图空间的原点就是该实体的原点，所有变换都相对于它。",
+    ));
 
     ui.list_item_flat_noninteractive(
-        PropertyContent::new("视图类型")
+        PropertyContent::new(tr("View type", "视图类型"))
             .value_text(view.class(ctx.view_class_registry()).display_name()),
     )
-    .on_hover_text("这个视图的类型");
+    .on_hover_text(tr("The type of this view", "这个视图的类型"));
 }
 
 fn container_top_level_properties(
@@ -1224,7 +1296,7 @@ fn container_top_level_properties(
         return;
     };
 
-    ui.list_item_flat_noninteractive(PropertyContent::new("名称").value_fn(|ui, _| {
+    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Name", "名称")).value_fn(|ui, _| {
         ui.spacing_mut().text_edit_width = ui
             .spacing_mut()
             .text_edit_width
@@ -1235,45 +1307,49 @@ fn container_top_level_properties(
         container.set_display_name(ctx, if name.is_empty() { None } else { Some(name) });
     }));
 
-    ui.list_item_flat_noninteractive(PropertyContent::new("容器类型").value_fn(|ui, _| {
-        let mut container_kind = container.container_kind;
-        container_kind_selection_ui(ui, &mut container_kind);
-        viewport.set_container_kind(*container_id, container_kind);
-    }));
+    ui.list_item_flat_noninteractive(
+        PropertyContent::new(tr("Container kind", "容器类型")).value_fn(|ui, _| {
+            let mut container_kind = container.container_kind;
+            container_kind_selection_ui(ui, &mut container_kind);
+            viewport.set_container_kind(*container_id, container_kind);
+        }),
+    );
 
     if container.container_kind == ContainerKind::Grid {
-        ui.list_item_flat_noninteractive(PropertyContent::new("列数").value_fn(|ui, _| {
-            fn columns_to_string(columns: Option<u32>) -> String {
-                match columns {
-                    None => "自动".to_owned(),
-                    Some(cols) => cols.to_string(),
-                }
-            }
-
-            let mut new_columns = container.grid_columns;
-
-            egui::ComboBox::from_id_salt("container_grid_columns")
-                .selected_text(columns_to_string(new_columns))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut new_columns, None, columns_to_string(None));
-
-                    ui.separator();
-
-                    for columns in 1..=container.contents.len() as u32 {
-                        ui.selectable_value(
-                            &mut new_columns,
-                            Some(columns),
-                            columns_to_string(Some(columns)),
-                        );
+        ui.list_item_flat_noninteractive(PropertyContent::new(tr("Columns", "列数")).value_fn(
+            |ui, _| {
+                fn columns_to_string(columns: Option<u32>) -> String {
+                    match columns {
+                        None => tr("Auto", "自动").to_owned(),
+                        Some(cols) => cols.to_string(),
                     }
-                });
+                }
 
-            container.set_grid_columns(ctx, new_columns);
-        }));
+                let mut new_columns = container.grid_columns;
+
+                egui::ComboBox::from_id_salt("container_grid_columns")
+                    .selected_text(columns_to_string(new_columns))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut new_columns, None, columns_to_string(None));
+
+                        ui.separator();
+
+                        for columns in 1..=container.contents.len() as u32 {
+                            ui.selectable_value(
+                                &mut new_columns,
+                                Some(columns),
+                                columns_to_string(Some(columns)),
+                            );
+                        }
+                    });
+
+                container.set_grid_columns(ctx, new_columns);
+            },
+        ));
     }
 
     ui.list_item_flat_noninteractive(
-        list_item::ButtonContent::new("简化层级")
+        list_item::ButtonContent::new(tr("Simplify hierarchy", "简化层级"))
             .on_click(|| {
                 viewport.simplify_container(
                     container_id,
@@ -1288,7 +1364,10 @@ fn container_top_level_properties(
                     },
                 );
             })
-            .hover_text("简化这个容器及其子级"),
+            .hover_text(tr(
+                "Simplify this container and its children",
+                "简化这个容器及其子级",
+            )),
     );
 
     fn equal_shares(shares: &[f32]) -> bool {
@@ -1305,12 +1384,12 @@ fn container_top_level_properties(
         }
     {
         ui.list_item_flat_noninteractive(
-            list_item::ButtonContent::new("平均分配空间")
+            list_item::ButtonContent::new(tr("Distribute content equally", "平均分配空间"))
                 .on_click(|| {
                     viewport.make_all_children_same_size(container_id);
                 })
                 .enabled(!all_shares_are_equal)
-                .hover_text("让所有子级大小一致"),
+                .hover_text(tr("Make all children the same size", "让所有子级大小一致")),
         );
     }
 }
@@ -1318,10 +1397,10 @@ fn container_top_level_properties(
 fn container_kind_selection_ui(ui: &mut egui::Ui, in_out_kind: &mut ContainerKind) {
     fn kind_name(kind: ContainerKind) -> &'static str {
         match kind {
-            ContainerKind::Tabs => "标签页",
-            ContainerKind::Grid => "网格",
-            ContainerKind::Horizontal => "水平",
-            ContainerKind::Vertical => "垂直",
+            ContainerKind::Tabs => tr("Tabs", "标签页"),
+            ContainerKind::Grid => tr("Grid", "网格"),
+            ContainerKind::Horizontal => tr("Horizontal", "水平"),
+            ContainerKind::Vertical => tr("Vertical", "垂直"),
         }
     }
 
@@ -1374,8 +1453,11 @@ fn show_list_item_for_container_child(
                     .with_icon(view.class(ctx.view_class_registry()).icon())
                     .with_buttons(|ui| {
                         let response = ui
-                            .small_icon_button(&icons::REMOVE, "移除这个视图")
-                            .on_hover_text("移除这个视图");
+                            .small_icon_button(
+                                &icons::REMOVE,
+                                tr("Remove this view", "移除这个视图"),
+                            )
+                            .on_hover_text(tr("Remove this view", "移除这个视图"));
 
                         if response.clicked() {
                             remove_contents = true;
@@ -1398,8 +1480,11 @@ fn show_list_item_for_container_child(
                     .with_icon(icon_for_container_kind(&container.container_kind))
                     .with_buttons(|ui| {
                         let response = ui
-                            .small_icon_button(&icons::REMOVE, "移除这个容器")
-                            .on_hover_text("移除这个容器");
+                            .small_icon_button(
+                                &icons::REMOVE,
+                                tr("Remove this container", "移除这个容器"),
+                            )
+                            .on_hover_text(tr("Remove this container", "移除这个容器"));
 
                         if response.clicked() {
                             remove_contents = true;
@@ -1445,9 +1530,12 @@ fn visible_interactive_toggle_ui(
         let mut visible = visible_before;
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("可见").value_bool_mut(&mut visible),
+            list_item::PropertyContent::new(tr("Visible", "可见")).value_bool_mut(&mut visible),
         )
-        .on_hover_text("关闭后，该实体不会显示在视图中。");
+        .on_hover_text(tr(
+            "If disabled, the entity won't be shown in the view.",
+            "关闭后，该实体不会显示在视图中。",
+        ));
 
         if visible_before != visible {
             data_result.save_visible(ctx.viewer_ctx, &query_result.tree, visible);
@@ -1458,9 +1546,13 @@ fn visible_interactive_toggle_ui(
         let mut interactive = interactive_before;
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("可交互").value_bool_mut(&mut interactive),
+            list_item::PropertyContent::new(tr("Interactive", "可交互"))
+                .value_bool_mut(&mut interactive),
         )
-        .on_hover_text("关闭后，该实体不再响应任何鼠标操作。");
+        .on_hover_text(tr(
+            "If disabled, the entity will not react to any mouse interaction.",
+            "关闭后，该实体不再响应任何鼠标操作。",
+        ));
 
         if interactive_before != interactive {
             data_result.save_interactive(ctx.viewer_ctx, &query_result.tree, interactive);

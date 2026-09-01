@@ -756,7 +756,11 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                 } else {
                     (&icons::PAUSE, tr("Pause downloading this dataset", "暂停下载该数据集"))
                 };
-                if ui.small_icon_button(icon, tooltip).clicked() {
+                if ui
+                    .small_icon_button(icon, tooltip)
+                    .on_hover_text(tooltip)
+                    .clicked()
+                {
                     re_data_source::lerobot_remote::set_dataset_paused(app_id.as_str(), !paused);
                 }
             }
@@ -777,7 +781,11 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
             // in front of the row furniture, where a feature belongs.
             if let Some(url) = diagnose_url {
                 let resp = ui
-                    .add(egui::Button::new(tr("Diagnose", "质检")).small())
+                    .add(
+                        re_ui::ReButton::new(tr("Diagnose", "质检"))
+                            .secondary()
+                            .small(),
+                    )
                     .on_hover_text(tr("Run data curation on this dataset", "对该数据集进行数据质检"));
                 if resp.clicked() {
                     ui.open_url(egui::OpenUrl::new_tab(url));

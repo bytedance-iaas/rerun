@@ -254,7 +254,10 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(err.contains("未完成"), "unexpected error: {err}");
+        assert!(
+            err.contains("did not finish") || err.contains("未完成"),
+            "unexpected error: {err}"
+        );
 
         // Unblock the abandoned ureq thread (the runtime waits for blocking tasks on
         // shutdown — without this, the test lingers until ureq's own 30s timeout).
@@ -360,7 +363,7 @@ mod tests {
         // The method check runs before any connection is made, so the unroutable port never hurts.
         let request = ehttp::Request::post("http://127.0.0.1:9/", Vec::new());
         let err = super::fetch_async(request).await.unwrap_err();
-        assert!(err.contains("不支持的 HTTP 方法"));
+        assert!(err.contains("Unsupported HTTP method") || err.contains("不支持的 HTTP 方法"));
     }
 
     /// Reaches a public HTTPS endpoint and asserts the TLS handshake succeeds.

@@ -105,7 +105,10 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
         ui.label(tr("Memory budget", "内存预算"));
         memory_budget_section_ui(ui, memory_limit);
         ui.help_button(|ui| {
-            ui.label(tr("When this limit is reached we start purging data from RAM", "达到这个上限后，会开始从内存中清理数据"));
+            ui.label(tr(
+                "When this limit is reached we start purging data from RAM",
+                "达到这个上限后，会开始从内存中清理数据",
+            ));
         });
         ui.end_row();
 
@@ -129,15 +132,12 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
         "显示“Rerun 示例”按钮",
     );
 
-    ui.re_checkbox(
-        visualizer_limits_enabled,
-        "限制单个视图中的图元数量",
-    )
-    .on_hover_text(
-        "限制每个可视化器处理的元素数量\
+    ui.re_checkbox(visualizer_limits_enabled, "限制单个视图中的图元数量")
+        .on_hover_text(
+            "限制每个可视化器处理的元素数量\
              （例如 3D 形状的实例上限、时间序列的线条上限）。\
              关闭后，数据量特别大时 Viewer 可能会卡死无响应。",
-    );
+        );
 
     ui.collapsing_header("时间戳格式", false, |ui| {
         time_format_section_ui(ui, timestamp_format);
@@ -252,7 +252,13 @@ fn origin_private_filesystem_section_ui(ui: &mut Ui) {
                 Ok(true) => re_log::info!("浏览器已授予持久化存储"),
                 Ok(false) => re_log::warn!("浏览器拒绝了持久化存储请求"),
                 Err(err) => {
-                    re_log::error!("{}", trf!("Failed to request persistent browser storage: {err}", "申请浏览器持久化存储失败：{err}"));
+                    re_log::error!(
+                        "{}",
+                        trf!(
+                            "Failed to request persistent browser storage: {err}",
+                            "申请浏览器持久化存储失败：{err}"
+                        )
+                    );
                 }
             }
         });
@@ -511,9 +517,15 @@ fn ffmpeg_path_status_ui(ui: &mut Ui, options: &VideoOptions) {
 
         Poll::Ready(Ok(version)) => {
             if version.is_compatible() {
-                ui.success_label(trf!("FFmpeg found (version {version})", "已找到 FFmpeg（版本 {version}）"));
+                ui.success_label(trf!(
+                    "FFmpeg found (version {version})",
+                    "已找到 FFmpeg（版本 {version}）"
+                ));
             } else {
-                ui.error_label(trf!("Incompatible FFmpeg version: {version}", "FFmpeg 版本不兼容：{version}"));
+                ui.error_label(trf!(
+                    "Incompatible FFmpeg version: {version}",
+                    "FFmpeg 版本不兼容：{version}"
+                ));
             }
         }
         Poll::Ready(Err(FFmpegVersionParseError::ParseVersion { raw_version })) => {

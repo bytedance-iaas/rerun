@@ -1,5 +1,5 @@
-use re_i18n::{tr, trf};
 use egui::{AtomExt as _, IntoAtoms, NumExt as _};
+use re_i18n::{tr, trf};
 use re_ui::list_item::PropertyContent;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 use re_ui::{UiExt as _, icons};
@@ -85,7 +85,10 @@ impl ShareModal {
 
         match url_for_current_screen {
             Err(err) => {
-                share_button_resp.on_disabled_hover_text(trf!("Cannot create share URL: {err}", "无法生成分享链接：{err}"));
+                share_button_resp.on_disabled_hover_text(trf!(
+                    "Cannot create share URL: {err}",
+                    "无法生成分享链接：{err}"
+                ));
             }
             Ok(url) => {
                 if share_button_resp.clicked() {
@@ -285,62 +288,66 @@ fn fragment_ui(
     });
 
     let mut any_time = when.is_some();
-    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Time cursor", "时间标记")).value_fn(|ui, _| {
-        ui.selectable_toggle(|ui| {
-            selectable_value_with_min_width(
-                ui,
-                MIN_TOGGLE_WIDTH_RH,
-                &mut any_time,
-                false,
-                tr("At the start", "起始位置"),
-            );
-            ui.add_enabled_ui(current_time_cursor.is_some(), |ui| {
-                let mut label = egui::Atoms::new(egui::Atom::from(tr("Current", "当前位置")));
-                if let Some((_, time_cell)) = current_time_cursor {
-                    label.push_right({
-                        let time = time_cell.format(timestamp_format);
-                        egui::RichText::new(time).weak().small().atom_shrink(true)
-                    });
-                }
-                label.push_left(egui::Atom::grow());
-                label.push_right(egui::Atom::grow());
+    ui.list_item_flat_noninteractive(
+        PropertyContent::new(tr("Time cursor", "时间标记")).value_fn(|ui, _| {
+            ui.selectable_toggle(|ui| {
+                selectable_value_with_min_width(
+                    ui,
+                    MIN_TOGGLE_WIDTH_RH,
+                    &mut any_time,
+                    false,
+                    tr("At the start", "起始位置"),
+                );
+                ui.add_enabled_ui(current_time_cursor.is_some(), |ui| {
+                    let mut label = egui::Atoms::new(egui::Atom::from(tr("Current", "当前位置")));
+                    if let Some((_, time_cell)) = current_time_cursor {
+                        label.push_right({
+                            let time = time_cell.format(timestamp_format);
+                            egui::RichText::new(time).weak().small().atom_shrink(true)
+                        });
+                    }
+                    label.push_left(egui::Atom::grow());
+                    label.push_right(egui::Atom::grow());
 
-                selectable_value_with_available_width(ui, &mut any_time, true, label)
-                    .on_disabled_hover_text(tr("No time selected.", "没有选中的时间。"));
+                    selectable_value_with_available_width(ui, &mut any_time, true, label)
+                        .on_disabled_hover_text(tr("No time selected.", "没有选中的时间。"));
+                });
             });
-        });
-    }));
+        }),
+    );
 
     ui.add_space(8.0);
 
     let mut any_selection = time_selection.is_some();
-    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Time selection", "时间选区")).value_fn(|ui, _| {
-        ui.selectable_toggle(|ui| {
-            selectable_value_with_min_width(
-                ui,
-                MIN_TOGGLE_WIDTH_RH,
-                &mut any_selection,
-                false,
-                tr("No selection", "不带选区"),
-            );
-            ui.add_enabled_ui(current_time_selection.is_some(), |ui| {
-                let mut label = egui::Atoms::new(egui::Atom::from(tr("Current", "当前选区")));
-                if let Some(time_selection) = &current_time_selection {
-                    label.push_right({
-                        egui::RichText::new(time_selection.format(timestamp_format))
-                            .weak()
-                            .small()
-                            .atom_shrink(true)
-                    });
-                }
-                label.push_left(egui::Atom::grow());
-                label.push_right(egui::Atom::grow());
+    ui.list_item_flat_noninteractive(
+        PropertyContent::new(tr("Time selection", "时间选区")).value_fn(|ui, _| {
+            ui.selectable_toggle(|ui| {
+                selectable_value_with_min_width(
+                    ui,
+                    MIN_TOGGLE_WIDTH_RH,
+                    &mut any_selection,
+                    false,
+                    tr("No selection", "不带选区"),
+                );
+                ui.add_enabled_ui(current_time_selection.is_some(), |ui| {
+                    let mut label = egui::Atoms::new(egui::Atom::from(tr("Current", "当前选区")));
+                    if let Some(time_selection) = &current_time_selection {
+                        label.push_right({
+                            egui::RichText::new(time_selection.format(timestamp_format))
+                                .weak()
+                                .small()
+                                .atom_shrink(true)
+                        });
+                    }
+                    label.push_left(egui::Atom::grow());
+                    label.push_right(egui::Atom::grow());
 
-                selectable_value_with_available_width(ui, &mut any_selection, true, label)
-                    .on_disabled_hover_text(tr("No time selected.", "没有选中的时间。"));
+                    selectable_value_with_available_width(ui, &mut any_selection, true, label)
+                        .on_disabled_hover_text(tr("No time selected.", "没有选中的时间。"));
+                });
             });
-        });
-    }));
+        }),
+    );
     if any_time {
         *when = current_time_cursor;
     } else {

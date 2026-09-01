@@ -116,7 +116,10 @@ fn add_entities_ui(
             );
         });
     } else {
-        ui.label(tr("No entities match the filter.", "没有实体匹配这个过滤器。"));
+        ui.label(tr(
+            "No entities match the filter.",
+            "没有实体匹配这个过滤器。",
+        ));
     }
 }
 
@@ -236,7 +239,8 @@ fn add_entities_line_ui(
                 let enabled = add_info.can_add_self_or_descendant.is_compatible();
 
                 ui.add_enabled_ui(enabled, |ui| {
-                    let response = ui.small_icon_button(&re_ui::icons::ADD, tr("Include entity", "加入实体"));
+                    let response =
+                        ui.small_icon_button(&re_ui::icons::ADD, tr("Include entity", "加入实体"));
 
                     if response.clicked() {
                         view.contents.remove_filter_rule_for(ctx, entity_path);
@@ -248,11 +252,15 @@ fn add_entities_line_ui(
 
                     if enabled {
                         if add_info.can_add.is_compatible_and_missing() {
-                            response.on_hover_text(
-                                tr("Include this entity and all its descendants in the view", "把这个实体及其所有子级加入视图"),
-                            );
+                            response.on_hover_text(tr(
+                                "Include this entity and all its descendants in the view",
+                                "把这个实体及其所有子级加入视图",
+                            ));
                         } else {
-                            response.on_hover_text(tr("Add descendants of this entity to the view", "把这个实体的子级加入视图"));
+                            response.on_hover_text(tr(
+                                "Add descendants of this entity to the view",
+                                "把这个实体的子级加入视图",
+                            ));
                         }
                     } else if let CanAddToView::No { reason } = &add_info.can_add {
                         response.on_disabled_hover_text(reason);
@@ -261,22 +269,32 @@ fn add_entities_line_ui(
             } else {
                 // Reset-button
                 // Shows when an entity is explicitly excluded or included
-                let response = ui.small_icon_button(&re_ui::icons::RESET, tr("Remove this rule", "移除这条规则"));
+                let response = ui.small_icon_button(
+                    &re_ui::icons::RESET,
+                    tr("Remove this rule", "移除这条规则"),
+                );
 
                 if response.clicked() {
                     view.contents.remove_filter_rule_for(ctx, entity_path);
                 }
 
                 if is_explicitly_excluded {
-                    response.on_hover_text(tr("Stop excluding this entity path.", "不再排除这个实体路径。"));
+                    response.on_hover_text(tr(
+                        "Stop excluding this entity path.",
+                        "不再排除这个实体路径。",
+                    ));
                 } else if is_explicitly_included {
-                    response.on_hover_text(tr("Stop including this entity path.", "不再包含这个实体路径。"));
+                    response.on_hover_text(tr(
+                        "Stop including this entity path.",
+                        "不再包含这个实体路径。",
+                    ));
                 }
             }
         } else if is_included {
             // Remove-button
             // Shows when an entity is already included (but not explicitly)
-            let response = ui.small_icon_button(&re_ui::icons::REMOVE, tr("Exclude entity", "排除实体"));
+            let response =
+                ui.small_icon_button(&re_ui::icons::REMOVE, tr("Exclude entity", "排除实体"));
 
             if response.clicked() {
                 view.contents.raw_add_entity_exclusion(
@@ -285,7 +303,10 @@ fn add_entities_line_ui(
                 );
             }
 
-            response.on_hover_text(tr("Exclude this entity and all its descendants from the view", "把这个实体及其所有子级从视图中排除"));
+            response.on_hover_text(tr(
+                "Exclude this entity and all its descendants from the view",
+                "把这个实体及其所有子级从视图中排除",
+            ));
         } else {
             // Add-button:
             // Shows when an entity is not included
@@ -293,7 +314,8 @@ fn add_entities_line_ui(
             let enabled = add_info.can_add_self_or_descendant.is_compatible();
 
             ui.add_enabled_ui(enabled, |ui| {
-                let response = ui.small_icon_button(&re_ui::icons::ADD, tr("Include entity", "加入实体"));
+                let response =
+                    ui.small_icon_button(&re_ui::icons::ADD, tr("Include entity", "加入实体"));
 
                 if response.clicked() {
                     view.contents.raw_add_entity_inclusion(
@@ -304,11 +326,15 @@ fn add_entities_line_ui(
 
                 if enabled {
                     if add_info.can_add.is_compatible_and_missing() {
-                        response.on_hover_text(
-                            tr("Include this entity and all its descendants in the view", "把这个实体及其所有子级加入视图"),
-                        );
+                        response.on_hover_text(tr(
+                            "Include this entity and all its descendants in the view",
+                            "把这个实体及其所有子级加入视图",
+                        ));
                     } else {
-                        response.on_hover_text(tr("Add descendants of this entity to the view", "把这个实体的子级加入视图"));
+                        response.on_hover_text(tr(
+                            "Add descendants of this entity to the view",
+                            "把这个实体的子级加入视图",
+                        ));
                     }
                 } else if let CanAddToView::No { reason } = &add_info.can_add {
                     response.on_disabled_hover_text(reason);

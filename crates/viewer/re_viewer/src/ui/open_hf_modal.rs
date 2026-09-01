@@ -147,7 +147,13 @@ impl OpenHfModal {
                     Err(err) => Err(err),
                 };
                 if let Err(err) = &outcome {
-                    re_log::warn!("{}", trf!("Failed to load server TOS defaults: {err}\nFile: config.json", "加载服务器端默认配置失败：{err}\n文件：config.json"));
+                    re_log::warn!(
+                        "{}",
+                        trf!(
+                            "Failed to load server TOS defaults: {err}\nFile: config.json",
+                            "加载服务器端默认配置失败：{err}\n文件：config.json"
+                        )
+                    );
                 }
                 *config.lock() = Some(outcome);
             });
@@ -235,8 +241,8 @@ impl OpenHfModal {
 
                 if let Some(err) = &config_error {
                     ui.warning_label(format!(
-                        "加载服务器端默认配置（HF token、制品库凭证）失败：\
-                         {err}\n文件：config.json — 各集将改为本地转换，而不是从制品库加载。",
+                        "加载服务器端默认配置（HF token、缓存桶凭证）失败：\
+                         {err}\n文件：config.json — 各集将改为本地转换，而不是从缓存桶加载。",
                     ));
                 }
 
@@ -247,7 +253,7 @@ impl OpenHfModal {
                     re_data_source::rrd_artifacts::parse_artifacts_url(&server_config.tos_rrd_artifacts_url)
                 {
                     let mut upload = !self.artifact_upload_disabled;
-                    ui.re_checkbox(&mut upload, "把转换出的 rrd 上传到制品库")
+                    ui.re_checkbox(&mut upload, tr("Upload converted rrd to the artifacts store", "把转换出的 rrd 上传到缓存桶"))
                         .on_hover_text(format!("{artifacts_location}"));
                     self.artifact_upload_disabled = !upload;
                 }
@@ -257,7 +263,7 @@ impl OpenHfModal {
 
                 if !self.dataset.is_empty() && parsed.is_none() {
                     ui.error_label(
-                        "格式应为 org/name、hf://org/name 或 huggingface.co/datasets/… URL",
+                        tr("Expected org/name, hf://org/name, or a huggingface.co/datasets/… URL", "格式应为 org/name、hf://org/name 或 huggingface.co/datasets/… URL"),
                     );
                 } else if let Some((repo, file_path)) = &parsed {
                     if let Some(file_path) = file_path {
@@ -269,7 +275,7 @@ impl OpenHfModal {
                         ));
                     }
                 } else {
-                    ui.label("请输入一个 Hugging Face 数据集。");
+                    ui.label(tr("Enter a Hugging Face dataset.", "请输入一个 Hugging Face 数据集。"));
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -277,7 +283,7 @@ impl OpenHfModal {
 
                     let open_response = ui.add_enabled(
                         can_open,
-                        egui::Button::new("打开").min_size(egui::vec2(button_width, 0.0)),
+                        egui::Button::new(tr("Open", "打开")).min_size(egui::vec2(button_width, 0.0)),
                     );
                     if open_response.clicked()
                         || can_open && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -303,7 +309,7 @@ impl OpenHfModal {
                     }
 
                     let cancel_response =
-                        ui.add(egui::Button::new("取消").min_size(egui::vec2(button_width, 0.0)));
+                        ui.add(egui::Button::new(tr("Cancel", "取消")).min_size(egui::vec2(button_width, 0.0)));
                     if cancel_response.clicked() {
                         ui.close();
                     }

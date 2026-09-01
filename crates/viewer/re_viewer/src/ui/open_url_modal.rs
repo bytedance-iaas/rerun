@@ -77,11 +77,15 @@ impl OpenUrlModal {
                     // Our parse errors aren't terribly informative when you're just typing malformed links.
                     Err(_err) => {
                         if self.url.is_empty() {
-                            ui.error_label(tr("Please paste a valid URL.", "请粘贴一个有效的 URL。"));
+                            ui.error_label(tr(
+                                "Please paste a valid URL.",
+                                "请粘贴一个有效的 URL。",
+                            ));
                         } else {
-                            ui.error_label(
-                                tr("Can't open this link - it doesn't appear to be a valid URL.", "无法打开这个链接 — 它看起来不是有效的 URL。"),
-                            );
+                            ui.error_label(tr(
+                                "Can't open this link - it doesn't appear to be a valid URL.",
+                                "无法打开这个链接 — 它看起来不是有效的 URL。",
+                            ));
                         }
                         false
                     }
@@ -92,7 +96,8 @@ impl OpenUrlModal {
 
                     let open_response = ui.add_enabled(
                         can_import,
-                        egui::Button::new(tr("Open", "打开")).min_size(egui::vec2(button_width, 0.0)),
+                        egui::Button::new(tr("Open", "打开"))
+                            .min_size(egui::vec2(button_width, 0.0)),
                     );
                     if open_response.clicked()
                         || can_import && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -101,8 +106,10 @@ impl OpenUrlModal {
                         ui.close();
                     }
 
-                    let cancel_response =
-                        ui.add(egui::Button::new(tr("Cancel", "取消")).min_size(egui::vec2(button_width, 0.0)));
+                    let cancel_response = ui.add(
+                        egui::Button::new(tr("Cancel", "取消"))
+                            .min_size(egui::vec2(button_width, 0.0)),
+                    );
                     if cancel_response.clicked() {
                         ui.close();
                     }

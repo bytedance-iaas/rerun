@@ -388,7 +388,13 @@ impl AppState {
 
                 // If the blueprint is invalid, reset it.
                 if viewport_ui.blueprint.is_invalid() {
-                    re_log::warn!("检测到不兼容的 blueprint，正在重置为默认值。");
+                    re_log::warn!(
+                        "{}",
+                        tr(
+                            "Incompatible blueprint detected. Resetting to default.",
+                            "检测到不兼容的 blueprint，正在重置为默认值。"
+                        )
+                    );
                     command_sender
                         .send_system(re_viewer_context::SystemCommand::ClearActiveBlueprint);
 
@@ -656,7 +662,10 @@ impl AppState {
                             ui.center("loading error", |ui| {
                                 ui.set_max_width(ui.available_width() * 0.75);
                                 ui.vertical_centered(|ui| {
-                                    ui.error_label(trf!("Failed to load {source_name}: {err}", "加载 {source_name} 失败：{err}"));
+                                    ui.error_label(trf!(
+                                        "Failed to load {source_name}: {err}",
+                                        "加载 {source_name} 失败：{err}"
+                                    ));
 
                                     if ui.button(tr("Go Back", "返回")).clicked() {
                                         command_sender.send_system(SystemCommand::ResetRoute);

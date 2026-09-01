@@ -1,6 +1,6 @@
-use re_i18n::tr;
 use re_byte_size::NamedMemUsageTree;
 use re_entity_db::LogSource;
+use re_i18n::tr;
 use re_renderer::WgpuResourcePoolStatistics;
 use re_ui::{HasDesignTokens as _, UiExt as _, WindowFrameConfig};
 use re_viewer_context::{ActiveStoreContext, StorageContext, store_hub::StoreHubStats};

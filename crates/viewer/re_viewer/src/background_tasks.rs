@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use ahash::HashMap;
 use poll_promise::Promise;
-use re_i18n::trf;
+use re_i18n::{tr, trf};
 
 const FILE_SAVER_PROMISE: &str = "file_saver";
 
@@ -34,7 +34,10 @@ impl BackgroundTasks {
         let name = name.into();
 
         if self.promises.contains_key(&name) {
-            anyhow::bail!(trf!("there's already a promise {name:?} running!", "已经有一个名为 {name:?} 的任务在运行了！"));
+            anyhow::bail!(trf!(
+                "there's already a promise {name:?} running!",
+                "已经有一个名为 {name:?} 的任务在运行了！"
+            ));
         }
 
         let f = move || Box::new(f()) as Box<dyn Any + Send>; // erase it
@@ -51,7 +54,10 @@ impl BackgroundTasks {
         F: FnOnce() -> anyhow::Result<PathBuf> + Send + 'static,
     {
         if self.is_file_save_in_progress() {
-            anyhow::bail!("已经有一个保存操作正在进行中");
+            anyhow::bail!(tr(
+                "Another save operation is already in progress",
+                "已经有一个保存操作正在进行中"
+            ));
         }
 
         self.spawn_threaded_promise(FILE_SAVER_PROMISE, f)

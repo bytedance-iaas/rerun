@@ -203,7 +203,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
                     .ok_or_else(|| {
                         anyhow::anyhow!(tr(
                             "Artifact URL is not in the configured bucket",
-                            "工件 URL 不在配置的桶内"
+                            "缓存桶 URL 不在配置的桶内"
                         ))
                     })?;
                 client.delete_object(key).await?;
@@ -227,7 +227,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
                     "{}",
                     trf!(
                         "Deleted {deleted} rrd artifact(s) from the store\nTarget: {}",
-                        "已从存储中删除 {deleted} 个 rrd 工件\n目标：{}",
+                        "已从存储中删除 {deleted} 个 rrd 缓存文件\n目标：{}",
                         request.target_url
                     )
                 );
@@ -241,7 +241,7 @@ pub fn spawn_deletion(config: RrdArtifactsConfig, request: ArtifactDeletionReque
                     "{}",
                     trf!(
                         "Failed to delete rrd artifact(s): {err:#}\nTarget: {}",
-                        "删除 rrd 工件失败：{err:#}\n目标：{}",
+                        "删除 rrd 缓存文件失败：{err:#}\n目标：{}",
                         request.target_url
                     )
                 );
@@ -341,7 +341,7 @@ pub fn parse_artifacts_url(configured: &str) -> Option<TosLocation> {
             "{}",
             trf!(
                 "Ignoring invalid rrd-artifacts URL (expected tos://bucket/prefix/): {trimmed}",
-                "已忽略无效的 rrd 工件存储 URL（应形如 tos://bucket/prefix/）：{trimmed}"
+                "已忽略无效的 rrd 缓存桶 URL（应形如 tos://bucket/prefix/）：{trimmed}"
             )
         );
     }

@@ -176,7 +176,14 @@ fn handle_popstate(
             );
         }
         Err(err) => {
-            re_log::warn!("{}", trf!("Failed to open URL {:?}: {err}", "打开 URL 失败：{err}\nURL：{:?}", entry.url));
+            re_log::warn!(
+                "{}",
+                trf!(
+                    "Failed to open URL {:?}: {err}",
+                    "打开 URL 失败：{err}\nURL：{:?}",
+                    entry.url
+                )
+            );
         }
     }
     re_log::debug!("popstate: add receiver {}", entry.url);

@@ -356,7 +356,7 @@ impl DownloadKind {
             Self::Mp4 => Some("mp4"),
             Self::Mcap => Some("mcap"),
             Self::Rrd => Some("rrd"),
-            Self::RrdArtifact => Some("rrd (artifacts store)"),
+            Self::RrdArtifact => Some(tr("rrd (artifacts store)", "rrd（从缓存桶）")),
             Self::Other => None,
         }
     }
@@ -2188,7 +2188,7 @@ async fn load_one_item<S: DatasetStore>(
                             "{}",
                             trf!(
                                 "{}{index}: artifact up to date — skipped",
-                                "{}{index}：rrd 工件已是最新 — 跳过转换",
+                                "{}{index}：rrd 缓存文件已是最新 — 跳过转换",
                                 remote.recording_id_prefix()
                             )
                         );
@@ -2582,7 +2582,7 @@ async fn try_load_rrd_artifact(
                         "An rrd artifact exists but its fingerprint metadata is unreadable \
                          (a proxy or gateway on this network may be stripping x-amz-meta-* \
                          headers) — re-converting from source instead\nObject: {key}",
-                        "rrd 工件已存在，但无法读取其指纹元数据\
+                        "rrd 缓存文件已存在，但无法读取其指纹元数据\
                          （当前网络的代理或网关可能剥掉了 x-amz-meta-* 响应头）\
                          — 改为从源数据重新转换\n对象：{key}"
                     )
@@ -2723,7 +2723,7 @@ fn encode_artifact(msgs: &[re_log_types::LogMsg]) -> Option<Vec<u8>> {
                 "{}",
                 trf!(
                     "Failed to encode an episode for the rrd artifacts store: {err}",
-                    "为 rrd 工件存储编码 episode 失败：{err}"
+                    "为 rrd 缓存桶编码 episode 失败：{err}"
                 )
             );
             None
@@ -2804,7 +2804,7 @@ fn spawn_artifact_write_back(
                 "{}",
                 trf!(
                     "Failed to upload a converted rrd to the artifacts store (viewing is unaffected): {err:#}",
-                    "上传转换好的 rrd 到工件存储失败（不影响查看）：{err:#}"
+                    "上传转换好的 rrd 到缓存桶失败（不影响查看）：{err:#}"
                 )
             );
         }

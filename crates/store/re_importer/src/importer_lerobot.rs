@@ -34,11 +34,22 @@ impl Importer for LeRobotDatasetImporter {
         }
 
         let version = LeRobotDatasetVersion::find_version(&filepath)
-            .ok_or_else(|| anyhow!("无法确定 LeRobot 数据集版本"))?;
+            .ok_or_else(|| {
+                anyhow!(trf!(
+                    "Could not determine LeRobot dataset version",
+                    "无法确定 LeRobot 数据集版本"
+                ))
+            })?;
 
         match version {
             LeRobotDatasetVersion::V1 => {
-                re_log::error!("不支持 LeRobot v1.x 数据集格式。");
+                re_log::error!(
+                    "{}",
+                    trf!(
+                        "LeRobot 'v1.x' dataset format is unsupported.",
+                        "不支持 LeRobot v1.x 数据集格式。"
+                    )
+                );
                 Ok(())
             }
             LeRobotDatasetVersion::V2 => Self::load_v2_dataset(settings, filepath, tx),

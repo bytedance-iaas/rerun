@@ -140,11 +140,11 @@ impl UrdfTree {
 
         let root = match roots.len() {
             0 => {
-                bail!("URDF 中找不到根 link");
+                bail!(trf!("No root link found in URDF", "URDF 中找不到根 link"));
             }
             1 => roots[0].clone(),
             _ => {
-                bail!("URDF 中存在多个根");
+                bail!(trf!("Multiple roots in URDF", "URDF 中存在多个根"));
             }
         };
 
@@ -269,7 +269,10 @@ impl UrdfTree {
             })?;
 
         let joint_values = cast(values.values().as_ref(), &DataType::Float64)
-            .context("将关节值转换为 float64 失败")?
+            .context(trf!(
+                "failed to cast joint values to float64",
+                "将关节值转换为 float64 失败"
+            ))?
             .try_downcast_array::<Float64Array>()?;
 
         let mut offsets = Vec::<i32>::with_capacity(names.len() + 1);
@@ -341,7 +344,10 @@ impl UrdfTree {
 
             offsets.push(
                 i32::try_from(parent_frames.len())
-                    .context("关节变换过多，超出 Arrow 列表偏移的范围")?,
+                    .context(trf!(
+                        "too many joint transforms for Arrow list offsets",
+                        "关节变换过多，超出 Arrow 列表偏移的范围"
+                    ))?,
             );
         }
 

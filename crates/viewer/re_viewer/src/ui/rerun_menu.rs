@@ -122,10 +122,15 @@ impl App {
             // On the web the browser controls the zoom
             let zoom_factor = ui.zoom_factor();
             re_ui::menu::align_non_button_menu_items(ui, |ui| {
-                ui.weak(trf!("Current zoom: {:.0}%", "当前缩放：{:.0}%", zoom_factor * 100.0))
-                    .on_hover_text(
-                        tr("The UI zoom level on top of the operating system's default value", "在操作系统默认值基础上的界面缩放比例"),
-                    );
+                ui.weak(trf!(
+                    "Current zoom: {:.0}%",
+                    "当前缩放：{:.0}%",
+                    zoom_factor * 100.0
+                ))
+                .on_hover_text(tr(
+                    "The UI zoom level on top of the operating system's default value",
+                    "在操作系统默认值基础上的界面缩放比例",
+                ));
             });
             UICommand::ZoomIn.menu_button_ui(ui, &self.command_sender);
             UICommand::ZoomOut.menu_button_ui(ui, &self.command_sender);
@@ -222,7 +227,10 @@ impl App {
             ui.add_enabled_ui(recording_id.is_some(), |ui| {
                 if ui
                     .add(save_recording_button)
-                    .on_hover_text(tr("Save all data to a Rerun data file (.rrd)", "把全部数据保存为 Rerun 数据文件（.rrd）"))
+                    .on_hover_text(tr(
+                        "Save all data to a Rerun data file (.rrd)",
+                        "把全部数据保存为 Rerun 数据文件（.rrd）",
+                    ))
                     .clicked()
                     && let Some(recording_id) = recording_id
                 {
@@ -242,9 +250,10 @@ impl App {
 
                 if ui
                     .add_enabled(loop_selection.is_some(), save_selection_button)
-                    .on_hover_text(
-                        tr("Save data for the current loop selection to a Rerun data file (.rrd)", "把当前循环选区内的数据保存为 Rerun 数据文件（.rrd）"),
-                    )
+                    .on_hover_text(tr(
+                        "Save data for the current loop selection to a Rerun data file (.rrd)",
+                        "把当前循环选区内的数据保存为 Rerun 数据文件（.rrd）",
+                    ))
                     .clicked()
                     && let Some(recording_id) = recording_id
                 {

@@ -347,6 +347,7 @@ impl ModalWrapper {
             );
             if ui
                 .small_icon_button(&crate::icons::CLOSE, tr("Close", "关闭"))
+                .on_hover_text(tr("Close", "关闭"))
                 .clicked()
             {
                 ui.close();

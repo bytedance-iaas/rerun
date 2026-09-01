@@ -1,8 +1,8 @@
-use re_i18n::{tr, trf};
 use egui::{Color32, NumExt as _, Theme, Ui};
 use ehttp::{Request, fetch};
 use itertools::Itertools as _;
 use poll_promise::Promise;
+use re_i18n::{tr, trf};
 
 use crate::ui::CloudState;
 use crate::ui::welcome_screen::intro_section::intro_section;
@@ -92,7 +92,14 @@ impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Deserialize(err) => {
-                write!(f, "{}", trf!("manifest is invalid, it may be outdated: {err}", "manifest 无效，可能已过期：{err}"))
+                write!(
+                    f,
+                    "{}",
+                    trf!(
+                        "manifest is invalid, it may be outdated: {err}",
+                        "manifest 无效，可能已过期：{err}"
+                    )
+                )
             }
             Self::Fetch(err) => f.write_str(err),
         }
@@ -283,7 +290,10 @@ impl ExampleSection {
                     Ok(examples) => examples,
                     Err(err) => {
                         // Examples failed to load.
-                        re_log::warn_once!("{}", trf!("Failed to load examples: {err}", "加载示例失败：{err}"));
+                        re_log::warn_once!(
+                            "{}",
+                            trf!("Failed to load examples: {err}", "加载示例失败：{err}")
+                        );
 
                         return;
                     }
@@ -519,10 +529,14 @@ impl ExampleDescLayout {
                 if ui
                     .add_enabled(
                         source_url.is_some(),
-                        re_ui::icons::GITHUB.as_button_with_label(ui.tokens(), tr("Source code", "源代码")),
+                        re_ui::icons::GITHUB
+                            .as_button_with_label(ui.tokens(), tr("Source code", "源代码")),
                     )
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .on_disabled_hover_text(tr("Source code is not available for this example", "这个示例没有提供源代码"))
+                    .on_disabled_hover_text(tr(
+                        "Source code is not available for this example",
+                        "这个示例没有提供源代码",
+                    ))
                     .clicked()
                     && let Some(source_url) = source_url
                 {

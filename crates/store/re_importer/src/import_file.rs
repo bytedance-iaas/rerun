@@ -193,7 +193,7 @@ pub(crate) fn import(
                             if err.is_incompatible() {
                                 return;
                             }
-                            re_log::error!(?path, importer = importer.name(), %err, "导入数据失败");
+                            re_log::error!(?path, importer = importer.name(), %err, "{}", trf!("Failed to import data", "导入数据失败"));
                         }
                     } else if let Err(err) =
                         importer.import_from_path(&settings, path.clone(), tx_importer)
@@ -201,7 +201,7 @@ pub(crate) fn import(
                         if err.is_incompatible() {
                             return;
                         }
-                        re_log::error!(?path, importer = importer.name(), %err, "从文件导入数据失败");
+                        re_log::error!(?path, importer = importer.name(), %err, "{}", trf!("Failed to import data from file", "从文件导入数据失败"));
                     }
 
                     re_log::debug!(
@@ -262,7 +262,7 @@ pub(crate) fn import(
                     if err.is_incompatible() {
                         return false;
                     }
-                    re_log::error!(?path, importer = importer.name(), %err, "从文件导入数据失败");
+                    re_log::error!(?path, importer = importer.name(), %err, "{}", trf!("Failed to import data from file", "从文件导入数据失败"));
                 }
 
                 true
@@ -334,7 +334,7 @@ pub(crate) fn send(
                         msg
                     }
                     Err(err) => {
-                        re_log::error!(%err, "序列化组件数据失败");
+                        re_log::error!(%err, "{}", trf!("Couldn't serialize component data", "序列化组件数据失败"));
                         continue;
                     }
                 };

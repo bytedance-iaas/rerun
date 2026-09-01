@@ -69,7 +69,10 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
             ));
 
             if ui
-                .small_icon_button(&icons::CLOSE, tr("Remove from this list", "从这个列表中移除"))
+                .small_icon_button(
+                    &icons::CLOSE,
+                    tr("Remove from this list", "从这个列表中移除"),
+                )
                 .clicked()
             {
                 action = Some(RecentAction::Remove(index));
