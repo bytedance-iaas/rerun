@@ -904,12 +904,18 @@ pub fn entity_db_button_ui(
     // copyable via the context menu ("Copy rrd artifact address").
     if episode_queued {
         response = response
-            .on_hover_text("尚未下载 — 点击后移到下载队列最前。");
+            .on_hover_text(tr(
+                "Not downloaded yet — click to move it to the front of the download queue.",
+                "尚未下载 — 点击后移到下载队列最前。",
+            ));
     }
 
     if let Some(artifact_url) = re_data_source::lerobot_remote::episode_rrd_artifact_url(&store_id)
     {
-        response = response.on_hover_text(format!("rrd artifact：{artifact_url}"));
+        response = response.on_hover_text(trf!(
+            "rrd artifact: {artifact_url}",
+            "rrd 缓存文件：{artifact_url}"
+        ));
     }
 
     if let Some(progress) = &download_progress {
