@@ -110,6 +110,23 @@ pub trait DatasetStore: Send + Sync {
         rel_path: &str,
     ) -> impl std::future::Future<Output = anyhow::Result<u64>> + Send;
 
+    /// Listing metadata of a single file — feeds the rrd-artifacts fingerprint.
+    ///
+    /// The default resolves the size only, weakening the fingerprint to path+size;
+    /// backends with cheap content ids (`ETag`/oid) should override.
+    fn file_stat(
+        &self,
+        rel_path: &str,
+    ) -> impl std::future::Future<Output = anyhow::Result<ListedFile>> + Send {
+        async move {
+            Ok(ListedFile {
+                rel_path: rel_path.to_owned(),
+                size: self.file_size(rel_path).await?,
+                content_id: None,
+            })
+        }
+    }
+
     /// One ranged GET attempt of `[start, end)`.
     ///
     /// May legitimately return fewer bytes than requested (e.g. proxies silently truncating large
@@ -138,6 +155,18 @@ pub trait DatasetStore {
 
     /// The size of a single file.
     async fn file_size(&self, rel_path: &str) -> anyhow::Result<u64>;
+
+    /// Listing metadata of a single file — feeds the rrd-artifacts fingerprint.
+    ///
+    /// The default resolves the size only, weakening the fingerprint to path+size;
+    /// backends with cheap content ids (`ETag`/oid) should override.
+    async fn file_stat(&self, rel_path: &str) -> anyhow::Result<ListedFile> {
+        Ok(ListedFile {
+            rel_path: rel_path.to_owned(),
+            size: self.file_size(rel_path).await?,
+            content_id: None,
+        })
+    }
 
     /// One ranged GET attempt of `[start, end)`.
     async fn get_range_once(&self, rel_path: &str, range: Range<u64>) -> anyhow::Result<Vec<u8>>;
@@ -1028,19 +1057,87 @@ impl Drop for StreamGuard {
 // ----------------------------------------------------------------------------
 // Single-file streaming.
 
+/// Which loose files get rrd artifacts: only formats whose import is a real conversion.
+/// (`.rrd` already is its own artifact; images/meshes are cheap to load as-is.)
+fn file_conversion_is_cacheable(rel_path: &str) -> bool {
+    std::path::Path::new(rel_path)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("mcap"))
+}
+
 /// Fetch a single remote file (`.rrd`, `.mcap`, image, mesh, …) and load it via all importers.
+///
+/// Conversion-heavy formats (MCAP) additionally go through the rrd artifacts store, like
+/// `LeRobot` episodes: a fresh cached rrd is served instead of re-converting, and a fresh
+/// conversion is uploaded in the background.
 ///
 /// `url` is the user-facing address of the file (used as the source name).
 pub fn stream_remote_file<S: DatasetStore + 'static>(
     store: S,
     rel_path: String,
     url: String,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 ) -> LogReceiver {
     let (tx, rx) = re_log_channel::log_channel(LogSource::HttpStream { url: url.clone() });
 
     crate::data_source::spawn_future(async move {
         let pause = PauseState::default();
         let filename = rel_path.rsplit('/').next().unwrap_or("downloaded_file");
+
+        // The artifact key + expected fingerprint, when this file is artifact material.
+        // The fingerprint covers just this one source file (size + ETag/oid).
+        let mut artifact_ctx = None;
+        if let Some(artifacts) = rrd_artifacts
+            && file_conversion_is_cacheable(&rel_path)
+        {
+            match store.file_stat(&rel_path).await {
+                Ok(stat) => {
+                    // The full URL as the fingerprint path (not `rel_path`, whose meaning
+                    // depends on the open mode) — the loose-file branch of the dataset
+                    // pipeline computes the identical fingerprint for the same file.
+                    let mut parts = [crate::rrd_artifacts::FingerprintPart {
+                        rel_path: &url,
+                        size: stat.size,
+                        content_id: stat.content_id.as_deref(),
+                    }];
+                    let fingerprint = crate::rrd_artifacts::fingerprint(&mut parts);
+                    let key =
+                        crate::rrd_artifacts::file_object_key(&artifacts.location.prefix, &url);
+                    artifact_ctx = Some((artifacts, key, fingerprint));
+                }
+                Err(err) => {
+                    // No metadata, no fingerprint: skip the artifacts store, just convert.
+                    re_log::debug!(
+                        "Failed to stat the file for the rrd artifacts store: {err:#}\nFile: {rel_path}"
+                    );
+                }
+            }
+        }
+
+        // Serve the ready-made rrd when the store has a fresh one.
+        if let Some((artifacts, key, fingerprint)) = &artifact_ctx {
+            let state = Arc::new(StreamState::default());
+            match try_load_rrd_artifact(
+                artifacts,
+                key,
+                fingerprint,
+                &state,
+                0,
+                ARTIFACT_SERIAL_CHUNKS,
+                &tx,
+            )
+            .await
+            {
+                Ok(Some(_sent_ok)) => {
+                    tx.quit(None).ok();
+                    return;
+                }
+                Ok(None) => {} // Miss or stale — download and convert below.
+                Err(err) => re_log::debug!(
+                    "The rrd artifacts store could not be reached — converting from source: {err:#}\nObject: {key}"
+                ),
+            }
+        }
 
         let bytes = match fetch_full(&store, &pause, &rel_path).await {
             Ok(bytes) => bytes,
@@ -1065,12 +1162,29 @@ pub fn stream_remote_file<S: DatasetStore + 'static>(
             ..re_importer::ImporterSettings::recommended(re_log_types::RecordingId::random())
         };
 
-        if let Err(err) = re_importer::import_from_file_contents(
+        // Tee the imported messages off for write-back: they stream to the viewer through
+        // `tx` untouched, while the copies get encoded into the artifact rrd.
+        let mut tee_rx = None;
+        let tee_tx = artifact_ctx
+            .as_ref()
+            .filter(|(artifacts, _, _)| artifacts.write_back)
+            .map(|_| {
+                // Unbounded by design: on wasm the import fills the tee completely before
+                // the drain runs (same thread), so any bounded channel would deadlock. The
+                // drain encodes incrementally, so the queue stays short on native.
+                #[expect(clippy::disallowed_methods)]
+                let (tee_tx, rx) = std::sync::mpsc::channel();
+                tee_rx = Some(rx);
+                tee_tx
+            });
+
+        if let Err(err) = re_importer::import_from_file_contents_with_tee(
             &settings,
             re_log_types::FileSource::Uri,
             &std::path::PathBuf::from(filename),
             std::borrow::Cow::Owned(bytes),
             &tx,
+            tee_tx,
         ) {
             re_log::error!(
                 ?url,
@@ -1078,11 +1192,84 @@ pub fn stream_remote_file<S: DatasetStore + 'static>(
                 trf!("Failed to load file: {err}", "加载文件失败：{err}")
             );
             tx.quit(Some(Box::new(err))).ok();
+            return;
         }
         // On success the importers call `tx.quit(None)` themselves once done.
+
+        // Encode the teed messages as they stream in (only the encoded bytes are held,
+        // not the messages), then upload in the background. Draining ends when the import
+        // finished and dropped the tee sender; on native that wait leaves the async pool.
+        if let (Some(tee_rx), Some((artifacts, key, fingerprint))) = (tee_rx, artifact_ctx)
+            && let Some(encoded) = encode_teed_messages_async(tee_rx).await
+        {
+            let state = Arc::new(StreamState::default());
+            crate::data_source::spawn_future(async move {
+                let size = encoded.len();
+                match upload_artifact(&artifacts, &key, &fingerprint, &url, encoded, &state, 0)
+                    .await
+                {
+                    Ok(()) => re_log::info!(
+                        "{}",
+                        trf!(
+                            "Cached the converted rrd in the artifacts store ({})\nObject: {key}",
+                            "已把转换好的 rrd 存入缓存桶（{}）\n对象：{key}",
+                            re_format::format_bytes(size as _)
+                        )
+                    ),
+                    Err(err) => re_log::warn_once!(
+                        "{}",
+                        trf!(
+                            "Failed to upload the converted rrd to the artifacts store (viewing is unaffected): {err:#}",
+                            "上传转换好的 rrd 到缓存桶失败（不影响查看）：{err:#}"
+                        )
+                    ),
+                }
+            });
+        }
     });
 
     rx
+}
+
+/// [`encode_teed_messages`], off the async pool: the drain blocks until the import
+/// finished, so on native it runs on a blocking thread. On wasm the import already ran
+/// synchronously — the channel is full and disconnected, nothing blocks.
+async fn encode_teed_messages_async(
+    tee_rx: std::sync::mpsc::Receiver<re_log_types::LogMsg>,
+) -> Option<Vec<u8>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        tokio::task::spawn_blocking(move || encode_teed_messages(tee_rx))
+            .await
+            .ok()
+            .flatten()
+    }
+    #[cfg(target_arch = "wasm32")]
+    encode_teed_messages(tee_rx)
+}
+
+/// Drain the import tee and encode everything into rrd bytes for the artifacts store.
+///
+/// `None` when nothing was produced (no importer matched) or encoding failed — either way
+/// there is nothing worth caching.
+fn encode_teed_messages(
+    tee_rx: std::sync::mpsc::Receiver<re_log_types::LogMsg>,
+) -> Option<Vec<u8>> {
+    let mut n_msgs = 0usize;
+    match re_log_encoding::Encoder::encode(tee_rx.into_iter().inspect(|_| n_msgs += 1).map(Ok)) {
+        Ok(encoded) if n_msgs > 0 => Some(encoded),
+        Ok(_) => None,
+        Err(err) => {
+            re_log::warn_once!(
+                "{}",
+                trf!(
+                    "Failed to encode the converted rrd for the artifacts store: {err}",
+                    "为缓存桶编码转换好的 rrd 失败：{err}"
+                )
+            );
+            None
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1177,7 +1364,7 @@ async fn run_stream<S: DatasetStore>(
             re_log::debug!(
                 "No meta/info.json (HTTP 404); checking for loose data files…\nDataset: {dataset_url}"
             );
-            return run_stream_files(store, &dataset_url, tx).await;
+            return run_stream_files(store, &dataset_url, tx, rrd_artifacts).await;
         }
     };
 
@@ -1406,6 +1593,7 @@ async fn run_stream_files<S: DatasetStore>(
     store: &S,
     dataset_url: &str,
     tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 ) -> anyhow::Result<()> {
     let listing_err = |err: anyhow::Error| {
         anyhow::anyhow!(trf!(
@@ -1597,7 +1785,8 @@ async fn run_stream_files<S: DatasetStore>(
         names,
         dataset_url,
         tx,
-        None, // The rrd artifacts store only covers LeRobot episodes, not loose files.
+        // Conversion-heavy loose files (MCAP) go through the artifacts store like episodes.
+        rrd_artifacts,
         StreamMode::Viewer,
     )
     .await
@@ -1651,17 +1840,29 @@ async fn stream_items<S: DatasetStore>(
         );
         let artifacts_dir =
             crate::rrd_artifacts::dataset_artifacts_dir(&artifacts.location.prefix, dataset_url);
+        // Loose-file artifacts are keyed by their mirrored path (`<rel_path>.rrd`), not by
+        // index — map those back through the listing.
+        let path_to_index: ahash::HashMap<String, usize> = match &remote {
+            RemoteDataset::Files { files } => files
+                .iter()
+                .enumerate()
+                .map(|(index, file)| (format!("{}.rrd", file.rel_path), index))
+                .collect(),
+            _ => Default::default(),
+        };
         match client.list_objects(&artifacts_dir).await {
             Ok(objects) => {
                 let mut urls = guard.state.rrd_artifact_urls.lock();
                 for object in objects {
-                    if let Some(index) = object
-                        .key
-                        .strip_prefix(&artifacts_dir)
-                        .and_then(|rest| rest.strip_prefix(id_prefix))
+                    let Some(rest) = object.key.strip_prefix(&artifacts_dir) else {
+                        continue;
+                    };
+                    let index = rest
+                        .strip_prefix(id_prefix)
                         .and_then(|rest| rest.strip_suffix(".rrd"))
                         .and_then(|n| n.parse::<usize>().ok())
-                    {
+                        .or_else(|| path_to_index.get(rest).copied());
+                    if let Some(index) = index {
                         urls.insert(
                             index,
                             format!("tos://{}/{}", artifacts.location.bucket, object.key),
@@ -2078,18 +2279,16 @@ async fn prefetch_artifacts(
 
     use futures_util::stream::StreamExt as _;
     let state: &StreamState = &guard.state;
-    let id_prefix = remote.recording_id_prefix();
     let mut tasks = futures_util::stream::iter(candidates.into_iter().map(|index| async move {
         let result = async {
-            let Some(fingerprint) = episode_artifact_fingerprint(remote, EpisodeIndex(index))
-            else {
-                return Ok(None); // No fingerprint (e.g. loose files): not artifact material.
-            };
-            let key = crate::rrd_artifacts::object_key(
+            let Some((key, fingerprint)) = item_artifact_key_and_fingerprint(
+                remote,
+                index,
                 &artifacts.location.prefix,
                 dataset_url,
-                &format!("{id_prefix}{index}"),
-            );
+            ) else {
+                return Ok(None); // No fingerprint (e.g. uncacheable loose files).
+            };
             try_load_rrd_artifact(
                 artifacts,
                 &key,
@@ -2149,15 +2348,15 @@ async fn load_one_item<S: DatasetStore>(
     // skipping the source downloads and the conversion entirely.
     let episode = EpisodeIndex(index);
     let artifact_ctx = rrd_artifacts.and_then(|artifacts| {
-        let fingerprint = episode_artifact_fingerprint(remote, episode)?;
         // Keys mirror the source URL, not the (normalized) application id.
         let dataset_url =
             dataset_url_of(application_id.as_str()).unwrap_or_else(|| application_id.to_string());
-        let key = crate::rrd_artifacts::object_key(
+        let (key, fingerprint) = item_artifact_key_and_fingerprint(
+            remote,
+            index,
             &artifacts.location.prefix,
             &dataset_url,
-            &format!("{}{index}", remote.recording_id_prefix()),
-        );
+        )?;
         Some((artifacts, key, fingerprint))
     });
 
@@ -2361,15 +2560,72 @@ async fn load_one_item<S: DatasetStore>(
                 ..re_importer::ImporterSettings::recommended(format!("file_{index}"))
             };
 
+            // Tee the imported messages off for artifact write-back (same scheme as
+            // `stream_remote_file`); the store content itself streams through `tx`.
+            let mut tee_rx = None;
+            let tee_tx = artifact_ctx
+                .as_ref()
+                .filter(|(artifacts, _, _)| artifacts.write_back)
+                .map(|_| {
+                    // Unbounded by design — see `stream_remote_file`.
+                    #[expect(clippy::disallowed_methods)]
+                    let (tee_tx, rx) = std::sync::mpsc::channel();
+                    tee_rx = Some(rx);
+                    tee_tx
+                });
+
             pause.set_item_converting();
-            re_importer::import_from_file_contents(
+            let import_result = re_importer::import_from_file_contents_with_tee(
                 &settings,
                 re_log_types::FileSource::Uri,
                 &std::path::PathBuf::from(filename),
                 std::borrow::Cow::Owned(bytes),
                 tx,
-            )
-            .map(|()| Vec::new())
+                tee_tx,
+            );
+
+            if import_result.is_ok()
+                && let (Some(tee_rx), Some((artifacts, key, fingerprint))) = (tee_rx, &artifact_ctx)
+                && let Some(encoded) = encode_teed_messages_async(tee_rx).await
+            {
+                let artifacts = (*artifacts).clone();
+                let key = key.clone();
+                let fingerprint = fingerprint.clone();
+                let application_id = application_id.to_string();
+                let state = Arc::clone(state);
+                crate::data_source::spawn_future(async move {
+                    let size = encoded.len();
+                    match upload_artifact(
+                        &artifacts,
+                        &key,
+                        &fingerprint,
+                        &application_id,
+                        encoded,
+                        &state,
+                        index,
+                    )
+                    .await
+                    {
+                        Ok(()) => re_log::info!(
+                            "{}",
+                            trf!(
+                                "Cached the converted rrd in the artifacts store ({})\nObject: {key}",
+                                "已把转换好的 rrd 存入缓存桶（{}）\n对象：{key}",
+                                re_format::format_bytes(size as _)
+                            )
+                        ),
+                        Err(err) => re_log::warn_once!(
+                            "{}",
+                            trf!(
+                                "Failed to upload the converted rrd to the artifacts store (viewing is unaffected): {err:#}",
+                                "上传转换好的 rrd 到缓存桶失败（不影响查看）：{err:#}"
+                            )
+                        ),
+                    }
+                });
+            }
+
+            import_result.map(|()| Vec::new())
         }
     };
 
@@ -2510,7 +2766,50 @@ fn episode_artifact_fingerprint(remote: &RemoteDataset, episode: EpisodeIndex) -
             ))
         }
 
-        RemoteDataset::Files { .. } => None, // Loose files get no artifacts.
+        RemoteDataset::Files { .. } => None, // Loose files fingerprint per file, see below.
+    }
+}
+
+/// The artifact key + expected fingerprint of one item, from listing metadata alone.
+///
+/// Episodes are keyed by index (`episode_3.rrd`); loose files mirror their path — the same
+/// key and fingerprint [`stream_remote_file`] uses, so an artifact converted through either
+/// open path serves the other.
+fn item_artifact_key_and_fingerprint(
+    remote: &RemoteDataset,
+    index: usize,
+    artifacts_prefix: &str,
+    dataset_url: &str,
+) -> Option<(String, String)> {
+    match remote {
+        RemoteDataset::Files { files } => {
+            let file = files.get(index)?;
+            if !file_conversion_is_cacheable(&file.rel_path) {
+                return None;
+            }
+            let file_url = format!("{}/{}", dataset_url.trim_end_matches('/'), file.rel_path);
+            let mut parts = [crate::rrd_artifacts::FingerprintPart {
+                rel_path: &file_url,
+                size: file.size,
+                content_id: file.content_id.as_deref(),
+            }];
+            Some((
+                crate::rrd_artifacts::file_object_key(artifacts_prefix, &file_url),
+                crate::rrd_artifacts::fingerprint(&mut parts),
+            ))
+        }
+
+        RemoteDataset::V2 { .. } | RemoteDataset::V3 { .. } => {
+            let fingerprint = episode_artifact_fingerprint(remote, EpisodeIndex(index))?;
+            Some((
+                crate::rrd_artifacts::object_key(
+                    artifacts_prefix,
+                    dataset_url,
+                    &format!("{}{index}", remote.recording_id_prefix()),
+                ),
+                fingerprint,
+            ))
+        }
     }
 }
 
@@ -2597,6 +2896,14 @@ async fn try_load_rrd_artifact(
 
     if head.size == 0 {
         return Ok(None); // A truncated upload — treat as a miss and re-convert.
+    }
+
+    // Browser only: an artifact too big to buffer must not be attempted — treat as a miss,
+    // so the source path runs instead (and reports its own clear too-large error if the
+    // source is just as big).
+    if let Err(err) = check_browser_file_size(head.size, tr("The cached rrd", "缓存的 rrd")) {
+        re_log::debug!("{err:#}\nObject: {key}");
+        return Ok(None);
     }
 
     // Per-item progress entry for the UI; removed again on every exit path.
@@ -3170,6 +3477,8 @@ mod fetch_range_tests {
 
     #[tokio::test]
     async fn persistent_empty_responses_fail() {
+        // The error text is bilingual; pin the language so the assertion is deterministic.
+        re_i18n::set_language(re_i18n::Language::English);
         let store = ScriptedStore::new(file_100(), &[Reply::Bytes(0); 4]);
         let err = fetch_range(&store, &PauseState::default(), "f", 0..100)
             .await
@@ -3227,6 +3536,8 @@ mod fetch_range_tests {
 
     #[tokio::test]
     async fn skip_aborts_the_download() {
+        // The error text is bilingual; pin the language so the assertion is deterministic.
+        re_i18n::set_language(re_i18n::Language::English);
         let pause = PauseState::default();
         pause.request_skip();
         let store = ScriptedStore::new(file_100(), &[]);

@@ -325,6 +325,71 @@ impl DatasetStore for HfStore {
         ))
     }
 
+    async fn file_stat(&self, rel_path: &str) -> anyhow::Result<ListedFile> {
+        // The parent directory's tree listing carries the oid (content id) the recursive
+        // dataset listing exposes — so the fingerprint of a file opened directly matches
+        // the one computed in loose-files browsing mode.
+        let parent = rel_path
+            .rsplit_once('/')
+            .map(|(dir, _)| dir)
+            .unwrap_or_default();
+        let mut url = format!(
+            "{}/api/datasets/{}/tree/main{}",
+            hf_endpoint(),
+            self.source.repo,
+            if parent.is_empty() {
+                String::new()
+            } else {
+                // Percent-encode the path: file names with spaces etc. are invalid in a raw URI.
+                format!("/{}", crate::tos::client::uri_encode(parent, false))
+            }
+        );
+
+        loop {
+            let mut request = ehttp::Request::get(&url);
+            if let Some((name, value)) = self.auth_header() {
+                request.headers.insert(&name, &value);
+            }
+            let response = hf_fetch(request).await?;
+            if response.status != 200 {
+                return Err(http_error(
+                    &response,
+                    tr(
+                        "Listing the Hugging Face directory",
+                        "列出 Hugging Face 目录",
+                    ),
+                    &trf!("File: {rel_path}", "文件：{rel_path}"),
+                ));
+            }
+
+            let entries: Vec<TreeEntry> =
+                serde_json::from_slice(&response.bytes).map_err(|err| {
+                    anyhow::anyhow!(trf!(
+                        "Unexpected tree response: {err}",
+                        "意外的文件树响应：{err}"
+                    ))
+                })?;
+            if let Some(entry) = entries
+                .into_iter()
+                .find(|entry| entry.entry_type == "file" && entry.path == rel_path)
+            {
+                return Ok(ListedFile {
+                    rel_path: rel_path.to_owned(),
+                    size: entry.size,
+                    content_id: entry.oid,
+                });
+            }
+
+            match response.headers.get("link").and_then(parse_next_link) {
+                Some(next_url) => url = next_url,
+                None => anyhow::bail!(trf!(
+                    "File not found in the repo tree\nFile: {rel_path}",
+                    "仓库目录树里找不到该文件\n文件：{rel_path}"
+                )),
+            }
+        }
+    }
+
     async fn get_range_once(&self, rel_path: &str, range: Range<u64>) -> anyhow::Result<Vec<u8>> {
         // Percent-encode the path: file names with spaces etc. are invalid in a raw URI.
         let url = format!(
@@ -380,10 +445,17 @@ fn parse_next_link(link_header: &str) -> Option<String> {
 /// Open a `LeRobot` dataset (or a single data file) on Hugging Face as a streaming log source.
 pub fn stream_lerobot_dataset(source: HfDatasetSource) -> LogReceiver {
     // A file within the repo is downloaded and run through the regular importers instead of the
-    // LeRobot dataset pipeline. The rrd artifacts store only covers LeRobot episodes, not loose files.
+    // LeRobot dataset pipeline. Conversion-heavy formats (MCAP) still go through the rrd
+    // artifacts store.
     if let Some(file_path) = source.file_path.clone() {
         let url = format!("hf://{}/{file_path}", source.repo);
-        return crate::lerobot_remote::stream_remote_file(HfStore { source }, file_path, url);
+        let rrd_artifacts = source.rrd_artifacts.clone();
+        return crate::lerobot_remote::stream_remote_file(
+            HfStore { source },
+            file_path,
+            url,
+            rrd_artifacts,
+        );
     }
 
     let rrd_artifacts = source.rrd_artifacts.clone();

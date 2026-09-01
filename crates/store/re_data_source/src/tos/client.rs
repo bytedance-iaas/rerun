@@ -1,7 +1,7 @@
 //! Minimal S3-compatible client (AWS Signature V4) on top of `ehttp`, so it runs both natively
 //! and in the browser. Tested against Volcengine TOS's S3-compatible endpoint.
 
-use re_i18n::trf;
+use re_i18n::{tr, trf};
 
 use hmac::{Hmac, Mac as _};
 use sha2::{Digest as _, Sha256};
@@ -18,6 +18,29 @@ pub const USER_METADATA_PREFIX: &str = "x-amz-meta-";
 /// Hard deadline for small metadata requests (HEAD/DELETE): fail fast so the callers'
 /// retry logic gets to act — a stalled connection must not stall a whole pipeline.
 const SMALL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Objects above this size are PUT as a multipart upload (see [`TosClient::put_object`]).
+const MULTIPART_THRESHOLD: usize = 256 * 1024 * 1024;
+
+/// 128 MiB parts keep even TiB-scale objects far from the 10 000-part cap, while a lost
+/// part only costs that slice a retry.
+const MULTIPART_PART_SIZE: usize = 128 * 1024 * 1024;
+
+/// Parts uploaded concurrently — same connection-budget reasoning as artifact downloads.
+const MULTIPART_PART_PARALLEL: usize = 3;
+
+/// User metadata as request headers: `x-amz-meta-<key>: value`.
+fn metadata_headers(metadata: &[(String, String)]) -> Vec<(String, String)> {
+    metadata
+        .iter()
+        .map(|(name, value)| {
+            (
+                format!("{USER_METADATA_PREFIX}{}", name.to_ascii_lowercase()),
+                value.clone(),
+            )
+        })
+        .collect()
+}
 
 /// Hard deadline for one listing page (up to 1000 keys of XML).
 const LIST_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(1);
@@ -443,31 +466,27 @@ impl TosClient {
         Ok(Some(ObjectHead { size, metadata }))
     }
 
-    /// PUT an object in a single request, with user metadata (`x-amz-meta-<key>: value`).
+    /// PUT an object, with user metadata (`x-amz-meta-<key>: value`).
     ///
-    /// Good for episode-sized files; no multipart support.
+    /// Small objects go up as one request; anything above [`MULTIPART_THRESHOLD`] switches to
+    /// multipart — single PUTs cap at 5 GiB on S3/TOS, and one giant request body leaves a
+    /// flaky connection nothing to retry but the whole object.
     pub async fn put_object(
         &self,
         key: &str,
         bytes: Vec<u8>,
         metadata: &[(String, String)],
     ) -> anyhow::Result<()> {
-        let extra_headers = metadata
-            .iter()
-            .map(|(name, value)| {
-                (
-                    format!("{USER_METADATA_PREFIX}{}", name.to_ascii_lowercase()),
-                    value.clone(),
-                )
-            })
-            .collect();
+        if bytes.len() > MULTIPART_THRESHOLD {
+            return self.put_object_multipart(key, bytes, metadata).await;
+        }
 
         let response = self
             .signed_request(
                 "PUT",
                 &format!("/{key}"),
                 &[],
-                extra_headers,
+                metadata_headers(metadata),
                 bytes,
                 crate::http_client::DEFAULT_HARD_TIMEOUT,
             )
@@ -477,6 +496,191 @@ impl TosClient {
             anyhow::bail!(trf!(
                 "PUT failed with HTTP {}: {}\nObject: {key}",
                 "PUT 失败，HTTP {}：{}\n对象：{key}",
+                response.status,
+                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Multipart PUT: initiate → upload parts (concurrently, each retried) → complete.
+    ///
+    /// A failure after initiation aborts the upload — uncompleted parts are invisible
+    /// but billed, so they must not be left dangling.
+    async fn put_object_multipart(
+        &self,
+        key: &str,
+        bytes: Vec<u8>,
+        metadata: &[(String, String)],
+    ) -> anyhow::Result<()> {
+        let response = self
+            .signed_request(
+                "POST",
+                &format!("/{key}"),
+                &[("uploads".to_owned(), String::new())],
+                metadata_headers(metadata),
+                Vec::new(),
+                SMALL_REQUEST_TIMEOUT,
+            )
+            .await?;
+        if response.status != 200 {
+            anyhow::bail!(trf!(
+                "Initiating a multipart upload failed with HTTP {}: {}\nObject: {key}",
+                "发起分片上传失败，HTTP {}：{}\n对象：{key}",
+                response.status,
+                String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
+            ));
+        }
+        let body = String::from_utf8_lossy(&response.bytes);
+        let upload_id = xml_tag_content(&body, "UploadId").ok_or_else(|| {
+            anyhow::anyhow!(tr(
+                "No UploadId in the multipart-initiate response",
+                "分片上传的发起响应里没有 UploadId"
+            ))
+        })?;
+
+        let result = self.upload_parts_and_complete(key, &upload_id, bytes).await;
+        if result.is_err()
+            && let Err(abort_err) = self.abort_multipart(key, &upload_id).await
+        {
+            re_log::warn_once!(
+                "{}",
+                trf!(
+                    "Failed to abort a broken multipart upload (its invisible parts keep \
+                     using storage until removed): {abort_err:#}\nObject: {key}",
+                    "中止损坏的分片上传失败（其不可见的分片会一直占用存储，直到被清理）：\
+                     {abort_err:#}\n对象：{key}"
+                )
+            );
+        }
+        result
+    }
+
+    async fn upload_parts_and_complete(
+        &self,
+        key: &str,
+        upload_id: &str,
+        bytes: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        use futures_util::stream::StreamExt as _;
+
+        let bytes = std::sync::Arc::new(bytes);
+        let n_parts = bytes.len().div_ceil(MULTIPART_PART_SIZE);
+        let mut uploads = futures_util::stream::iter((0..n_parts).map(|i| {
+            let bytes = std::sync::Arc::clone(&bytes);
+            async move {
+                let part =
+                    &bytes[i * MULTIPART_PART_SIZE..bytes.len().min((i + 1) * MULTIPART_PART_SIZE)];
+                let part_number = i + 1; // 1-based
+                let query = [
+                    ("partNumber".to_owned(), part_number.to_string()),
+                    ("uploadId".to_owned(), upload_id.to_owned()),
+                ];
+
+                // Transient transport failures only cost this one part a retry.
+                const MAX_ATTEMPTS: u32 = 3;
+                let mut last_err = None;
+                for _attempt in 1..=MAX_ATTEMPTS {
+                    match self
+                        .signed_request(
+                            "PUT",
+                            &format!("/{key}"),
+                            &query,
+                            Vec::new(),
+                            part.to_vec(),
+                            crate::http_client::DEFAULT_HARD_TIMEOUT,
+                        )
+                        .await
+                    {
+                        Ok(response) if response.status == 200 => {
+                            let etag = response
+                                .headers
+                                .get("etag")
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(tr(
+                                        "No ETag on the part-upload response",
+                                        "分片上传响应里没有 ETag"
+                                    ))
+                                })?
+                                .trim_matches('"')
+                                .to_owned();
+                            return anyhow::Ok((part_number, etag));
+                        }
+                        Ok(response) => {
+                            last_err = Some(anyhow::anyhow!(trf!(
+                                "Part {part_number} failed with HTTP {}: {}",
+                                "第 {part_number} 片上传失败，HTTP {}：{}",
+                                response.status,
+                                String::from_utf8_lossy(
+                                    &response.bytes[..response.bytes.len().min(300)]
+                                ),
+                            )));
+                        }
+                        Err(err) => last_err = Some(err),
+                    }
+                }
+                #[expect(clippy::unwrap_used)] // every failing branch sets it
+                Err(last_err
+                    .unwrap()
+                    .context(trf!("Object: {key}", "对象：{key}")))
+            }
+        }))
+        .buffer_unordered(MULTIPART_PART_PARALLEL);
+
+        let mut etags = vec![String::new(); n_parts];
+        while let Some(part) = uploads.next().await {
+            let (part_number, etag) = part?;
+            etags[part_number - 1] = etag;
+        }
+        drop(uploads);
+
+        let manifest: String = std::iter::once("<CompleteMultipartUpload>".to_owned())
+            .chain(etags.iter().enumerate().map(|(i, etag)| {
+                format!(
+                    "<Part><PartNumber>{}</PartNumber><ETag>\"{etag}\"</ETag></Part>",
+                    i + 1
+                )
+            }))
+            .chain(std::iter::once("</CompleteMultipartUpload>".to_owned()))
+            .collect();
+
+        let response = self
+            .signed_request(
+                "POST",
+                &format!("/{key}"),
+                &[("uploadId".to_owned(), upload_id.to_owned())],
+                Vec::new(),
+                manifest.into_bytes(),
+                crate::http_client::DEFAULT_HARD_TIMEOUT,
+            )
+            .await?;
+        let body = String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]);
+        // S3 semantics: completion may answer 200 OK and still carry an error document.
+        if response.status != 200 || body.contains("<Error") {
+            anyhow::bail!(trf!(
+                "Completing a multipart upload failed with HTTP {}: {body}\nObject: {key}",
+                "完成分片上传失败，HTTP {}：{body}\n对象：{key}",
+                response.status,
+            ));
+        }
+        Ok(())
+    }
+
+    async fn abort_multipart(&self, key: &str, upload_id: &str) -> anyhow::Result<()> {
+        let response = self
+            .signed_request(
+                "DELETE",
+                &format!("/{key}"),
+                &[("uploadId".to_owned(), upload_id.to_owned())],
+                Vec::new(),
+                Vec::new(),
+                SMALL_REQUEST_TIMEOUT,
+            )
+            .await?;
+        if response.status != 204 && response.status != 200 {
+            anyhow::bail!(trf!(
+                "Abort failed with HTTP {}: {}",
+                "中止分片上传失败，HTTP {}：{}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
             ));
@@ -518,7 +722,7 @@ impl TosClient {
     /// Fire a SigV4-signed request with an overall hard deadline.
     async fn signed_request(
         &self,
-        method: &str,               // "GET", "HEAD", "PUT" or "DELETE"
+        method: &str,               // "GET", "HEAD", "PUT", "POST" or "DELETE"
         path: &str,                 // must start with `/`
         query: &[(String, String)], // must be sorted by key
         extra_headers: Vec<(String, String)>,
@@ -609,6 +813,7 @@ impl TosClient {
                 request.method = ehttp::Method::PUT;
                 request
             }
+            "POST" => ehttp::Request::post(&url, body),
             "DELETE" => {
                 let mut request = ehttp::Request::get(&url);
                 request.method = ehttp::Method::DELETE;
