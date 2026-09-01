@@ -749,10 +749,10 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
     let diagnose_url = re_viewer_context::daft_link::diagnose_url(link_url, region.as_deref());
 
     if !local_app_id.loaded_recordings.is_empty() || streaming {
-        if paused || diagnose_url.is_some() {
-            // Keep the resume button visible without hovering; same for Diagnose —
-            // it is the hand-off into the curation workflow, users must be able to
-            // see it without discovering the hover behavior first.
+        if paused {
+            // Keep the resume button visible without hovering, so a paused dataset
+            // shows how to get going again. Everything else (Diagnose, close) is
+            // hover-only, like on the HF dataset rows.
             list_item_content = list_item_content.with_always_show_buttons(true);
         }
         list_item_content = list_item_content.with_buttons(move |ui| {
