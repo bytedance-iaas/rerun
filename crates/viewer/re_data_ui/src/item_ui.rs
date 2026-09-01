@@ -888,21 +888,29 @@ pub fn entity_db_button_ui(
     }
 
     let mut response = list_item::list_item_scope(ui, "entity db button", |ui| {
-        list_item
-            .show_hierarchical(ui, item_content)
-            .on_hover_ui(|ui| {
-                entity_db.app_ui(ctx, ui, re_viewer_context::UiLayout::Tooltip);
-            })
+        list_item.show_hierarchical(ui, item_content)
     })
     .inner;
 
-    if let Some(reason) = &episode_failure {
+    // Only request the hover card (and the extra hover lines below) while the row itself
+    // is hovered: egui keeps an open tooltip alive by rect-containment, which would
+    // otherwise suppress the tooltips of the buttons sitting inside this row.
+    let row_hovered = response.hovered();
+    if row_hovered {
+        response = response.on_hover_ui(|ui| {
+            entity_db.app_ui(ctx, ui, re_viewer_context::UiLayout::Tooltip);
+        });
+    }
+
+    if let Some(reason) = &episode_failure
+        && row_hovered
+    {
         response = response.on_hover_text(reason.clone());
     }
 
     // A converted copy of this episode lives in the rrd artifacts store: show where. The address is
     // copyable via the context menu ("Copy rrd artifact address").
-    if episode_queued {
+    if episode_queued && row_hovered {
         response = response
             .on_hover_text(tr(
                 "Not downloaded yet — click to move it to the front of the download queue.",
@@ -911,6 +919,7 @@ pub fn entity_db_button_ui(
     }
 
     if let Some(artifact_url) = re_data_source::lerobot_remote::episode_rrd_artifact_url(&store_id)
+        && row_hovered
     {
         response = response.on_hover_text(trf!(
             "rrd artifact: {artifact_url}",
@@ -918,7 +927,9 @@ pub fn entity_db_button_ui(
         ));
     }
 
-    if let Some(progress) = &download_progress {
+    if let Some(progress) = &download_progress
+        && row_hovered
+    {
         let total = progress.bytes_total.map_or_else(
             || tr("unknown size", "大小未知").to_owned(),
             |total| re_format::format_bytes(total as _),

@@ -587,9 +587,16 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
         list_item.show_hierarchical(ui, list_item_content)
     };
 
-    let item_response = item_response.on_hover_ui(|ui| {
-        ui.label(trf!("Dataset: {name}", "数据集：{name}"));
-    });
+    // Only request the hover card while the row itself is hovered: egui keeps an open
+    // tooltip alive by rect-containment, which would otherwise suppress the tooltips of
+    // the buttons sitting inside this row (egui `tooltip.rs` "big tooltip" carve-out).
+    let item_response = if item_response.hovered() {
+        item_response.on_hover_ui(|ui| {
+            ui.label(trf!("Dataset: {name}", "数据集：{name}"));
+        })
+    } else {
+        item_response
+    };
 
     let new_route = Route::from(re_uri::EntryUri::new(origin.clone(), *entry_id));
 
@@ -845,9 +852,13 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
         list_item.show_hierarchical(ui, list_item_content)
     };
 
-    item_response = item_response.on_hover_ui(|ui| {
-        app_id.app_ui(ctx, ui, UiLayout::Tooltip);
-    });
+    // See the dataset row above: only request the hover card while actually hovered,
+    // so the row buttons' own tooltips are not suppressed.
+    if item_response.hovered() {
+        item_response = item_response.on_hover_ui(|ui| {
+            app_id.app_ui(ctx, ui, UiLayout::Tooltip);
+        });
+    }
 
     // Whole-dataset artifact management (per-episode actions live on the episode rows).
     if streaming {
