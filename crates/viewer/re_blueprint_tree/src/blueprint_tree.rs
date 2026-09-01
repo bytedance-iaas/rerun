@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::{Response, Ui, WidgetInfo, WidgetType};
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item_with_context};
 use re_data_ui::item_ui::guess_instance_path_icon;
@@ -96,13 +97,13 @@ impl BlueprintTree {
 
                         if let Some(title_response) = title_response {
                             title_response.on_hover_text(
-                                "Blueprint 面板用于配置 Rerun Viewer",
+                                tr("The blueprint is where you can configure the Rerun Viewer", "Blueprint 面板用于配置 Rerun Viewer"),
                             );
                         }
                     })
                     .menu_button(
                         &re_ui::icons::MORE,
-                        "打开更多选项菜单",
+                        tr("Open menu with more options", "打开更多选项菜单"),
                         |ui| {
                             let recording_id = ctx.store_context.recording_store_id();
                             re_ui::RecordingCommandKind::AddViewOrContainer.menu_button_ui(
@@ -338,7 +339,7 @@ impl BlueprintTree {
             .with_buttons(|ui| {
                 visibility_button_ui(ui, parent_visible, &mut visible);
 
-                if remove_button_ui(ui, "移除容器").clicked() {
+                if remove_button_ui(ui, tr("Remove container", "移除容器")).clicked() {
                     viewport_blueprint.mark_user_interaction(ctx);
                     viewport_blueprint.remove_contents(content);
                 }
@@ -483,7 +484,7 @@ impl BlueprintTree {
                         .interactive(false)
                         .show_flat(
                             ui,
-                            list_item::LabelContent::new("投影：").italics(true),
+                            list_item::LabelContent::new(tr("Projections:", "投影：")).italics(true),
                         );
 
                     for projection in &view_data.projection_trees {
@@ -596,7 +597,7 @@ impl BlueprintTree {
 
                             if remove_button_ui(
                                 ui,
-                                "从视图中移除该实体及其所有子实体",
+                                tr("Remove this entity and all its children from the view", "从视图中移除该实体及其所有子实体"),
                             )
                             .clicked()
                             {

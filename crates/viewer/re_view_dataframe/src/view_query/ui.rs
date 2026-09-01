@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::collections::{BTreeSet, HashSet};
 
 use egui::PopupCloseBehavior;
@@ -67,7 +68,7 @@ impl Query {
             (time_drag_value, timeline.typ())
         });
 
-        ui.label("按时间范围过滤行：");
+        ui.label(tr("Filter rows by time range:", "按时间范围过滤行："));
         let range = self.filter_by_range()?;
         let (mut start, mut end) = (range.min(), range.max());
 
@@ -77,10 +78,10 @@ impl Query {
             let mut reset_start = false;
 
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("起始")
+                list_item::PropertyContent::new(tr("Start", "起始"))
                     .with_action_button_enabled(
                         &re_ui::icons::RESET,
-                        "重置",
+                        tr("Reset", "重置"),
                         start != TimeInt::MIN,
                         || {
                             reset_start = true;
@@ -118,10 +119,10 @@ impl Query {
             let mut reset_to = false;
 
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("结束")
+                list_item::PropertyContent::new(tr("End", "结束"))
                     .with_action_button_enabled(
                         &re_ui::icons::RESET,
-                        "重置",
+                        tr("Reset", "重置"),
                         end != TimeInt::MAX,
                         || {
                             reset_to = true;
@@ -435,7 +436,7 @@ impl Query {
 
                 if first {
                     ui.add_space(6.0);
-                    ui.label("时间轴");
+                    ui.label(tr("Timelines", "时间轴"));
                     first = false;
                 }
 
@@ -579,7 +580,7 @@ impl Query {
         ctx: &ViewerContext<'_>,
         ui: &mut egui::Ui,
     ) -> Result<(), ViewSystemExecutionError> {
-        ui.label("空单元格：");
+        ui.label(tr("Empty cells:", "空单元格："));
 
         let mut latest_at = self.latest_at_enabled()?;
         let changed = {
@@ -634,14 +635,14 @@ fn time_boundary_ui(
     time: &mut TimeInt,
 ) -> egui::Response {
     if *time == TimeInt::MAX {
-        let mut response = ui.button("+∞").on_hover_text("点击编辑");
+        let mut response = ui.button("+∞").on_hover_text(tr("Click to edit", "点击编辑"));
         if response.clicked() {
             *time = time_drag_value.max_time();
             response.mark_changed();
         }
         response
     } else if *time == TimeInt::MIN {
-        let mut response = ui.button("–∞").on_hover_text("点击编辑");
+        let mut response = ui.button("–∞").on_hover_text(tr("Click to edit", "点击编辑"));
         if response.clicked() {
             *time = time_drag_value.min_time();
             response.mark_changed();

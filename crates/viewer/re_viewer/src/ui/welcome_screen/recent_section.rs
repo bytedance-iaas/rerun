@@ -4,6 +4,7 @@
 //! datasets were open before (with their metadata) and re-opens one with a click — by bringing
 //! up the matching "Open from …" dialog pre-filled, so credential handling stays in one place.
 
+use re_i18n::tr;
 use re_ui::{DesignTokens, UiExt as _, icons};
 
 use crate::recent_datasets::{RecentDataset, RecentKind, now_unix, relative_time_label};
@@ -27,7 +28,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
     let now = now_unix();
 
     ui.add(egui::Label::new(
-        egui::RichText::new("最近打开")
+        egui::RichText::new(tr("Recently opened", "最近打开"))
             .strong()
             .line_height(Some(32.0))
             .text_style(DesignTokens::welcome_screen_example_title()),
@@ -68,7 +69,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
             ));
 
             if ui
-                .small_icon_button(&icons::CLOSE, "从这个列表中移除")
+                .small_icon_button(&icons::CLOSE, tr("Remove from this list", "从这个列表中移除"))
                 .clicked()
             {
                 action = Some(RecentAction::Remove(index));

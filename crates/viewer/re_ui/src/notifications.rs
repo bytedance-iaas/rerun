@@ -7,6 +7,7 @@
 //! - If a notifications text contains [`re_error::DETAILS_SEPARATOR`] the section after that
 //!   will be displayed inside a collapsible details header.
 
+use re_i18n::tr;
 use std::time::Duration;
 
 use egui::{NumExt as _, Widget as _};
@@ -359,7 +360,7 @@ impl NotificationUi {
         let is_panel_visible = egui::Popup::is_id_open(ui.ctx(), popup_id);
         let button_response = ui.medium_icon_toggle_button(
             &icons::NOTIFICATION,
-            "通知开关",
+            tr("Notification toggle", "通知开关"),
             &mut is_panel_visible.clone(),
         );
 
@@ -419,7 +420,7 @@ impl NotificationUi {
 
         let notification_list = |ui: &mut egui::Ui| {
             if notifications.is_empty() {
-                ui.label(egui::RichText::new("暂时没有通知。").weak());
+                ui.label(egui::RichText::new(tr("No notifications yet.", "暂时没有通知。")).weak());
 
                 return;
             }
@@ -441,10 +442,10 @@ impl NotificationUi {
             if !notifications.is_empty() {
                 ui.strong(format!("通知（{}）", notifications.len()));
             } else {
-                ui.strong("通知");
+                ui.strong(tr("Notifications", "通知"));
             }
             ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
-                if ui.small_icon_button(&icons::CLOSE, "关闭").clicked() {
+                if ui.small_icon_button(&icons::CLOSE, tr("Close", "关闭")).clicked() {
                     ui.close();
                 }
             });
@@ -456,7 +457,7 @@ impl NotificationUi {
 
         if !notifications.is_empty() {
             ui.horizontal_top(|ui| {
-                if ui.button("全部忽略").clicked() {
+                if ui.button(tr("Dismiss all", "全部忽略")).clicked() {
                     dismiss_all = true;
                 }
             });
@@ -529,7 +530,7 @@ impl Toasts {
                 notification.toast_ttl = notification.toast_ttl.saturating_sub(dt);
             }
 
-            let response = response.on_hover_text("点击关闭并复制内容");
+            let response = response.on_hover_text(tr("Click to close and copy contents", "点击关闭并复制内容"));
 
             if response.clicked() {
                 if let Some(link) = &notification.link {
@@ -608,7 +609,7 @@ fn show_notification(
                             }
 
                             if let Some(details) = details {
-                                ui.collapsing_header("详情", false, |ui| {
+                                ui.collapsing_header(tr("Details", "详情"), false, |ui| {
                                     ui.label(egui::RichText::new(details).monospace().weak());
                                 });
                             }
@@ -634,12 +635,12 @@ fn show_notification(
                             |ui| {
                                 if show_dismiss {
                                     if permanent_dismiss_id.is_some() {
-                                        if ui.button("不再显示").clicked() {
+                                        if ui.button(tr("Don't show again", "不再显示")).clicked() {
                                             reaction = Some(NotificationReaction::NeverShowAgain);
                                         }
                                     } else {
                                         //
-                                        if ui.button("忽略").clicked() {
+                                        if ui.button(tr("Dismiss", "忽略")).clicked() {
                                             reaction = Some(NotificationReaction::Dismissed);
                                         }
                                     }
@@ -664,7 +665,7 @@ fn notification_age_label(ui: &mut egui::Ui, created_at: Timestamp) {
     let formatted = if age < 10.0 {
         ui.request_repaint_after(Duration::from_secs(1));
 
-        "刚刚".to_owned()
+        tr("now", "刚刚").to_owned()
     } else if age < 60.0 {
         ui.request_repaint_after(Duration::from_secs(1));
 

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::collections::BTreeMap;
 
 use arrow::array::ArrayRef;
@@ -62,7 +63,7 @@ pub fn view_components_defaults_section_ui(
 
     let mut add_button_is_open = false;
     let mut add_button = ui
-        .small_icon_button_widget(&re_ui::icons::ADD, "添加覆盖…")
+        .small_icon_button_widget(&re_ui::icons::ADD, tr("Add overrides…", "添加覆盖…"))
         .on_menu(|ui| {
             add_button_is_open = true;
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
@@ -74,7 +75,7 @@ pub fn view_components_defaults_section_ui(
                 components_to_show_in_add_menu.unwrap_or_default(),
             );
         })
-        .on_hover_text("添加更多组件默认值");
+        .on_hover_text(tr("Add more component defaults", "添加更多组件默认值"));
 
     if let Some(reason) = reason_we_cannot_add_more {
         add_button = add_button.enabled(false).on_disabled_hover_text(reason);

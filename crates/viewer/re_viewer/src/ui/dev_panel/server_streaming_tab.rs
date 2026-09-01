@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui_plot::HoverPosition;
 use re_byte_size::SizeBytes as _;
 use re_chunk_store::Chunk;
@@ -38,7 +39,7 @@ pub fn server_streaming_tab_ui(
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         if streaming_recordings.is_empty() {
-                            ui.label("没有活跃的服务器流式读取连接。");
+                            ui.label(tr("No active server streaming connections.", "没有活跃的服务器流式读取连接。"));
                         } else {
                             list_item::list_item_scope(ui, "streaming_recordings", |ui| {
                                 for recording in &streaming_recordings {
@@ -77,7 +78,7 @@ fn recording_ui(
                     rect,
                     1.0,
                     Some(visuals.text_color()),
-                    "正在下载 chunk",
+                    tr("Downloading chunks", "正在下载 chunk"),
                 );
             } else {
                 ui.painter()
@@ -111,10 +112,10 @@ fn recording_details_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, i
 
 fn status_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
     ui.list_item_flat_noninteractive(
-        list_item::PropertyContent::new("连接")
+        list_item::PropertyContent::new(tr("Connection", "连接"))
             .value_text(format!("{:?}", recording.redap_connection_state())),
     )
-    .on_hover_text("与 Redap 服务器的连接状态");
+    .on_hover_text(tr("Connection state to the redap server", "与 Redap 服务器的连接状态"));
 }
 
 #[derive(Default)]
@@ -165,10 +166,10 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
             overall.add(uncompressed_sizes[info.row_id], info.is_fully_loaded());
         }
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("总体").value_text(overall.value_text()),
+            list_item::PropertyContent::new(tr("Overall", "总体")).value_text(overall.value_text()),
         )
         .on_hover_text(
-            "已完整加载的根 chunk 相对于 manifest 声明的整个录制文件的占比。",
+            tr("Fully-loaded root chunks vs. the whole recording advertised by the manifest.", "已完整加载的根 chunk 相对于 manifest 声明的整个录制文件的占比。"),
         );
 
         let protected_roots = &manifest_index.chunk_prioritizer().protected_chunks().roots;
@@ -181,10 +182,10 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
                 }
             }
             ui.list_item_flat_noninteractive(
-                list_item::PropertyContent::new("已加载的受保护根 chunk")
+                list_item::PropertyContent::new(tr("Loaded protected roots", "已加载的受保护根 chunk"))
                     .value_text(target.value_text()),
             )
-            .on_hover_text("受保护的根 chunk 不会被垃圾回收。chunk 通常在被活跃使用时受保护。");
+            .on_hover_text(tr("Protected root chunks are root chunks that won't be GC'd. A chunk is typically protected if it's actively in use.", "受保护的根 chunk 不会被垃圾回收。chunk 通常在被活跃使用时受保护。"));
         }
     }
 
@@ -193,9 +194,9 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         .bandwidth()
         .map_or_else(|| "—".to_owned(), |bw| format!("{}/s", format_bytes(bw)));
     ui.list_item_flat_noninteractive(
-        list_item::PropertyContent::new("带宽").value_text(bw_text),
+        list_item::PropertyContent::new(tr("Bandwidth", "带宽")).value_text(bw_text),
     )
-    .on_hover_text("近期平均下载速度（按传输中的压缩字节计）");
+    .on_hover_text(tr("Recent average download speed (compressed on-wire bytes)", "近期平均下载速度（按传输中的压缩字节计）"));
 }
 
 fn chunks_removed_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
@@ -211,32 +212,32 @@ fn chunks_removed_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
             ui,
             ui.make_persistent_id(("chunks_removed", recording.store_id())),
             false,
-            list_item::PropertyContent::new("已移除的 chunk")
+            list_item::PropertyContent::new(tr("Chunks removed", "已移除的 chunk"))
                 .value_text(format_uint(total_removed)),
             |ui| {
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("垃圾回收")
+                    list_item::PropertyContent::new(tr("Garbage collection", "垃圾回收"))
                         .value_text(format_uint(stats.num_chunks_gc)),
                 )
-                .on_hover_text("因内存压力被清理");
+                .on_hover_text(tr("Memory pressure eviction", "因内存压力被清理"));
 
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("拆分清理")
+                    list_item::PropertyContent::new(tr("Split cleanup", "拆分清理"))
                         .value_text(format_uint(stats.num_chunks_split_cleanup)),
                 )
-                .on_hover_text("根 chunk 重新下载后，被移除的旧拆分 chunk");
+                .on_hover_text(tr("Old split chunks removed when their root chunk was re-downloaded", "根 chunk 重新下载后，被移除的旧拆分 chunk"));
 
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("压实（compaction）")
+                    list_item::PropertyContent::new(tr("Compaction", "压实（compaction）"))
                         .value_text(format_uint(stats.num_chunks_compacted)),
                 )
-                .on_hover_text("chunk 被压实后的版本替换");
+                .on_hover_text(tr("Chunk replaced by a compacted version", "chunk 被压实后的版本替换"));
 
                 ui.list_item_flat_noninteractive(
-                    list_item::PropertyContent::new("覆盖")
+                    list_item::PropertyContent::new(tr("Overwrite", "覆盖"))
                         .value_text(format_uint(stats.num_chunks_overwritten)),
                 )
-                .on_hover_text("静态 chunk 被更新的值覆盖");
+                .on_hover_text(tr("Static chunk overwritten by a newer value", "静态 chunk 被更新的值覆盖"));
             },
         );
 }
@@ -247,7 +248,7 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         return;
     };
 
-    ui.list_item_collapsible_noninteractive_label("Manifest（chunk 清单）", false, |ui| {
+    ui.list_item_collapsible_noninteractive_label(tr("Manifest", "Manifest（chunk 清单）"), false, |ui| {
         let num_chunks = manifest.num_chunks();
         let num_static = manifest.col_chunk_is_static().filter(|s| *s).count();
         let num_temporal = num_chunks.saturating_sub(num_static);
@@ -257,14 +258,14 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
                 ui,
                 ui.make_persistent_id(("manifest_chunks", recording.store_id())),
                 false,
-                list_item::PropertyContent::new("Chunk 数").value_text(format_uint(num_chunks)),
+                list_item::PropertyContent::new(tr("Chunks", "Chunk 数")).value_text(format_uint(num_chunks)),
                 |ui| {
                     ui.list_item_flat_noninteractive(
-                        list_item::PropertyContent::new("静态")
+                        list_item::PropertyContent::new(tr("Static", "静态"))
                             .value_text(format_uint(num_static)),
                     );
                     ui.list_item_flat_noninteractive(
-                        list_item::PropertyContent::new("时序")
+                        list_item::PropertyContent::new(tr("Temporal", "时序"))
                             .value_text(format_uint(num_temporal)),
                     );
                 },
@@ -277,26 +278,26 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
             .collect::<BTreeSet<_>>()
             .len();
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("实体数").value_text(format_uint(num_entities)),
+            list_item::PropertyContent::new(tr("Entities", "实体数")).value_text(format_uint(num_entities)),
         );
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Manifest 大小（内存中）")
+            list_item::PropertyContent::new(tr("Manifest size (in memory)", "Manifest 大小（内存中）"))
                 .value_text(format_bytes(manifest.total_size_bytes() as _)),
         )
-        .on_hover_text("manifest（所有 chunk 的索引）在内存中的大小");
+        .on_hover_text(tr("In-memory size of the manifest (the index of all chunks)", "manifest（所有 chunk 的索引）在内存中的大小"));
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("索引大小（内存中）")
+            list_item::PropertyContent::new(tr("Index size (in memory)", "索引大小（内存中）"))
                 .value_text(format_bytes(manifest_index.total_size_bytes() as _)),
         )
         .on_hover_text(
-            "manifest 加上派生索引（排序后的 chunk、已加载范围、优先级器状态等）在内存中的大小",
+            tr("In-memory size of the manifest plus derived indices (sorted chunks, loaded ranges, prioritizer state, …)", "manifest 加上派生索引（排序后的 chunk、已加载范围、优先级器状态等）在内存中的大小"),
         );
 
         let compressed: u64 = manifest.col_chunk_byte_size().iter().sum();
         let uncompressed: u64 = manifest.col_chunk_byte_size_uncompressed().iter().sum();
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("录制文件未压缩/压缩大小").value_text(
+            list_item::PropertyContent::new(tr("Recording uncompressed/compressed size", "录制文件未压缩/压缩大小")).value_text(
                 format!(
                     "{} / {}",
                     format_bytes(uncompressed as _),

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_chunk_store::ChunkTrackingMode;
 use re_log_types::{ComponentPath, Instance};
 use re_ui::UiExt as _;
@@ -37,7 +38,7 @@ impl DataUi for ComponentPath {
 
             // TODO(RR-3670): figure out how to handle missing chunks
             if any_missing_chunks && ctx.db.can_fetch_chunks_from_redap() {
-                ui.loading_indicator("正在从 Redap 获取 chunk");
+                ui.loading_indicator(tr("Fetching chunks from redap", "正在从 Redap 获取 chunk"));
             } else if engine.store().entity_has_component_on_timeline(
                 Some(&ctx.timeline_name()),
                 &entity_path,

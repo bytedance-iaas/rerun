@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::sync::Arc;
 
 use re_log_channel::LogSource;
@@ -7,7 +8,7 @@ use re_ui::{DesignTokens, UiExt as _};
 pub fn loading_data_ui(ui: &mut egui::Ui, loading_text: &str) {
     ui.center("loading_data_ui_contents", |ui| {
         ui.vertical_centered(|ui| {
-            ui.loading_indicator("正在连接数据源");
+            ui.loading_indicator(tr("Connecting to data source", "正在连接数据源"));
 
             ui.add_space(50.0);
 

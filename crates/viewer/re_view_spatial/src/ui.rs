@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::text::TextWrapping;
 use egui::{NumExt as _, WidgetText};
 use egui::{emath::OrderedFloat, epaint::text::ByteRangeExt as _, text::ByteRange};
@@ -120,14 +121,14 @@ impl SpatialViewState {
     }
 
     pub fn bounding_box_ui(&self, ui: &mut egui::Ui, spatial_kind: SpaceKind) {
-        ui.grid_left_hand_label("包围盒")
-            .on_hover_text("当前视图中包含所有实体的包围盒");
+        ui.grid_left_hand_label(tr("Bounding box", "包围盒"))
+            .on_hover_text(tr("The bounding box encompassing all Entities in the view right now", "当前视图中包含所有实体的包围盒"));
         ui.vertical(|ui| {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
             let BoundingBox { min, max } = self.bounding_boxes.current;
 
             if self.bounding_boxes.current.is_nothing() {
-                ui.label(egui::RichText::new("空").italics());
+                ui.label(egui::RichText::new(tr("empty", "空")).italics());
             } else {
                 ui.label(format!("x [{} - {}]", format_f32(min.x), format_f32(max.x)));
                 ui.label(format!("y [{} - {}]", format_f32(min.y), format_f32(max.y)));
@@ -144,9 +145,9 @@ impl SpatialViewState {
         let eye_property = ViewProperty::from_archetype_for_view::<EyeControls3D>(ctx, view_id);
 
         if ui
-            .button("重置")
+            .button(tr("Reset", "重置"))
             .on_hover_text(
-                "重置相机的位置和朝向。\n也可以双击 3D 视图。",
+                tr("Resets camera position & orientation.\nYou can also double-click the 3D view.", "重置相机的位置和朝向。\n也可以双击 3D 视图。"),
             )
             .clicked()
         {

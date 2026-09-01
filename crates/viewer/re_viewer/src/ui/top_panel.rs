@@ -251,8 +251,8 @@ fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppE
                 .color(ui.visuals().warn_fg_color);
             let url = "https://github.com/rerun-io/rerun/issues/6835";
             ui.hyperlink_to(text,url).on_hover_ui(|ui| {
-                ui.label("Rerun Viewer 似乎运行在 Docker 容器里。这不在官方支持范围内，可能引发一些不易察觉的问题。");
-                ui.label("点击了解更多。");
+                ui.label(tr("It looks like the Rerun Viewer is running inside a Docker container. This is not officially supported, and may lead to subtle bugs. ", "Rerun Viewer 似乎运行在 Docker 容器里。这不在官方支持范围内，可能引发一些不易察觉的问题。"));
+                ui.label(tr("Click for more info.", "点击了解更多。"));
             });
         });
     }
@@ -260,15 +260,15 @@ fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppE
 
 fn software_rasterizer_warning_ui(ui: &mut egui::Ui, info: &wgpu::AdapterInfo) {
     ui.hyperlink_to(
-        egui::RichText::new("⚠ 软件光栅化")
+        egui::RichText::new(tr("⚠ Software rasterizer", "⚠ 软件光栅化"))
             .small()
             .color(ui.visuals().warn_fg_color),
         "https://www.rerun.io/docs/overview/installing-rerun/troubleshooting#graphics-issues",
     )
     .on_hover_ui(|ui| {
-        ui.label("检测到软件光栅化 — 性能会很差。");
-        ui.label("Rerun 需要硬件图形加速（即 GPU）才能获得好的性能。");
-        ui.label("点击查看排查方法。");
+        ui.label(tr("Software rasterizer detected - expect poor performance.", "检测到软件光栅化 — 性能会很差。"));
+        ui.label(tr("Rerun requires hardware accelerated graphics (i.e. a GPU) for good performance.", "Rerun 需要硬件图形加速（即 GPU）才能获得好的性能。"));
+        ui.label(tr("Click for troubleshooting.", "点击查看排查方法。"));
         ui.add_space(8.0);
         ui.label(format!(
             "wgpu adapter {}",

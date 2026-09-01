@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::emath::Rangef;
 use egui::scroll_area::ScrollSource;
 use egui::{
@@ -385,7 +386,7 @@ impl TimePanel {
 
                         if ui
                             .button(
-                                egui::RichText::new("回到默认时间轴")
+                                egui::RichText::new(tr("Go to default timeline", "回到默认时间轴"))
                                     .color(ui.style().visuals.weak_text_color()),
                             )
                             .clicked()
@@ -490,7 +491,7 @@ impl TimePanel {
                     match timeline_count {
                         0 => {}
                         1 => {
-                            ui.label("另有一条时间轴上有数据");
+                            ui.label(tr("One other timeline has data", "另有一条时间轴上有数据"));
                         }
                         c => {
                             ui.label(format!("{c} other timelines have data"));
@@ -499,7 +500,7 @@ impl TimePanel {
 
                     if ui
                         .button(
-                            egui::RichText::new("回到默认时间轴")
+                            egui::RichText::new(tr("Go to default timeline", "回到默认时间轴"))
                                 .color(ui.style().visuals.weak_text_color()),
                         )
                         .clicked()
@@ -517,7 +518,7 @@ impl TimePanel {
 
                         if ui
                             .button(
-                                egui::RichText::new("回到默认时间轴")
+                                egui::RichText::new(tr("Go to default timeline", "回到默认时间轴"))
                                     .color(ui.style().visuals.weak_text_color()),
                             )
                             .clicked()

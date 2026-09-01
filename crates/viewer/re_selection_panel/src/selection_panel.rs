@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::{NumExt as _, TextBuffer, WidgetInfo, WidgetType};
 use egui_tiles::ContainerKind;
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item};
@@ -70,7 +71,8 @@ impl SelectionPanel {
 
         panel.show_collapsible(ui, expanded, |ui: &mut egui::Ui| {
             ui.panel_content(|ui| {
-                let hover = "Selection 面板显示当前选中对象的信息和相关选项";
+                let hover = tr(";
+                ui.panel_title_bar(", "Selection 面板显示当前选中对象的信息和相关选项");
                 ui.panel_title_bar("Selection", Some(hover));
             });
 
@@ -214,7 +216,15 @@ impl SelectionPanel {
                                 ui.strong(archetype_name.full_name());
 
                                 if let Some(doc_url) = archetype_name.doc_url() {
-                                    ui.re_hyperlink("完整文档", doc_url, true);
+                                    ui.re_hyperlink(tr(", doc_url, true);
+                                }
+                            });
+                        },
+                    ));
+                }
+
+                ui.list_item_flat_noninteractive(
+                    PropertyContent::new(", "完整文档"), doc_url, true);
                                 }
                             });
                         },
@@ -439,12 +449,20 @@ impl SelectionPanel {
             if view.class(ctx.view_class_registry()).is_experimental() {
                 ui.add_space(6.0);
                 ui.info_label(
-                    "这是实验性视图：其 API、行为和存储格式可能随时变化，恕不另行通知。",
+                    tr(",
                 );
                 ui.add_space(8.0);
             }
 
-            ui.section_collapsing_header("实体路径过滤器")
+            ui.section_collapsing_header(", "这是实验性视图：其 API、行为和存储格式可能随时变化，恕不另行通知。"),
+                );
+                ui.add_space(8.0);
+            }
+
+            ui.section_collapsing_header(tr(")
+                .with_action_button(
+                    &re_ui::icons::EDIT,
+                    ", "实体路径过滤器"))
                 .with_action_button(
                     &re_ui::icons::EDIT,
                     "在编辑器中修改实体查询",
@@ -1045,17 +1063,17 @@ fn container_children(
 
         if !has_child {
             ui.list_item_flat_noninteractive(
-                list_item::LabelContent::new("空 — 点 + 按钮添加内容")
+                list_item::LabelContent::new(tr("empty — use the + button to add content", "空 — 点 + 按钮添加内容"))
                     .weak(true)
                     .italics(true),
             );
         }
     };
 
-    ui.section_collapsing_header("内容")
+    ui.section_collapsing_header(tr("Contents", "内容"))
         .with_action_button(
             &re_ui::icons::ADD,
-            "在这个容器里添加新的视图或容器",
+            tr("Add a new view or container to this container", "在这个容器里添加新的视图或容器"),
             || {
                 show_add_view_or_container_modal(*container_id);
             },
@@ -1114,13 +1132,13 @@ fn list_existing_data_blueprints(
     let store_view_ctx = ctx.guess_store_view_context_for_entity(&instance_path.entity_path);
 
     if views_with_path.is_empty() {
-        ui.weak("（未在任何视图中显示）");
+        ui.weak(tr("(Not shown in any view)", "（未在任何视图中显示）"));
     } else {
         for &view_id in &views_with_path {
             if let Some(view) = viewport.view(&view_id) {
                 let response = ui.list_item().show_flat(
                     ui,
-                    PropertyContent::new("显示于").value_fn(|ui, _| {
+                    PropertyContent::new(tr("Shown in", "显示于")).value_fn(|ui, _| {
                         view_button(ctx, ui, view);
                     }),
                 );
@@ -1158,18 +1176,18 @@ fn view_top_level_properties(
     ui: &mut egui::Ui,
     view: &re_viewport_blueprint::ViewBlueprint,
 ) {
-    ui.list_item_flat_noninteractive(PropertyContent::new("名称").value_fn(|ui, _| {
+    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Name", "名称")).value_fn(|ui, _| {
         ui.spacing_mut().text_edit_width = ui
             .spacing_mut()
             .text_edit_width
             .at_least(ui.available_width());
 
         let mut name = view.display_name.clone().unwrap_or_default();
-        ui.add(egui::TextEdit::singleline(&mut name).hint_text("（默认）"));
+        ui.add(egui::TextEdit::singleline(&mut name).hint_text(tr("(default)", "（默认）")));
         view.set_display_name(ctx, if name.is_empty() { None } else { Some(name) });
     }));
 
-    ui.list_item_flat_noninteractive(PropertyContent::new("空间原点").value_fn(|ui, _| {
+    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Space origin", "空间原点")).value_fn(|ui, _| {
         ui.spacing_mut().text_edit_width = ui
             .spacing_mut()
             .text_edit_width

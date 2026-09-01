@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::RichText;
 use itertools::Itertools as _;
 use re_capabilities::MainThreadToken;
@@ -331,7 +332,7 @@ fn component_list_ui(
                     // Maybe there _will be_ data, once we have loaded it.
                     let any_missing_chunks = !query_results.missing_virtual.is_empty();
                     if any_missing_chunks && ctx.db.can_fetch_chunks_from_redap() {
-                        ui.loading_indicator("正在从 Redap 获取 chunk");
+                        ui.loading_indicator(tr("Fetching chunks from redap", "正在从 Redap 获取 chunk"));
                     } else {
                         ui.weak("-"); // TODO(RR-3670): figure out how to handle missing chunks
                     }
@@ -442,7 +443,7 @@ fn component_ui(
             ),
         ) {
             re_ui::list_item::list_item_scope(ui, component_descr, |ui| {
-                ui.list_item_flat_noninteractive(PropertyContent::new("数据类型").value_text(
+                ui.list_item_flat_noninteractive(PropertyContent::new(tr("Data type", "数据类型")).value_text(
                     // TODO(#11071): use re_arrow_ui to format the datatype here
                     column.store_datatype.to_string(),
                 ));
@@ -467,7 +468,7 @@ pub fn archetype_label_list_item_ui(ui: &mut egui::Ui, archetype: Option<&Archet
                 RichText::new(
                     archetype
                         .map(|a| a.short_name())
-                        .unwrap_or("无 archetype"),
+                        .unwrap_or(tr("Without archetype", "无 archetype")),
                 )
                 .size(10.0)
                 .color(design_tokens_of_visuals(ui.visuals()).list_item_strong_text),

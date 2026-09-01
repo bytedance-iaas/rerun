@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_viewer_context::{
     Item, ScreenshotTarget, SystemCommand, SystemCommandSender as _, ViewId, ViewRectPublisher,
 };
@@ -45,8 +46,8 @@ impl ContextMenuAction for ScreenshotAction {
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
         match self {
-            Self::CopyScreenshot => "复制截图".to_owned(),
-            Self::SaveScreenshot => "保存截图…".to_owned(),
+            Self::CopyScreenshot => tr("Copy screenshot", "复制截图").to_owned(),
+            Self::SaveScreenshot => tr("Save screenshot…", "保存截图…").to_owned(),
         }
     }
 

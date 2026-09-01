@@ -4,6 +4,7 @@
 //! (range-)downloading files. Works both natively and in the browser (both endpoints are
 //! CORS-enabled). Public datasets need no token; a token is sent as a bearer header when set.
 
+use re_i18n::tr;
 use std::ops::Range;
 
 use re_log_channel::LogReceiver;
@@ -149,11 +150,11 @@ async fn hf_fetch(request: ehttp::Request) -> anyhow::Result<ehttp::Response> {
 /// A human hint for HTTP statuses users actually hit against Hugging Face hosts.
 fn status_hint(status: u16) -> &'static str {
     match status {
-        401 => "（Unauthorized — 需要访问令牌，或提供的令牌无效）",
-        403 => "（Forbidden — 这组凭证无权访问；可能是受限数据集？）",
-        404 => "（Not Found — 不存在）",
-        429 => "（Too Many Requests — 服务器正在对该地址限流；请稍后再试）",
-        503 => "（Service Unavailable — 服务器过载或限流中；请稍后再试）",
+        401 => tr(" (Unauthorized — an access token is required or the given one is invalid)", "（Unauthorized — 需要访问令牌，或提供的令牌无效）"),
+        403 => tr(" (Forbidden — no access with these credentials; gated dataset?)", "（Forbidden — 这组凭证无权访问；可能是受限数据集？）"),
+        404 => tr(" (Not Found)", "（Not Found — 不存在）"),
+        429 => tr(" (Too Many Requests — the host is rate-limiting this address; try again later)", "（Too Many Requests — 服务器正在对该地址限流；请稍后再试）"),
+        503 => tr(" (Service Unavailable — the host is overloaded or throttling; try again later)", "（Service Unavailable — 服务器过载或限流中；请稍后再试）"),
         _ => "",
     }
 }
@@ -212,7 +213,7 @@ impl DatasetStore for HfStore {
             if response.status != 200 {
                 return Err(http_error(
                     &response,
-                    "列出 Hugging Face 数据集",
+                    tr("Listing the Hugging Face dataset", "列出 Hugging Face 数据集"),
                     &format!("数据集：{}", self.source.repo),
                 ));
             }
@@ -494,7 +495,7 @@ mod tests {
             "explains the code: {msg}"
         );
         assert!(
-            msg.contains("请稍后再试"),
+            msg.contains(tr("try again later", "请稍后再试")),
             "tells the user what to do: {msg}"
         );
         assert!(

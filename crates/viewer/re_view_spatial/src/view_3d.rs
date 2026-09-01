@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use ahash::HashSet;
 use egui::NumExt as _;
 use glam::Vec3;
@@ -499,7 +500,7 @@ impl ViewClass for SpatialView3D {
         // TODO(andreas): list_item'ify the rest
         ui.selection_grid("spatial_settings_ui").show(ui, |ui| {
             ui.grid_left_hand_label("Camera")
-                .on_hover_text("控制屏幕显示内容的虚拟相机");
+                .on_hover_text(tr("The virtual camera which controls what is shown on screen", "控制屏幕显示内容的虚拟相机"));
             ui.vertical(|ui| {
                 state.view_eye_ui(ui, ctx, view_id);
             });
@@ -610,7 +611,7 @@ fn view_property_ui_grid3d(ctx: &ViewContext<'_>, ui: &mut egui::Ui) {
                                 LineGrid3D::descriptor_color().component,
                             )
                         else {
-                            ui.error_label("查询颜色组件失败");
+                            ui.error_label(tr("Failed to query color component", "查询颜色组件失败"));
                             return;
                         };
                         let mut edit_color = egui::Color32::from(*color);

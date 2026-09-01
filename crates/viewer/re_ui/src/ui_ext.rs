@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::{
     CollapsingResponse, Color32, IntoAtoms, Margin, NumExt as _, Rangef, Rect, StrokeKind,
     Widget as _, WidgetInfo, WidgetText, pos2,
@@ -98,7 +99,7 @@ pub trait UiExt {
     ///
     /// This has a large border! If you don't want a border, use [`crate::ContextExt::error_text`].
     fn error_with_details_on_hover(&mut self, error_text: impl Into<String>) -> egui::Response {
-        Alert::error().show_text(self.ui_mut(), "错误", Some(error_text.into()))
+        Alert::error().show_text(self.ui_mut(), tr("Error", "错误"), Some(error_text.into()))
     }
 
     fn error_label_background_color(&self) -> egui::Color32 {
@@ -328,9 +329,9 @@ pub trait UiExt {
 
     fn visibility_toggle_button(&mut self, visible: &mut bool) -> egui::Response {
         let mut response = if *visible && self.ui().is_enabled() {
-            self.small_icon_button(&icons::VISIBLE, "设为隐藏")
+            self.small_icon_button(&icons::VISIBLE, tr("Make invisible", "设为隐藏"))
         } else {
-            self.small_icon_button(&icons::INVISIBLE, "设为可见")
+            self.small_icon_button(&icons::INVISIBLE, tr("Make visible", "设为可见"))
         };
         if response.clicked() {
             response.mark_changed();
@@ -1071,21 +1072,21 @@ pub trait UiExt {
             response.on_hover_text_at_pointer(tooltip)
         }
 
-        if window_button(ui, WindowButtonKind::Close, "关闭窗口", true).clicked() {
+        if window_button(ui, WindowButtonKind::Close, tr("Close the window", "关闭窗口"), true).clicked() {
             ui.send_viewport_cmd(ViewportCommand::Close);
         }
 
         let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
         if maximized {
-            if window_button(ui, WindowButtonKind::Restore, "还原窗口", false).clicked() {
+            if window_button(ui, WindowButtonKind::Restore, tr("Restore window", "还原窗口"), false).clicked() {
                 ui.send_viewport_cmd(ViewportCommand::Maximized(false));
             }
-        } else if window_button(ui, WindowButtonKind::Maximize, "最大化窗口", false).clicked()
+        } else if window_button(ui, WindowButtonKind::Maximize, tr("Maximize window", "最大化窗口"), false).clicked()
         {
             ui.send_viewport_cmd(ViewportCommand::Maximized(true));
         }
 
-        if window_button(ui, WindowButtonKind::Minimize, "最小化窗口", false).clicked() {
+        if window_button(ui, WindowButtonKind::Minimize, tr("Minimize the window", "最小化窗口"), false).clicked() {
             ui.send_viewport_cmd(ViewportCommand::Minimized(true));
         }
 

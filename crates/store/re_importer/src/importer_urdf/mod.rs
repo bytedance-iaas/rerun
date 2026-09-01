@@ -6,6 +6,7 @@ mod urdf_tree;
 pub(crate) use robot_description_parser::build_urdf_chunks_from_xml;
 pub use urdf_tree::UrdfTree;
 
+use re_i18n::tr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
@@ -535,7 +536,7 @@ fn emit_geometry(
                 } = material;
 
                 if texture.is_some() {
-                    re_log::warn_once!("暂不支持材质纹理"); // TODO(emilk): support textures
+                    re_log::warn_once!("{}", tr("Material texture not supported", "暂不支持材质纹理")); // TODO(emilk): support textures
                 }
             }
 

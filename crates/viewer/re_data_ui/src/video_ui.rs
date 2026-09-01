@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::sync::Arc;
 
 use egui::NumExt as _;
@@ -35,7 +36,7 @@ pub fn video_asset_result_ui(
                 // Extra scope needed to ensure right spacing.
                 ui.list_item_scope("video_asset", |ui| {
                     ui.list_item_collapsible_noninteractive_label(
-                        "视频资产",
+                        tr("Video Asset", "视频资产"),
                         default_open,
                         |ui| {
                             video_data_ui(ui, ui_layout, StreamKind::Video, video.data_descr());
@@ -108,7 +109,7 @@ fn video_data_ui(
             // Images can display higher bit depths.
             let is_image_sequence =
                 matches!(video_descr.codec, re_video::VideoCodec::ImageSequence(_));
-            ui.list_item_flat_noninteractive(PropertyContent::new("位深").value_fn(
+            ui.list_item_flat_noninteractive(PropertyContent::new(tr("Bit depth", "位深")).value_fn(
                 |ui, _| {
                     ui.label(bit_depth.to_string());
                     if 8 < bit_depth && !is_image_sequence {
@@ -124,7 +125,7 @@ fn video_data_ui(
                     if encoding_details.chroma_subsampling
                         == Some(re_video::ChromaSubsamplingModes::Monochrome)
                     {
-                        ui.label("（单色）");
+                        ui.label(tr("(monochrome)", "（单色）"));
                     }
                 },
             ));
@@ -133,7 +134,7 @@ fn video_data_ui(
             // Don't show subsampling mode for monochrome. Usually we know the bit depth and already shown it there.
             if chroma_subsampling != re_video::ChromaSubsamplingModes::Monochrome {
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new("色度子采样").value_text(chroma_subsampling.to_string()),
+                    PropertyContent::new(tr("Subsampling", "色度子采样")).value_text(chroma_subsampling.to_string()),
                 );
             }
         }
@@ -141,7 +142,7 @@ fn video_data_ui(
 
     if let Some(duration) = video_descr.duration() {
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("时长")
+            PropertyContent::new(tr("Duration", "时长"))
                 .value_text(format!("{}", re_log_types::Duration::from(duration))),
         );
     }
@@ -158,8 +159,8 @@ fn video_data_ui(
         .on_hover_text(format!(
             "{}的平均每秒帧数（FPS）",
             match stream_kind {
-                StreamKind::Video => "视频",
-                StreamKind::Image => "图像流",
+                StreamKind::Video => tr("video", "视频"),
+                StreamKind::Image => tr("image stream", "图像流"),
             }
         ));
     }
@@ -173,35 +174,35 @@ fn video_data_ui(
             .all(|s| matches!(s.source(), re_video::VideoSource::Span(_)));
 
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("平均码率")
+            PropertyContent::new(tr("Average bitrate", "平均码率"))
                 .value_text(re_format::format_bits_per_second(bitrate_bps)),
         )
         .on_hover_text(if fully_loaded {
             format!(
                 "{}的平均码率",
                 match stream_kind {
-                    StreamKind::Video => "视频",
-                    StreamKind::Image => "图像流",
+                    StreamKind::Video => tr("video", "视频"),
+                    StreamKind::Image => tr("image stream", "图像流"),
                 }
             )
         } else {
-            "已下载部分的平均码率（完整数据尚未全部就绪）"
+            tr("Average bitrate over the downloaded portion (the full data is not yet available)", "已下载部分的平均码率（完整数据尚未全部就绪）")
                 .to_owned()
         });
     }
 
     ui.list_item_flat_noninteractive(
-        PropertyContent::new("编码格式").value_text(video_descr.human_readable_codec_string()),
+        PropertyContent::new(tr("Codec", "编码格式")).value_text(video_descr.human_readable_codec_string()),
     );
 
     if ui_layout != UiLayout::Tooltip && !video_descr.mp4_tracks.is_empty() {
-        ui.list_item_collapsible_noninteractive_label("MP4 轨道", false, |ui| {
+        ui.list_item_collapsible_noninteractive_label(tr("MP4 tracks", "MP4 轨道"), false, |ui| {
             for (track_id, track_kind) in &video_descr.mp4_tracks {
                 let track_kind_string = match track_kind {
-                    Some(re_video::TrackKind::Audio) => "音频",
-                    Some(re_video::TrackKind::Subtitle) => "字幕",
-                    Some(re_video::TrackKind::Video) => "视频",
-                    None => "未知",
+                    Some(re_video::TrackKind::Audio) => tr("audio", "音频"),
+                    Some(re_video::TrackKind::Subtitle) => tr("subtitle", "字幕"),
+                    Some(re_video::TrackKind::Video) => tr("video", "视频"),
+                    None => tr("unknown", "未知"),
                 };
                 ui.list_item_flat_noninteractive(
                     PropertyContent::new(format!("轨道 {track_id}")).value_text(track_kind_string),
@@ -211,12 +212,12 @@ fn video_data_ui(
     }
 
     if stream_kind == StreamKind::Video {
-        ui.list_item_collapsible_noninteractive_label("更多视频统计信息", false, |ui| {
+        ui.list_item_collapsible_noninteractive_label(tr("More video statistics", "更多视频统计信息"), false, |ui| {
             ui.list_item_flat_noninteractive(
-                PropertyContent::new("关键帧数量")
+                PropertyContent::new(tr("Number of keyframes", "关键帧数量"))
                     .value_uint(video_descr.keyframe_indices.len()),
             )
-            .on_hover_text("视频中关键帧的总数。");
+            .on_hover_text(tr("The total number of keyframes in the video.", "视频中关键帧的总数。"));
 
             let re_video::SamplesStatistics {
                 dts_always_equal_pts,
@@ -228,8 +229,8 @@ fn video_data_ui(
             let _ = gop_sizes; // only used by the debug-only UI below
 
             ui.list_item_flat_noninteractive(
-                PropertyContent::new("所有 PTS 等于 DTS").value_bool(*dts_always_equal_pts)
-            ).on_hover_text("所有解码时间戳（DTS）是否都等于显示时间戳（PTS）。若为真，视频通常没有 B 帧。");
+                PropertyContent::new(tr("All PTS equal DTS", "所有 PTS 等于 DTS")).value_bool(*dts_always_equal_pts)
+            ).on_hover_text(tr("Whether all decode timestamps are equal to presentation timestamps. If true, the video typically has no B-frames.", "所有解码时间戳（DTS）是否都等于显示时间戳（PTS）。若为真，视频通常没有 B 帧。"));
 
             #[cfg(debug_assertions)]
             if gop_sizes.smallest > 0 {
@@ -238,20 +239,20 @@ fn video_data_ui(
                 if gop_sizes.smallest == gop_sizes.largest {
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("GOP size").value_uint(gop_sizes.smallest)
-                    ).on_hover_text("所有已知 GOP 都是这个大小。");
+                    ).on_hover_text(tr("All known gops are this size.", "所有已知 GOP 都是这个大小。"));
                 } else {
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("Smallest GOP size").value_uint(gop_sizes.smallest)
-                    ).on_hover_text("观测到的最小 GOP 大小。");
+                    ).on_hover_text(tr("The smallest observed gop size.", "观测到的最小 GOP 大小。"));
 
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("Largest GOP size").value_uint(gop_sizes.largest)
-                    ).on_hover_text("观测到的最大 GOP 大小。");
+                    ).on_hover_text(tr("The largest observed gop size.", "观测到的最大 GOP 大小。"));
                 }
             }
         });
 
-        ui.list_item_collapsible_noninteractive_label("视频样本", false, |ui| {
+        ui.list_item_collapsible_noninteractive_label(tr("Video samples", "视频样本"), false, |ui| {
             egui::Resize::default()
                 .with_stroke(true)
                 .resizable([false, true])
@@ -277,28 +278,28 @@ fn samples_table_ui(ui: &mut egui::Ui, video_descr: &VideoDataDescription) {
         .header(tokens.deprecated_table_header_height(), |mut header| {
             re_ui::DesignTokens::setup_table_header(&mut header);
             header.col(|ui| {
-                ui.strong("样本");
+                ui.strong(tr("Sample", "样本"));
             });
             header.col(|ui| {
-                ui.strong("帧");
+                ui.strong(tr("Frame", "帧"));
             });
             header.col(|ui| {
                 ui.strong("GOP");
             });
             header.col(|ui| {
-                ui.strong("同步");
+                ui.strong(tr("Sync", "同步"));
             });
             header.col(|ui| {
-                ui.strong("DTS").on_hover_text("解码时间戳");
+                ui.strong("DTS").on_hover_text(tr("Decode timestamp", "解码时间戳"));
             });
             header.col(|ui| {
-                ui.strong("PTS").on_hover_text("显示时间戳");
+                ui.strong("PTS").on_hover_text(tr("Presentation timestamp", "显示时间戳"));
             });
             header.col(|ui| {
-                ui.strong("时长");
+                ui.strong(tr("Duration", "时长"));
             });
             header.col(|ui| {
-                ui.strong("大小");
+                ui.strong(tr("Size", "大小"));
             });
         })
         .body(|mut body| {
@@ -339,7 +340,7 @@ fn samples_table_ui(ui: &mut egui::Ui, video_descr: &VideoDataDescription) {
                     });
                     row.col(|ui| {
                         if is_sync {
-                            ui.label("同步");
+                            ui.label(tr("sync", "同步"));
                         }
                     });
                     row.col(|ui| {
@@ -357,7 +358,7 @@ fn samples_table_ui(ui: &mut egui::Ui, video_descr: &VideoDataDescription) {
                                     .to_string(),
                             );
                         } else {
-                            ui.monospace("未知");
+                            ui.monospace(tr("unknown", "未知"));
                         }
                     });
                     row.col(|ui| match source {
@@ -557,7 +558,7 @@ fn frame_info_ui(
     if let Some(is_sync) = is_sync
         && stream_kind == StreamKind::Video
     {
-        ui.list_item_flat_noninteractive(PropertyContent::new("同步").value_bool(is_sync))
+        ui.list_item_flat_noninteractive(PropertyContent::new(tr("Sync", "同步")).value_bool(is_sync))
             .on_hover_text(
                 "是否为新一组画面（GOP）的起点？\n\
                 若为真，通常说明该帧是关键帧。",

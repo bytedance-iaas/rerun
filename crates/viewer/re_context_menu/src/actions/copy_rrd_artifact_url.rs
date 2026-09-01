@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_viewer_context::Item;
 
 use crate::{ContextMenuAction, ContextMenuContext};
@@ -16,7 +17,7 @@ impl ContextMenuAction for CopyRrdArtifactUrl {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "复制 rrd 转换产物地址".to_owned()
+        tr("Copy rrd artifact address", "复制 rrd 转换产物地址").to_owned()
     }
 
     fn process_store_id(&self, ctx: &ContextMenuContext<'_>, store_id: &re_log_types::StoreId) {

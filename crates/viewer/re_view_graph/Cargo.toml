@@ -16,6 +16,7 @@ include = ["../../LICENSE-APACHE", "../../LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 workspace = true
 
 [dependencies]
+re_i18n.workspace = true
 re_byte_size = { workspace = true, features = ["egui"] }
 re_data_ui.workspace = true
 re_chunk.workspace = true

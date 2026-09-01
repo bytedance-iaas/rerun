@@ -1,5 +1,6 @@
 //! Support crate for context menu and actions.
 
+use re_i18n::tr;
 use std::sync::OnceLock;
 
 use egui::Popup;
@@ -189,7 +190,7 @@ fn action_list(
             vec![Box::new(CloneViewAction)],
             vec![
                 Box::new(SubMenu {
-                    label: "添加容器".to_owned(),
+                    label: tr("Add container", "添加容器").to_owned(),
                     actions: vec![
                         Box::new(AddContainerAction(ContainerKind::Tabs)),
                         Box::new(AddContainerAction(ContainerKind::Horizontal)),
@@ -198,7 +199,7 @@ fn action_list(
                     ],
                 }),
                 Box::new(SubMenu {
-                    label: "添加视图".to_owned(),
+                    label: tr("Add view", "添加视图").to_owned(),
                     actions: ctx
                         .view_class_registry()
                         .iter_registry()
@@ -213,7 +214,7 @@ fn action_list(
                 }),
             ],
             vec![Box::new(SubMenu {
-                label: "移动到新容器".to_owned(),
+                label: tr("Move to new container", "移动到新容器").to_owned(),
                 actions: vec![
                     Box::new(MoveContentsToNewContainerAction(ContainerKind::Tabs)),
                     Box::new(MoveContentsToNewContainerAction(ContainerKind::Horizontal)),
@@ -258,7 +259,7 @@ fn show_context_menu_for_selection(ctx: &ContextMenuContext<'_>, ui: &mut egui::
     // If anything was shown, then `should_display_separator` has to be true. We can therefore
     // recycle this flag for the empty menu message.
     if !should_display_separator {
-        ui.label(egui::RichText::from("当前选中项没有可用操作").italics());
+        ui.label(egui::RichText::from(tr("No action available for the current selection", "当前选中项没有可用操作")).italics());
     }
 }
 

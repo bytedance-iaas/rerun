@@ -23,6 +23,7 @@ default = []
 
 
 [dependencies]
+re_i18n.workspace = true
 re_async.workspace = true
 re_importer.workspace = true
 re_lerobot.workspace = true

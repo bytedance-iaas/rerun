@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_data_source::rrd_artifacts::ArtifactDeletionRequest;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 
@@ -24,7 +25,7 @@ impl DeleteArtifactsModal {
 
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("删除 rrd 制品？"),
+            || ModalWrapper::new(tr("Delete rrd artifacts?", "删除 rrd 制品？")),
             |ui| {
                 if request.episode.is_some() {
                     ui.label(

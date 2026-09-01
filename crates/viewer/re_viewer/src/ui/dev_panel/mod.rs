@@ -5,6 +5,7 @@ mod server_streaming_tab;
 mod streaming_history;
 mod transform_cache_ui;
 
+use re_i18n::tr;
 use ahash::HashMap;
 use egui_plot::HoverPosition;
 use plot_utils::history_to_plot;
@@ -48,13 +49,13 @@ enum DevPanelTab {
 impl DevPanelTab {
     fn label(&self) -> &'static str {
         match self {
-            Self::Flamegraph => "内存火焰图",
-            Self::TimeGraph => "随时间变化",
-            Self::Stores => "录制文件",
-            Self::Streaming => "服务器流式读取",
-            Self::AllocationTracking => "内存分配追踪",
+            Self::Flamegraph => tr("Flamegraph", "内存火焰图"),
+            Self::TimeGraph => tr("Over time", "随时间变化"),
+            Self::Stores => tr("Recordings", "录制文件"),
+            Self::Streaming => tr("Server streaming", "服务器流式读取"),
+            Self::AllocationTracking => tr("Allocation tracking", "内存分配追踪"),
             Self::Gpu => "GPU",
-            Self::TransformCache => "变换缓存",
+            Self::TransformCache => tr("Transform cache", "变换缓存"),
         }
     }
 }
@@ -130,7 +131,7 @@ impl DevPanel {
                 }
             },
             |ui| {
-                ui.small_icon_button(&re_ui::icons::CLOSE, "关闭开发者面板")
+                ui.small_icon_button(&re_ui::icons::CLOSE, tr("Close dev panel", "关闭开发者面板"))
                     .clicked()
             },
         );
@@ -147,7 +148,7 @@ impl DevPanel {
                 );
             }
             DevPanelTab::TimeGraph => {
-                ui.label("🗠 Rerun Viewer 内存占用随时间的变化");
+                ui.label(tr("🗠 Rerun Viewer memory use over time", "🗠 Rerun Viewer 内存占用随时间的变化"));
                 self.plot(ui, limit);
             }
             DevPanelTab::Stores => {
@@ -204,7 +205,7 @@ impl DevPanel {
         ui.set_min_height(ui.available_height());
 
         let Some(store_context) = store_context else {
-            ui.warning_label("没有选中活跃的录制文件，无法查看变换缓存。");
+            ui.warning_label(tr("No active recording selected for the transform cache.", "没有选中活跃的录制文件，无法查看变换缓存。"));
             return;
         };
 
@@ -236,7 +237,7 @@ impl DevPanel {
 
                         ui.separator();
                     }
-                    ui.collapsing("数据存储资源", |ui| {
+                    ui.collapsing(tr("Datastore Resources", "数据存储资源"), |ui| {
                         Self::chunk_store_stats(
                             ui,
                             &store_stats.store_config,
@@ -245,12 +246,12 @@ impl DevPanel {
                     });
 
                     ui.separator();
-                    ui.collapsing("主查询缓存", |ui| {
+                    ui.collapsing(tr("Primary Query Caches", "主查询缓存"), |ui| {
                         Self::caches_stats(ui, &store_stats.query_cache_stats);
                     });
 
                     ui.separator();
-                    ui.collapsing("Viewer 缓存", |ui| {
+                    ui.collapsing(tr("Viewer Caches", "Viewer 缓存"), |ui| {
                         ui.label(format!(
                             "GPU 内存：{}",
                             format_bytes(store_stats.cache_vram_usage.size_bytes() as f64)
@@ -261,7 +262,7 @@ impl DevPanel {
                 });
             }
         } else {
-            ui.label("没有可用的存储统计信息。");
+            ui.label(tr("No store statistics available.", "没有可用的存储统计信息。"));
         }
     }
 
@@ -269,9 +270,9 @@ impl DevPanel {
         let mut is_tracking_callstacks = re_memory::accounting_allocator::is_tracking_callstacks();
         ui.re_checkbox(
             &mut is_tracking_callstacks,
-            "启用详细的内存分配追踪",
+            tr("Enable detailed allocation tracking", "启用详细的内存分配追踪"),
         )
-        .on_hover_text("这会拖慢程序");
+        .on_hover_text(tr("This will slow down the program", "这会拖慢程序"));
         re_memory::accounting_allocator::set_tracking_callstacks(is_tracking_callstacks);
 
         ui.add_space(8.0);
@@ -287,7 +288,7 @@ impl DevPanel {
     }
 
     fn gpu_stats(ui: &mut egui::Ui, gpu_resource_stats: &WgpuResourcePoolStatistics) {
-        ui.strong("GPU 资源");
+        ui.strong(tr("GPU Resources", "GPU 资源"));
         ui.separator();
 
         egui::Grid::new("gpu resource grid")
@@ -306,34 +307,34 @@ impl DevPanel {
                     total_texture_size_in_bytes,
                 } = gpu_resource_stats;
 
-                ui.label("Bind group layout 数：");
+                ui.label(tr("# Bind Group Layouts:", "Bind group layout 数："));
                 ui.label(num_bind_group_layouts.to_string());
                 ui.end_row();
-                ui.label("Pipeline layout 数：");
+                ui.label(tr("# Pipeline Layouts:", "Pipeline layout 数："));
                 ui.label(num_pipeline_layouts.to_string());
                 ui.end_row();
-                ui.label("渲染管线数：");
+                ui.label(tr("# Render Pipelines:", "渲染管线数："));
                 ui.label(num_render_pipelines.to_string());
                 ui.end_row();
-                ui.label("采样器数：");
+                ui.label(tr("# Samplers:", "采样器数："));
                 ui.label(num_samplers.to_string());
                 ui.end_row();
-                ui.label("着色器模块数：");
+                ui.label(tr("# Shader Modules:", "着色器模块数："));
                 ui.label(num_shader_modules.to_string());
                 ui.end_row();
-                ui.label("Bind group 数：");
+                ui.label(tr("# Bind Groups:", "Bind group 数："));
                 ui.label(num_bind_groups.to_string());
                 ui.end_row();
-                ui.label("缓冲区数：");
+                ui.label(tr("# Buffers:", "缓冲区数："));
                 ui.label(num_buffers.to_string());
                 ui.end_row();
-                ui.label("纹理数：");
+                ui.label(tr("# Textures:", "纹理数："));
                 ui.label(num_textures.to_string());
                 ui.end_row();
-                ui.label("缓冲区内存：");
+                ui.label(tr("Buffer Memory:", "缓冲区内存："));
                 ui.label(re_format::format_bytes(*total_buffer_size_in_bytes as _));
                 ui.end_row();
-                ui.label("纹理内存：");
+                ui.label(tr("Texture Memory:", "纹理内存："));
                 ui.label(re_format::format_bytes(*total_texture_size_in_bytes as _));
                 ui.end_row();
             });
@@ -355,12 +356,12 @@ impl DevPanel {
                     temporal_chunks,
                 } = *store_stats;
 
-                ui.label(egui::RichText::new("统计").italics());
-                ui.label("Chunk 数");
-                ui.label("行数（总计）");
-                ui.label("事件数（总计）")
-                    .on_hover_text("非空组件批次（单元格）的数量");
-                ui.label("大小（总计）");
+                ui.label(egui::RichText::new(tr("Stats", "统计")).italics());
+                ui.label(tr("Chunks", "Chunk 数"));
+                ui.label(tr("Rows (total)", "行数（总计）"));
+                ui.label(tr("Events (total)", "事件数（总计）"))
+                    .on_hover_text(tr("Number of non-null component batches (cells)", "非空组件批次（单元格）的数量"));
+                ui.label(tr("Size (total)", "大小（总计）"));
                 ui.end_row();
 
                 fn label_chunk_stats(ui: &mut egui::Ui, stats: ChunkStoreChunkStats) {
@@ -377,15 +378,15 @@ impl DevPanel {
                     ui.label(re_format::format_bytes(total_size_bytes as _));
                 }
 
-                ui.label("静态：");
+                ui.label(tr("Static:", "静态："));
                 label_chunk_stats(ui, static_chunks);
                 ui.end_row();
 
-                ui.label("时序：");
+                ui.label(tr("Temporal:", "时序："));
                 label_chunk_stats(ui, temporal_chunks);
                 ui.end_row();
 
-                ui.label("总计：");
+                ui.label(tr("Total:", "总计："));
                 label_chunk_stats(ui, static_chunks + temporal_chunks);
                 ui.end_row();
             });
@@ -404,14 +405,14 @@ impl DevPanel {
                     egui::Grid::new("latest_at cache stats grid")
                         .num_columns(3)
                         .show(ui, |ui| {
-                            ui.label(egui::RichText::new("实体").underline());
-                            ui.label(egui::RichText::new("组件").underline());
-                            ui.label(egui::RichText::new("Chunk 数").underline())
-                                .on_hover_text("缓存里有多少个 chunk？");
-                            ui.label(egui::RichText::new("名义大小").underline())
-                                .on_hover_text("最坏情况下（即所有 chunk 都被完整复制时）这个缓存会有多大？");
-                            ui.label(egui::RichText::new("实际大小").underline())
-                                .on_hover_text("去重之后这个缓存实际有多大？");
+                            ui.label(egui::RichText::new(tr("Entity", "实体")).underline());
+                            ui.label(egui::RichText::new(tr("Component", "组件")).underline());
+                            ui.label(egui::RichText::new(tr("Chunks", "Chunk 数")).underline())
+                                .on_hover_text(tr("How many chunks in the cache?", "缓存里有多少个 chunk？"));
+                            ui.label(egui::RichText::new(tr("Effective size", "名义大小")).underline())
+                                .on_hover_text(tr("What would be the size of this cache in the worst case, i.e. if all chunks had been fully copied?", "最坏情况下（即所有 chunk 都被完整复制时）这个缓存会有多大？"));
+                            ui.label(egui::RichText::new(tr("Actual size", "实际大小")).underline())
+                                .on_hover_text(tr("What is the actual size of this cache after deduplication?", "去重之后这个缓存实际有多大？"));
                             ui.end_row();
 
                             for (cache_key, stats) in latest_at {
@@ -442,14 +443,14 @@ impl DevPanel {
                     egui::Grid::new("range cache stats grid")
                         .num_columns(4)
                         .show(ui, |ui| {
-                            ui.label(egui::RichText::new("实体").underline());
-                            ui.label(egui::RichText::new("组件").underline());
-                            ui.label(egui::RichText::new("Chunk 数").underline())
-                                .on_hover_text("缓存里有多少个 chunk？");
-                            ui.label(egui::RichText::new("名义大小").underline())
-                                .on_hover_text("最坏情况下（即所有 chunk 都被完整复制时）这个缓存会有多大？");
-                            ui.label(egui::RichText::new("实际大小").underline())
-                                .on_hover_text("去重之后这个缓存实际有多大？");
+                            ui.label(egui::RichText::new(tr("Entity", "实体")).underline());
+                            ui.label(egui::RichText::new(tr("Component", "组件")).underline());
+                            ui.label(egui::RichText::new(tr("Chunks", "Chunk 数")).underline())
+                                .on_hover_text(tr("How many chunks in the cache?", "缓存里有多少个 chunk？"));
+                            ui.label(egui::RichText::new(tr("Effective size", "名义大小")).underline())
+                                .on_hover_text(tr("What would be the size of this cache in the worst case, i.e. if all chunks had been fully copied?", "最坏情况下（即所有 chunk 都被完整复制时）这个缓存会有多大？"));
+                            ui.label(egui::RichText::new(tr("Actual size", "实际大小")).underline())
+                                .on_hover_text(tr("What is the actual size of this cache after deduplication?", "去重之后这个缓存实际有多大？"));
                             ui.end_row();
 
                             for (cache_key, stats) in range {
@@ -497,9 +498,9 @@ impl DevPanel {
             format_bytes(tracking_stats.overhead.size as _),
             format_uint(tracking_stats.overhead.count),
         ))
-        .on_hover_text("分配追踪器自身记账所用的内存");
+        .on_hover_text(tr("Used for the book-keeping of the allocation tracker", "分配追踪器自身记账所用的内存"));
 
-        egui::CollapsingHeader::new("内存占用大户")
+        egui::CollapsingHeader::new(tr("Top memory consumers", "内存占用大户"))
             .default_open(true)
             .show(ui, |ui| {
                 egui::ScrollArea::vertical()
@@ -528,13 +529,13 @@ impl DevPanel {
 
                             if ui
                                 .button(text)
-                                .on_hover_text("点击把调用栈复制到剪贴板")
+                                .on_hover_text(tr("Click to copy callstack to clipboard", "点击把调用栈复制到剪贴板"))
                                 .clicked()
                             {
                                 let mut text = callstack.readable_backtrace.to_string();
                                 if text.is_empty() {
                                     // This is weird
-                                    text = "没有可用的调用栈".to_owned();
+                                    text = tr("No callstack available", "没有可用的调用栈").to_owned();
                                 }
                                 ui.copy_text(text);
                             }
@@ -567,12 +568,12 @@ impl DevPanel {
             .show(ui, |plot_ui| {
                 if limit.is_limited() {
                     plot_ui
-                        .hline(egui_plot::HLine::new("上限", limit.as_bytes() as f64).width(2.0));
+                        .hline(egui_plot::HLine::new(tr("Limit", "上限"), limit.as_bytes() as f64).width(2.0));
                 }
 
                 for &time in &self.memory_purge_times {
                     plot_ui.vline(
-                        egui_plot::VLine::new("内存清理", time)
+                        egui_plot::VLine::new(tr("RAM purge", "内存清理"), time)
                             .color(ram_purge_color)
                             .width(2.0),
                     );
@@ -588,16 +589,16 @@ impl DevPanel {
                     counted_table_stores,
                 } = &self.history;
 
-                plot_ui.line(history_to_plot("常驻内存（RSS）", resident).width(1.5));
-                plot_ui.line(history_to_plot("分配器统计", counted_allocator).width(1.5));
-                plot_ui.line(history_to_plot("显存（VRAM）", counted_vram).width(1.5));
-                plot_ui.line(history_to_plot("录制文件", counted_recordings).width(1.5));
+                plot_ui.line(history_to_plot(tr("Resident", "常驻内存（RSS）"), resident).width(1.5));
+                plot_ui.line(history_to_plot(tr("Allocator", "分配器统计"), counted_allocator).width(1.5));
+                plot_ui.line(history_to_plot(tr("VRAM", "显存（VRAM）"), counted_vram).width(1.5));
+                plot_ui.line(history_to_plot(tr("Recordings", "录制文件"), counted_recordings).width(1.5));
 
                 if false {
                     // Intentionally omitted because they are uninteresting and clutter things up too much
                     plot_ui.line(history_to_plot("Blueprint", counted_blueprints).width(1.5));
-                    plot_ui.line(history_to_plot("查询缓存", counted_query_caches).width(1.5));
-                    plot_ui.line(history_to_plot("表格存储", counted_table_stores).width(1.5));
+                    plot_ui.line(history_to_plot(tr("Query caches", "查询缓存"), counted_query_caches).width(1.5));
+                    plot_ui.line(history_to_plot(tr("Table stores", "表格存储"), counted_table_stores).width(1.5));
                 }
             });
     }
@@ -651,9 +652,9 @@ pub fn memory_tree_ui(
 ) {
     // Add explanation at the top
     ui.horizontal(|ui| {
-        ui.label("内存火焰图，可视化内存占用树。");
+        ui.label(tr("Memory flamegraph visualizing the memory usage tree.", "内存火焰图，可视化内存占用树。"));
         ui.hyperlink_to(
-            "了解更多",
+            tr("Learn more", "了解更多"),
             "https://docs.rs/re_byte_size/latest/re_byte_size/trait.MemUsageTreeCapture.html",
         );
 
@@ -663,15 +664,15 @@ pub fn memory_tree_ui(
         }
     });
 
-    ui.label("双击重置视图，滚轮缩放，拖动平移。");
+    ui.label(tr("Double-click to reset view, scroll to zoom, drag to pan.", "双击重置视图，滚轮缩放，拖动平移。"));
 
-    ui.re_checkbox(include_rss, "包含 RSS")
-        .on_hover_text("在火焰图中包含常驻内存（RSS），即操作系统报告的总内存占用。它可能远大于实际使用量，因为我们的分配器（mimalloc）会保留内存页以备复用。");
+    ui.re_checkbox(include_rss, tr("Include RSS", "包含 RSS"))
+        .on_hover_text(tr("Include Resident Set Size (RSS) in the flamegraph. This shows total memory use as reported by the OS. This may be a lot bigger than what is actually _used_ because our allocator (mimalloc) retains pages in case they are needed again.", "在火焰图中包含常驻内存（RSS），即操作系统报告的总内存占用。它可能远大于实际使用量，因为我们的分配器（mimalloc）会保留内存页以备复用。"));
 
     ui.separator();
 
     let Some(mut tree) = tree else {
-        ui.label("没有可用的内存占用树。");
+        ui.label(tr("No memory usage tree available.", "没有可用的内存占用树。"));
         return;
     };
 

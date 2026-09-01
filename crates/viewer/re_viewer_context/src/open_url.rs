@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::sync::LazyLock;
 
 use re_chunk::ChunkId;
@@ -237,12 +238,12 @@ impl ViewerOpenUrl {
                     // `tos://` URLs are parsed into `Self::TosDataset` above;
                     // `LogDataSource::from_uri` never constructs this variant.
                     Err(anyhow::anyhow!(
-                        "TOS 数据集请通过 tos:// URL 或“从火山引擎 TOS 打开”对话框打开"
+                        tr("TOS datasets are opened via tos:// URLs or the 'Open from Volcengine TOS' dialog", "TOS 数据集请通过 tos:// URL 或“从火山引擎 TOS 打开”对话框打开")
                     ))
                 }
 
                 LogDataSource::HfDataset(_) => Err(anyhow::anyhow!(
-                    "Hugging Face 数据集请通过“从 Hugging Face 打开”对话框打开"
+                    tr("Hugging Face datasets are opened via the 'Open from Hugging Face' dialog", "Hugging Face 数据集请通过“从 Hugging Face 打开”对话框打开")
                 )),
             }
         } else if let Ok(url) = parse_webviewer_url(url) {
@@ -912,7 +913,7 @@ pub fn combine_with_base_url(
         Ok(url)
     } else {
         Err(anyhow::anyhow!(
-            "没有 web viewer 基础 URL 时，无法分享多个 URL"
+            tr("Can't share more than one URL without a web viewer base URL", "没有 web viewer 基础 URL 时，无法分享多个 URL")
         ))
     }
 }

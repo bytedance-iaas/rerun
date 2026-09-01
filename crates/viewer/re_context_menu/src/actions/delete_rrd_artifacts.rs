@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_viewer_context::Item;
 
 use crate::{ContextMenuAction, ContextMenuContext};
@@ -19,7 +20,7 @@ impl ContextMenuAction for DeleteRrdArtifact {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "删除 rrd 转换产物…".to_owned()
+        tr("Delete rrd artifact…", "删除 rrd 转换产物…").to_owned()
     }
 
     fn process_store_id(&self, _ctx: &ContextMenuContext<'_>, store_id: &re_log_types::StoreId) {
@@ -57,7 +58,7 @@ impl ContextMenuAction for DeleteDatasetRrdArtifacts {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "删除全部 rrd 转换产物…".to_owned()
+        tr("Delete all rrd artifacts…", "删除全部 rrd 转换产物…").to_owned()
     }
 
     fn process_app_id(&self, _ctx: &ContextMenuContext<'_>, app_id: &re_log_types::ApplicationId) {

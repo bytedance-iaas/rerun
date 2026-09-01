@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_entity_db::InstancePath;
 use re_viewer_context::{ContainerId, Contents, Item, ViewId};
 
@@ -33,9 +34,9 @@ impl ContextMenuAction for ShowAction {
 
     fn label(&self, ctx: &ContextMenuContext<'_>) -> String {
         if ctx.selection.len() > 1 {
-            "全部显示".to_owned()
+            tr("Show all", "全部显示").to_owned()
         } else {
-            "显示".to_owned()
+            tr("Show", "显示").to_owned()
         }
     }
 
@@ -93,9 +94,9 @@ impl ContextMenuAction for HideAction {
 
     fn label(&self, ctx: &ContextMenuContext<'_>) -> String {
         if ctx.selection.len() > 1 {
-            "全部隐藏".to_owned()
+            tr("Hide all", "全部隐藏").to_owned()
         } else {
-            "隐藏".to_owned()
+            tr("Hide", "隐藏").to_owned()
         }
     }
 

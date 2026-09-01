@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::collections::BTreeSet;
 
 use re_data_ui::item_ui::{self, timeline_button};
@@ -75,12 +76,14 @@ impl ViewClass for TextView {
     }
 
     fn help(&self, _os: egui::os::OperatingSystem) -> Help {
-        Help::new("Text log 视图")
+        Help::new(tr("Text log view", "Text log 视图"))
             .docs_link("https://rerun.io/docs/reference/types/views/text_log_view")
             .markdown(
-                "随时间排列的 TextLog 条目。
+                tr("TextLog entries over time.
 
-在 Selection 面板里过滤消息类型、切换列的显示。",
+Filter message types and toggle column visibility in a selection panel.", "随时间排列的 TextLog 条目。
+
+在 Selection 面板里过滤消息类型、切换列的显示。"),
             )
     }
 
@@ -522,7 +525,7 @@ fn view_property_ui_rows(ctx: &ViewContext<'_>, ui: &mut egui::Ui) {
                     &|_| {},
                     Some(&|ui| {
                         let Ok(state) = ctx.view_state.downcast_ref::<TextViewState>() else {
-                            ui.error_label("获取 text log 视图状态失败");
+                            ui.error_label(tr("Failed to get text log view state", "获取 text log 视图状态失败"));
                             return;
                         };
 
@@ -530,7 +533,7 @@ fn view_property_ui_rows(ctx: &ViewContext<'_>, ui: &mut egui::Ui) {
                             ctx,
                             TextLogRows::descriptor_filter_by_log_level().component,
                         ) else {
-                            ui.error_label("查询 text log 级别组件失败");
+                            ui.error_label(tr("Failed to query text log levels component", "查询 text log 级别组件失败"));
                             return;
                         };
 

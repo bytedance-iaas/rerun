@@ -2,6 +2,7 @@
 //!
 //! Note: the actual collapse/expand logic is in [`crate::collapse_expand`].
 
+use re_i18n::tr;
 use re_entity_db::InstancePath;
 use re_log_types::StoreKind;
 use re_viewer_context::{CollapseScope, ContainerId, Item, ItemContext, ViewId};
@@ -57,8 +58,8 @@ impl ContextMenuAction for CollapseExpandAllAction {
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
         match self {
-            Self::CollapseAll => "全部折叠".to_owned(),
-            Self::ExpandAll => "全部展开".to_owned(),
+            Self::CollapseAll => tr("Collapse all", "全部折叠").to_owned(),
+            Self::ExpandAll => tr("Expand all", "全部展开").to_owned(),
         }
     }
 

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_byte_size::NamedMemUsageTree;
 use re_entity_db::LogSource;
 use re_renderer::WgpuResourcePoolStatistics;
@@ -560,8 +561,8 @@ pub(super) fn file_saver_progress_ui(
                 .auto_sized()
                 .show(egui_ctx, |ui| {
                     ui.horizontal(|ui| {
-                        ui.loading_indicator("正在把文件写入磁盘");
-                        ui.label("正在把文件写入磁盘…");
+                        ui.loading_indicator(tr("Writing file to disk", "正在把文件写入磁盘"));
+                        ui.label(tr("Writing file to disk…", "正在把文件写入磁盘…"));
                     })
                 });
         }

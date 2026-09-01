@@ -2,6 +2,7 @@
 //!
 //! TODO(andreas): This is not a `data_ui`, can this go somewhere else, shouldn't be in `re_data_ui`.
 
+use re_i18n::tr;
 use re_entity_db::entity_db::EntityDbClass;
 use re_entity_db::{EntityTree, InstancePath};
 use re_format::format_uint;
@@ -289,9 +290,9 @@ fn entity_tree_stats_ui(
     let subtree_caveat = if tree.children.is_empty() {
         ""
     } else if include_subtree {
-        "（含子树）"
+        tr(" (including subtree)", "（含子树）")
     } else {
-        "（不含子树）"
+        tr(" (excluding subtree)", "（不含子树）")
     };
 
     let engine = db.storage_engine();
@@ -454,7 +455,7 @@ pub fn timeline_button_to(
 
     let response = ui
         .selectable_label(is_selected, text)
-        .on_hover_text("点击切换到这条时间轴");
+        .on_hover_text(tr("Click to switch to this timeline", "点击切换到这条时间轴"));
     if response.clicked() {
         ctx.send_time_commands_to_active_recording([
             TimeControlCommand::SetActiveTimeline(*timeline_name),
@@ -496,15 +497,15 @@ pub fn instance_hover_card_ui(
     include_subtree: bool,
 ) {
     if !ctx.db.is_known_entity(&instance_path.entity_path) {
-        ui.label("未知实体。");
+        ui.label(tr("Unknown entity.", "未知实体。"));
         return;
     }
 
     ui.horizontal(|ui| {
         let subtype_string = if instance_path.instance.is_all() {
-            "实体"
+            tr("Entity", "实体")
         } else {
-            "实体实例"
+            tr("Entity instance", "实体实例")
         };
         ui.strong(subtype_string);
         ui.label(instance_path.syntax_highlighted(ui.style()));
@@ -746,7 +747,7 @@ pub fn entity_db_button_ui(
                 rect,
                 1.0,
                 None,
-                "正在下载 episode",
+                tr("downloading episode", "正在下载 episode"),
             );
         })
     } else {
@@ -785,11 +786,11 @@ pub fn entity_db_button_ui(
         item_content = item_content.with_buttons(move |ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, "关闭录制文件")
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close recording", "关闭录制文件"))
                 .on_hover_text(match store_id.kind() {
-                    re_log_types::StoreKind::Recording => "关闭这个录制文件",
+                    re_log_types::StoreKind::Recording => tr("Close this recording", "关闭这个录制文件"),
                     re_log_types::StoreKind::Blueprint => {
-                        "关闭这个 blueprint（未保存的数据会丢失）"
+                        tr("Close this blueprint (unsaved data will be lost)", "关闭这个 blueprint（未保存的数据会丢失）")
                     }
                 });
             if resp.clicked() {
@@ -805,15 +806,15 @@ pub fn entity_db_button_ui(
             if can_hide {
                 if is_hidden {
                     if ui
-                        .small_icon_button(&icons::VISIBLE, "把这个 episode 移回列表")
-                        .on_hover_text("把这个 episode 移回列表")
+                        .small_icon_button(&icons::VISIBLE, tr("Move the episode back to the list", "把这个 episode 移回列表"))
+                        .on_hover_text(tr("Move the episode back to the list", "把这个 episode 移回列表"))
                         .clicked()
                     {
                         re_viewer_context::hidden_recordings::unhide(&store_id);
                     }
                 } else if ui
-                    .small_icon_button(&icons::INVISIBLE, "隐藏这个 episode")
-                    .on_hover_text("隐藏这个 episode")
+                    .small_icon_button(&icons::INVISIBLE, tr("Hide the episode", "隐藏这个 episode"))
+                    .on_hover_text(tr("Hide the episode", "隐藏这个 episode"))
                     .clicked()
                 {
                     re_viewer_context::hidden_recordings::hide(store_id.clone());
@@ -834,7 +835,7 @@ pub fn entity_db_button_ui(
                 ui.add_enabled_ui(!dataset_paused, |ui| {
                     if episode_loading {
                         if ui
-                            .small_icon_button(&icons::PAUSE, "暂停下载这个 episode")
+                            .small_icon_button(&icons::PAUSE, tr("Pause downloading this episode", "暂停下载这个 episode"))
                             .on_hover_text(
                                 "暂停下载这个 episode。\
                              点击该 episode（或它的继续按钮）可重新开始。",

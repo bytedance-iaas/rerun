@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_log_types::StoreKind;
 use re_sdk_types::archetypes::RecordingInfo;
 use re_sdk_types::components::Timestamp;
@@ -54,7 +55,7 @@ impl crate::AppUi for re_log_channel::LogSource {
             ui.spacing_mut().item_spacing.y = 0.0;
             if !recordings.is_empty() {
                 ui.add_space(8.0);
-                ui.strong("来自该数据源的录制文件");
+                ui.strong(tr("Recordings from this data source", "来自该数据源的录制文件"));
                 for db in recordings {
                     entity_db_button_ui(ctx, db, ui, ui_layout, true);
                 }
@@ -62,7 +63,7 @@ impl crate::AppUi for re_log_channel::LogSource {
 
             if !blueprints.is_empty() {
                 ui.add_space(8.0);
-                ui.strong("来自该数据源的 blueprint");
+                ui.strong(tr("Blueprints from this data source", "来自该数据源的 blueprint"));
                 for db in blueprints {
                     entity_db_button_ui(ctx, db, ui, ui_layout, true);
                 }

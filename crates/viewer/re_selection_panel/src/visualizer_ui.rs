@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::sync::Arc;
 
 use arrow::datatypes::DataType;
@@ -54,7 +55,7 @@ pub fn visualizer_ui(
         .lookup_result_by_path(entity_path.hash())
         .cloned()
     else {
-        ui.error_label("视图中找不到该实体");
+        ui.error_label(tr("Entity not found in view", "视图中找不到该实体"));
         return;
     };
     let view_visualizers = ctx.new_visualizer_collection();
@@ -78,7 +79,7 @@ pub fn visualizer_ui(
             );
         })
         .enabled(!available_visualizers.is_empty())
-        .on_hover_text("添加更多可视化器")
+        .on_hover_text(tr("Add additional visualizers", "添加更多可视化器"))
         .on_disabled_hover_text("No additional visualizers available");
 
     let markdown = "# Visualizers

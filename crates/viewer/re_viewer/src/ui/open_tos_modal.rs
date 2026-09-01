@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -206,16 +207,16 @@ impl OpenTosModal {
 
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("从火山引擎 TOS 打开"),
+            || ModalWrapper::new(tr("Open from Volcengine TOS", "从火山引擎 TOS 打开")),
             |ui| {
-                ui.strong("从 TOS 桶流式读取 LeRobot 数据集。");
+                ui.strong(tr("Stream a LeRobot dataset from a TOS bucket.", "从 TOS 桶流式读取 LeRobot 数据集。"));
                 ui.add_space(4.0);
 
                 let url_response = egui::Grid::new("tos_fields")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
-                        ui.label("数据集 URL：");
+                        ui.label(tr("Dataset URL:", "数据集 URL："));
                         let url_edit = egui::TextEdit::singleline(&mut self.url)
                             .hint_text("tos://bucket/path/to/dataset/")
                             .desired_width(f32::INFINITY)

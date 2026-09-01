@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::{AtomExt as _, IntoAtoms, NumExt as _};
 use re_ui::list_item::PropertyContent;
 use re_ui::modal::{ModalHandler, ModalWrapper};
@@ -79,7 +80,7 @@ impl ShareModal {
         let enable_share_button = url_for_current_screen.is_ok() && route != &Route::welcome_page();
 
         let share_button_resp = ui
-            .add_enabled_ui(enable_share_button, |ui| ui.button("分享"))
+            .add_enabled_ui(enable_share_button, |ui| ui.button(tr("Share", "分享")))
             .inner;
 
         match url_for_current_screen {
@@ -109,7 +110,7 @@ impl ShareModal {
 
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("分享"),
+            || ModalWrapper::new(tr("Share", "分享")),
             |ui| {
                 let panel_max_height = (ui.content_rect().height() - 100.0)
                     .at_least(0.0)
@@ -130,7 +131,7 @@ impl ShareModal {
                     // Ideally we'd keep this interactive but don't allow text edits, but `TextEdit` doesn't have this option yet.
                     let mut url_for_text_edit = url_string.clone();
                     egui::TextEdit::singleline(&mut url_for_text_edit)
-                        .hint_text("<无法生成分享链接>") // No known way to get into this situation.
+                        .hint_text(tr("<can't share link>", "<无法生成分享链接>")) // No known way to get into this situation.
                         .text_color(ui.style().visuals.strong_text_color())
                         .desired_width(f32::INFINITY) // Take up the entire space.
                         .show(ui);
@@ -141,7 +142,7 @@ impl ShareModal {
                 let copy_link_label = if self.show_copied_feedback {
                     (
                         egui::Atom::grow(),
-                        "已复制到剪贴板！",
+                        tr("Copied to clipboard!", "已复制到剪贴板！"),
                         egui::Atom::grow(),
                     )
                         .into_atoms()
@@ -149,7 +150,7 @@ impl ShareModal {
                     (
                         egui::Atom::grow(),
                         icons::URL.as_image().tint(ui.tokens().icon_inverse),
-                        "复制链接",
+                        tr("Copy link", "复制链接"),
                         egui::Atom::grow(),
                     )
                         .into_atoms()
@@ -235,12 +236,12 @@ fn url_settings_ui(
     url: &mut ViewerOpenUrl,
     create_web_viewer_url: &mut bool,
 ) {
-    ui.list_item_flat_noninteractive(PropertyContent::new("链接格式").value_fn(|ui, _| {
+    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Link format", "链接格式")).value_fn(|ui, _| {
         ui.selectable_toggle(|ui| {
-            selectable_value_with_min_width(ui, MIN_TOGGLE_WIDTH_RH, create_web_viewer_url, false, "仅数据源")
-                .on_hover_text("链接只能在已打开的 Viewer 里使用，不能直接粘贴到浏览器地址栏。");
+            selectable_value_with_min_width(ui, MIN_TOGGLE_WIDTH_RH, create_web_viewer_url, false, tr("Only source", "仅数据源"))
+                .on_hover_text(tr("Link works only in already opened viewers and not in the browser's address bar.", "链接只能在已打开的 Viewer 里使用，不能直接粘贴到浏览器地址栏。"));
             selectable_value_with_available_width(ui, create_web_viewer_url, true, "Web viewer")
-                .on_hover_text("链接可以直接粘贴到浏览器地址栏打开一个新的 Viewer，也仍然可以在本地原生 Viewer 里使用。");
+                .on_hover_text(tr("Link works in the browser's address bar, opening a new viewer. You can still use this link in the native viewer as well.", "链接可以直接粘贴到浏览器地址栏打开一个新的 Viewer，也仍然可以在本地原生 Viewer 里使用。"));
         });
     }));
 
@@ -284,17 +285,17 @@ fn fragment_ui(
     });
 
     let mut any_time = when.is_some();
-    ui.list_item_flat_noninteractive(PropertyContent::new("时间标记").value_fn(|ui, _| {
+    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Time cursor", "时间标记")).value_fn(|ui, _| {
         ui.selectable_toggle(|ui| {
             selectable_value_with_min_width(
                 ui,
                 MIN_TOGGLE_WIDTH_RH,
                 &mut any_time,
                 false,
-                "起始位置",
+                tr("At the start", "起始位置"),
             );
             ui.add_enabled_ui(current_time_cursor.is_some(), |ui| {
-                let mut label = egui::Atoms::new(egui::Atom::from("当前位置"));
+                let mut label = egui::Atoms::new(egui::Atom::from(tr("Current", "当前位置")));
                 if let Some((_, time_cell)) = current_time_cursor {
                     label.push_right({
                         let time = time_cell.format(timestamp_format);
@@ -305,7 +306,7 @@ fn fragment_ui(
                 label.push_right(egui::Atom::grow());
 
                 selectable_value_with_available_width(ui, &mut any_time, true, label)
-                    .on_disabled_hover_text("没有选中的时间。");
+                    .on_disabled_hover_text(tr("No time selected.", "没有选中的时间。"));
             });
         });
     }));
@@ -313,17 +314,17 @@ fn fragment_ui(
     ui.add_space(8.0);
 
     let mut any_selection = time_selection.is_some();
-    ui.list_item_flat_noninteractive(PropertyContent::new("时间选区").value_fn(|ui, _| {
+    ui.list_item_flat_noninteractive(PropertyContent::new(tr("Time selection", "时间选区")).value_fn(|ui, _| {
         ui.selectable_toggle(|ui| {
             selectable_value_with_min_width(
                 ui,
                 MIN_TOGGLE_WIDTH_RH,
                 &mut any_selection,
                 false,
-                "不带选区",
+                tr("No selection", "不带选区"),
             );
             ui.add_enabled_ui(current_time_selection.is_some(), |ui| {
-                let mut label = egui::Atoms::new(egui::Atom::from("当前选区"));
+                let mut label = egui::Atoms::new(egui::Atom::from(tr("Current", "当前选区")));
                 if let Some(time_selection) = &current_time_selection {
                     label.push_right({
                         egui::RichText::new(time_selection.format(timestamp_format))
@@ -336,7 +337,7 @@ fn fragment_ui(
                 label.push_right(egui::Atom::grow());
 
                 selectable_value_with_available_width(ui, &mut any_selection, true, label)
-                    .on_disabled_hover_text("没有选中的时间。");
+                    .on_disabled_hover_text(tr("No time selected.", "没有选中的时间。"));
             });
         });
     }));

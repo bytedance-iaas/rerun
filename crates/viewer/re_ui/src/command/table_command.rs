@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::KeyboardShortcut;
 use egui::os::OperatingSystem;
 use smallvec::SmallVec;
@@ -55,8 +56,8 @@ impl TableCommandKind {
     pub fn text_and_tooltip(self) -> (&'static str, &'static str) {
         match self {
             Self::Refresh => (
-                "刷新表",
-                "刷新当前数据集或表的内容",
+                tr("Refresh table", "刷新表"),
+                tr("Refresh the contents of the current dataset or table", "刷新当前数据集或表的内容"),
             ),
         }
     }

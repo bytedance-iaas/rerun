@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::str::FromStr as _;
 use std::sync::Arc;
 
@@ -791,12 +792,12 @@ impl<'a> DataFusionTableWidget<'a> {
                         |ui| {
                             ui.set_height(height);
 
-                            ui.label("行数：");
+                            ui.label(tr("rows:", "行数："));
                             ui.strong(format_uint(total_rows));
 
                             ui.add_space(16.0);
 
-                            ui.label("列数：");
+                            ui.label(tr("columns:", "列数："));
                             ui.strong(format!(
                                 "{} out of {}",
                                 format_uint(visible_columns),
@@ -825,7 +826,7 @@ impl<'a> DataFusionTableWidget<'a> {
                                 ctx.app_options.timestamp_format,
                                 Ui::strong,
                             );
-                            ui.label("最近更新：");
+                            ui.label(tr("Last updated:", "最近更新："));
                         },
                     );
                 });

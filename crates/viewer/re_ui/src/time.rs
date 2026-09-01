@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::ops::Sub as _;
 
 use re_log_types::{Timestamp, TimestampFormat};
@@ -17,18 +18,18 @@ pub fn format_duration_short(timestamp: Timestamp, fallback_format: TimestampFor
     let format_plural = |n: u64, unit: &'static str| format!("{n} {unit}前");
 
     if seconds < 10 {
-        "刚刚".to_owned()
+        tr("just now", "刚刚").to_owned()
     } else if seconds < 60 {
-        "不到一分钟前".to_owned()
+        tr("less than a minute ago", "不到一分钟前").to_owned()
     } else if seconds < 3600 {
         let minutes = seconds / 60;
-        format_plural(minutes, "分钟")
+        format_plural(minutes, tr("minute", "分钟"))
     } else if seconds < 24 * 3600 {
         let hours = seconds / 3600;
-        format_plural(hours, "小时")
+        format_plural(hours, tr("hour", "小时"))
     } else if seconds < 7 * 24 * 3600 {
         let days = seconds / 86400;
-        format_plural(days, "天")
+        format_plural(days, tr("day", "天"))
     } else {
         timestamp.format(fallback_format)
     }

@@ -6,6 +6,7 @@
 //! `docs/release/user-guide/`; the web deployment additionally serves it as HTML at
 //! `/docs/` (see deploy/Dockerfile) for reading or sharing outside the viewer.
 
+use re_i18n::tr;
 use std::sync::OnceLock;
 
 struct Page {
@@ -15,11 +16,11 @@ struct Page {
 
 const PAGES: &[Page] = &[
     Page {
-        tab: "Viewer 篇",
+        tab: tr("Viewer", "Viewer 篇"),
         markdown: include_str!("../../../../../docs/release/user-guide/01-viewer.md"),
     },
     Page {
-        tab: "Catalog server 篇",
+        tab: tr("Catalog server", "Catalog server 篇"),
         markdown: include_str!("../../../../../docs/release/user-guide/02-catalog.md"),
     },
 ];

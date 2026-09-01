@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::fmt::Write as _;
 
 use indexmap::IndexMap;
@@ -265,12 +266,12 @@ impl ItemCollection {
             let entries = entries.map(|(_, text)| text).collect_vec();
 
             let desc = match desc {
-                ClipboardTextDesc::FilePath => "文件路径",
+                ClipboardTextDesc::FilePath => tr("file path", "文件路径"),
                 ClipboardTextDesc::Url => "URL",
-                ClipboardTextDesc::AppId => "应用 ID",
-                ClipboardTextDesc::StoreId => "存储 ID",
-                ClipboardTextDesc::EntityPath => "实体路径",
-                ClipboardTextDesc::ComponentPath => "组件路径",
+                ClipboardTextDesc::AppId => tr("app id", "应用 ID"),
+                ClipboardTextDesc::StoreId => tr("store id", "存储 ID"),
+                ClipboardTextDesc::EntityPath => tr("entity path", "实体路径"),
+                ClipboardTextDesc::ComponentPath => tr("component path", "组件路径"),
             };
             if !content_description.is_empty() {
                 content_description.push_str("、");

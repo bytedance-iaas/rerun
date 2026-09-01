@@ -1,5 +1,6 @@
 //! The main Rerun drop-down menu found in the top panel.
 
+use re_i18n::tr;
 use std::fmt::Write as _;
 
 use egui::ScrollArea;
@@ -49,7 +50,7 @@ impl App {
         if ui
             .add_enabled(
                 has_back,
-                ui.small_icon_button_widget(&re_ui::icons::ARROW_LEFT, "后退"),
+                ui.small_icon_button_widget(&re_ui::icons::ARROW_LEFT, tr("go back", "后退")),
             )
             .on_hover_ui(|ui| UICommand::NavigateBack.tooltip_ui(ui))
             .clicked()
@@ -60,7 +61,7 @@ impl App {
         if ui
             .add_enabled(
                 has_forward,
-                ui.small_icon_button_widget(&re_ui::icons::ARROW_RIGHT, "前进"),
+                ui.small_icon_button_widget(&re_ui::icons::ARROW_RIGHT, tr("go forward", "前进")),
             )
             .on_hover_ui(|ui| UICommand::NavigateForward.tooltip_ui(ui))
             .clicked()
@@ -79,7 +80,7 @@ impl App {
         // no wrapping: make as wide as needed
 
         let build_info = self.build_info();
-        ui.menu_button("关于", |ui| {
+        ui.menu_button(tr("About", "关于"), |ui| {
             about_rerun_ui(ui, build_info, render_state);
         });
 
@@ -103,7 +104,7 @@ impl App {
         ui.separator();
         ui.add_enabled(
             false,
-            egui::Button::new(egui::RichText::new("扩展功能").italics()),
+            egui::Button::new(egui::RichText::new(tr("Extended", "扩展功能")).italics()),
         );
         UICommand::OpenTosDataset.menu_button_ui(ui, &self.command_sender);
         UICommand::OpenHfDataset.menu_button_ui(ui, &self.command_sender);
@@ -123,7 +124,7 @@ impl App {
             re_ui::menu::align_non_button_menu_items(ui, |ui| {
                 ui.weak(format!("当前缩放：{:.0}%", zoom_factor * 100.0))
                     .on_hover_text(
-                        "在操作系统默认值基础上的界面缩放比例",
+                        tr("The UI zoom level on top of the operating system's default value", "在操作系统默认值基础上的界面缩放比例"),
                     );
             });
             UICommand::ZoomIn.menu_button_ui(ui, &self.command_sender);
@@ -207,11 +208,11 @@ impl App {
             ui.add_enabled_ui(false, |ui| {
                 ui.horizontal(|ui| {
                     ui.add(save_recording_button);
-                    ui.loading_indicator("正在保存录制文件");
+                    ui.loading_indicator(tr("Saving recording", "正在保存录制文件"));
                 });
                 ui.horizontal(|ui| {
                     ui.add(save_selection_button);
-                    ui.loading_indicator("正在保存选中时间段");
+                    ui.loading_indicator(tr("Saving selection", "正在保存选中时间段"));
                 });
             });
         } else {
@@ -221,7 +222,7 @@ impl App {
             ui.add_enabled_ui(recording_id.is_some(), |ui| {
                 if ui
                     .add(save_recording_button)
-                    .on_hover_text("把全部数据保存为 Rerun 数据文件（.rrd）")
+                    .on_hover_text(tr("Save all data to a Rerun data file (.rrd)", "把全部数据保存为 Rerun 数据文件（.rrd）"))
                     .clicked()
                     && let Some(recording_id) = recording_id
                 {
@@ -242,7 +243,7 @@ impl App {
                 if ui
                     .add_enabled(loop_selection.is_some(), save_selection_button)
                     .on_hover_text(
-                        "把当前循环选区内的数据保存为 Rerun 数据文件（.rrd）",
+                        tr("Save data for the current loop selection to a Rerun data file (.rrd)", "把当前循环选区内的数据保存为 Rerun 数据文件（.rrd）"),
                     )
                     .clicked()
                     && let Some(recording_id) = recording_id
@@ -298,14 +299,14 @@ pub fn about_rerun_ui(
         ui.vertical(|ui|{
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.label(
-                "Rerun 是面向机器人和具身智能的工具链，让多频率、多模态数据的记录、查询、可视化和训练变得简单。",
+                tr("Rerun is a toolchain for robotics and physical AI that makes it easy to log, query, visualize, and train on multi-rate, multimodal data.", "Rerun 是面向机器人和具身智能的工具链，让多频率、多模态数据的记录、查询、可视化和训练变得简单。"),
             );
 
             ui.add_space(4.0);
 
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                ui.label("了解更多请访问 ");
+                ui.label(tr("Learn more at ", "了解更多请访问 "));
                 ui.hyperlink_to("rerun.io", "https://rerun.io/");
                 ui.label("。");
             });
@@ -334,12 +335,12 @@ pub fn about_rerun_ui(
         ui.label(crate_name.as_ref());
         ui.end_row();
 
-        ui.label("版本");
+        ui.label(tr("Version", "版本"));
         ui.label(version);
         ui.end_row();
 
         if !datetime.is_empty() {
-            ui.label("构建时间");
+            ui.label(tr("Built", "构建时间"));
             ui.label(datetime.as_ref());
             ui.end_row();
         }
@@ -347,17 +348,17 @@ pub fn about_rerun_ui(
         // It is really the features of `rerun-cli` (the `rerun` binary) that are interesting.
         // For the web-viewer (`crate_name: "re_viewer"`) it is much less interesting.
         if crate_name == "rerun-cli" && !features.is_empty() {
-            ui.label("特性");
+            ui.label(tr("Features", "特性"));
             ui.label(features.as_ref());
             ui.end_row();
         }
 
-        ui.label("平台");
+        ui.label(tr("Platform", "平台"));
         ui.label(target_triple.as_ref());
         ui.end_row();
 
         if !rustc_version.is_empty() {
-            ui.label("编译器");
+            ui.label(tr("Compiler", "编译器"));
             let mut compiler = format!("rustc {rustc_version}");
             if !llvm_version.is_empty() {
                 write!(compiler, ", LLVM {llvm_version}").ok();
@@ -398,43 +399,43 @@ fn render_state_ui(ui: &mut egui::Ui, render_state: &egui_wgpu::RenderState) {
         // > name: "ANGLE (Apple, Apple M1 Pro, OpenGL 4.1)", device_type: IntegratedGpu, backend: Gl, driver: "", driver_info: ""
 
         egui::Grid::new("adapter_info").show(ui, |ui| {
-            ui.label("渲染后端");
+            ui.label(tr("Backend", "渲染后端"));
             ui.label(backend.to_str()); // TODO(wgpu#5170): Use std::fmt::Display for backend.
             ui.end_row();
 
-            ui.label("设备类型");
+            ui.label(tr("Device Type", "设备类型"));
             ui.label(match device_type {
-                wgpu::DeviceType::Other => "其他",
-                wgpu::DeviceType::IntegratedGpu => "集成显卡",
-                wgpu::DeviceType::DiscreteGpu => "独立显卡",
-                wgpu::DeviceType::VirtualGpu => "虚拟显卡",
+                wgpu::DeviceType::Other => tr("Other", "其他"),
+                wgpu::DeviceType::IntegratedGpu => tr("Integrated GPU", "集成显卡"),
+                wgpu::DeviceType::DiscreteGpu => tr("Discrete GPU", "独立显卡"),
+                wgpu::DeviceType::VirtualGpu => tr("Virtual GPU", "虚拟显卡"),
                 wgpu::DeviceType::Cpu => "CPU",
             });
             ui.end_row();
 
             if !name.is_empty() {
-                ui.label("名称");
+                ui.label(tr("Name", "名称"));
                 ui.label(name);
                 ui.end_row();
             }
             if !driver.is_empty() {
-                ui.label("驱动");
+                ui.label(tr("Driver", "驱动"));
                 ui.label(driver);
                 ui.end_row();
             }
             if !driver_info.is_empty() {
-                ui.label("驱动信息");
+                ui.label(tr("Driver info", "驱动信息"));
                 ui.label(driver_info);
                 ui.end_row();
             }
             if *vendor != 0 {
                 // TODO(emilk): decode using https://github.com/gfx-rs/wgpu/blob/767ac03245ee937d3dc552edc13fe7ab0a860eec/wgpu-hal/src/auxil/mod.rs#L7
-                ui.label("厂商");
+                ui.label(tr("Vendor", "厂商"));
                 ui.label(format!("0x{vendor:04X}"));
                 ui.end_row();
             }
             if *device != 0 {
-                ui.label("设备");
+                ui.label(tr("Device", "设备"));
                 ui.label(format!("0x{device:02X}"));
                 ui.end_row();
             }
@@ -450,13 +451,13 @@ fn render_state_ui(ui: &mut egui::Ui, render_state: &egui_wgpu::RenderState) {
     };
 
     egui::Grid::new("wgpu_info").num_columns(2).show(ui, |ui| {
-        ui.label("渲染后端");
+        ui.label(tr("Rendering backend", "渲染后端"));
         wgpu_adapter_ui(ui, &render_state.adapter);
         ui.end_row();
 
         #[cfg(not(target_arch = "wasm32"))]
         if 1 < render_state.available_adapters.len() {
-            ui.label("其他可用渲染后端");
+            ui.label(tr("Other rendering backends", "其他可用渲染后端"));
             ui.vertical(|ui| {
                 for adapter in &*render_state.available_adapters {
                     if adapter.get_info() != render_state.adapter.get_info() {

@@ -1,5 +1,6 @@
 //! The [`LinkButton`] "smart link" button widget.
 
+use re_i18n::tr;
 use egui::IntoAtoms;
 
 use crate::button::ReButton;
@@ -65,7 +66,7 @@ impl LinkButton {
                     .tiny()
                     .image_tint_follows_text_color(tint_icons)
             });
-        let copy_response = copy_response.map(|r| r.on_hover_text("复制链接"));
+        let copy_response = copy_response.map(|r| r.on_hover_text(tr("Copy link", "复制链接")));
 
         response.response = response
             .response

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_sdk_types::blueprint::archetypes::EyeControls3D;
 use re_viewer_context::{Item, ViewId};
 use re_viewport_blueprint::ViewProperty;
@@ -32,7 +33,7 @@ impl ContextMenuAction for TrackEntity {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "设为视角跟踪目标".to_owned()
+        tr("Set as eye tracked", "设为视角跟踪目标").to_owned()
     }
 
     fn process_data_result(

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use ahash::HashMap;
 use egui::NumExt as _;
 use itertools::izip;
@@ -50,19 +51,19 @@ impl ViewClass for BarChartView {
             ..
         } = egui::InputOptions::default(); // This is OK, since we don't allow the user to change these modifiers.
 
-        Help::new("Bar chart 视图")
+        Help::new(tr("Bar chart view", "Bar chart 视图"))
             .docs_link("https://rerun.io/docs/reference/types/views/bar_chart_view")
-            .control("平移", (icons::LEFT_MOUSE_CLICK, "+", "拖动"))
+            .control(tr("Pan", "平移"), (icons::LEFT_MOUSE_CLICK, "+", tr("drag", "拖动")))
             .control(
-                "水平平移",
+                tr("Horizontal pan", "水平平移"),
                 IconText::from_modifiers_and(os, horizontal_scroll_modifier, icons::SCROLL),
             )
             .control(
-                "缩放",
+                tr("Zoom", "缩放"),
                 IconText::from_modifiers_and(os, zoom_modifier, icons::SCROLL),
             )
             .control(
-                "缩放 X 轴",
+                tr("Zoom X-axis", "缩放 X 轴"),
                 IconText::from_modifiers_and(
                     os,
                     zoom_modifier | horizontal_scroll_modifier,
@@ -70,7 +71,7 @@ impl ViewClass for BarChartView {
                 ),
             )
             .control(
-                "缩放 Y 轴",
+                tr("Zoom Y-axis", "缩放 Y 轴"),
                 IconText::from_modifiers_and(
                     os,
                     zoom_modifier | vertical_scroll_modifier,
@@ -78,10 +79,10 @@ impl ViewClass for BarChartView {
                 ),
             )
             .control(
-                "缩放到选区",
-                (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "拖动"),
+                tr("Zoom to selection", "缩放到选区"),
+                (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", tr("drag", "拖动")),
             )
-            .control("重置视角", ("双击", icons::LEFT_MOUSE_CLICK))
+            .control(tr("Reset view", "重置视角"), (tr("double", "双击"), icons::LEFT_MOUSE_CLICK))
     }
 
     fn on_register(

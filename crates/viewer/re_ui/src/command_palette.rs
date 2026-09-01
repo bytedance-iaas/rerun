@@ -17,6 +17,7 @@
 //! /car/open_door/
 //! ```
 
+use re_i18n::tr;
 use std::collections::BTreeSet;
 
 use egui::text::LayoutJob;
@@ -312,7 +313,7 @@ impl CommandPalette {
         let num_groups = groups.len();
 
         if num_groups == 0 {
-            ui.weak("没有匹配结果");
+            ui.weak(tr("No matching results", "没有匹配结果"));
             return None;
         }
 
@@ -426,7 +427,7 @@ impl CommandPalette {
                         f32::INFINITY,
                     ),
                     kb_shortcut: String::new(),
-                    tooltip: Some("显示这一组的全部匹配项".to_owned()),
+                    tooltip: Some(tr("Show all matches in this group", "显示这一组的全部匹配项").to_owned()),
                 };
 
                 let state = if selected {

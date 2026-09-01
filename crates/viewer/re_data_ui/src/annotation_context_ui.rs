@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::{NumExt as _, Vec2, color_picker};
 use itertools::Itertools as _;
 use re_log_types::EntityPath;
@@ -144,7 +145,7 @@ impl DataUi for AnnotationContext {
             }
             UiLayout::SelectionPanel => {
                 ui.vertical(|ui| {
-                    ui.maybe_collapsing_header(true, "类别", true, |ui| {
+                    ui.maybe_collapsing_header(true, tr("Classes", "类别"), true, |ui| {
                         let annotation_infos = self
                             .0
                             .iter()
@@ -222,10 +223,10 @@ fn class_description_ui(
                     .header(tokens.deprecated_table_header_height(), |mut header| {
                         re_ui::DesignTokens::setup_table_header(&mut header);
                         header.col(|ui| {
-                            ui.strong("起点");
+                            ui.strong(tr("From", "起点"));
                         });
                         header.col(|ui| {
-                            ui.strong("终点");
+                            ui.strong(tr("To", "终点"));
                         });
                     })
                     .body(|mut body| {
@@ -294,13 +295,13 @@ fn annotation_info_table_ui(
         .header(tokens.deprecated_table_header_height(), |mut header| {
             re_ui::DesignTokens::setup_table_header(&mut header);
             header.col(|ui| {
-                ui.strong("类别 ID");
+                ui.strong(tr("Class Id", "类别 ID"));
             });
             header.col(|ui| {
-                ui.strong("标签");
+                ui.strong(tr("Label", "标签"));
             });
             header.col(|ui| {
-                ui.strong("颜色");
+                ui.strong(tr("Color", "颜色"));
             });
         })
         .body(|mut body| {
@@ -334,8 +335,8 @@ fn color_ui(ui: &mut egui::Ui, info: &AnnotationInfo, size: Vec2) {
             .map_or_else(|| auto_color_egui(info.id), |color| color.into());
         color_picker::show_color(ui, color, size);
         if info.color.is_none() {
-            ui.weak("（自动）")
-                .on_hover_text("未记录颜色，此颜色为自动选取");
+            ui.weak(tr("(auto)", "（自动）"))
+                .on_hover_text(tr("Color chosen automatically, since it was not logged", "未记录颜色，此颜色为自动选取"));
         }
     });
 }
@@ -355,6 +356,6 @@ fn small_color_ui(ui: &mut egui::Ui, info: &AnnotationInfo) {
     let response = color_picker::show_color(ui, color, size);
 
     if info.color.is_none() {
-        response.on_hover_text("未记录颜色，此颜色为自动选取");
+        response.on_hover_text(tr("Color chosen automatically, since it was not logged", "未记录颜色，此颜色为自动选取"));
     }
 }

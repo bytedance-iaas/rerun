@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::str::FromStr as _;
 
 use egui::{NumExt as _, Ui};
@@ -43,7 +44,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
 
     ui.horizontal(|ui| {
         ui.add(egui::Label::new(
-            egui::RichText::new("设置")
+            egui::RichText::new(tr("Settings", "设置"))
                 .strong()
                 .line_height(Some(32.0))
                 .text_style(DesignTokens::welcome_screen_h2()),
@@ -54,7 +55,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
             egui::Layout::right_to_left(egui::Align::Center),
             |ui| {
                 if ui
-                    .small_icon_button(&re_ui::icons::CLOSE, "关闭")
+                    .small_icon_button(&re_ui::icons::CLOSE, tr("Close", "关闭"))
                     .clicked()
                 {
                     *keep_open = false;
@@ -69,10 +70,10 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
 
     separator_with_some_space(ui);
 
-    ui.strong("通用");
+    ui.strong(tr("General", "通用"));
 
     ui.horizontal(|ui| {
-        ui.label("主题");
+        ui.label(tr("Theme", "主题"));
         egui::global_theme_preference_buttons(ui);
     });
 
@@ -101,14 +102,14 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
     ui.add_space(8.0);
 
     egui::Grid::new("prefetcher").num_columns(2).show(ui, |ui| {
-        ui.label("内存预算");
+        ui.label(tr("Memory budget", "内存预算"));
         memory_budget_section_ui(ui, memory_limit);
         ui.help_button(|ui| {
-            ui.label("达到这个上限后，会开始从内存中清理数据");
+            ui.label(tr("When this limit is reached we start purging data from RAM", "达到这个上限后，会开始从内存中清理数据"));
         });
         ui.end_row();
 
-        ui.label("预取");
+        ui.label(tr("Prefetch", "预取"));
         prefetch_stage_combo_box_ui(ui, max_fetch_stage);
         ui.help_button(|ui| {
             ui.label(

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::task::Poll;
@@ -296,7 +297,7 @@ impl Server {
                 // Navigate up one level.
                 if ui
                     .small_icon_button(&icons::ARROW_UP, "Go to parent folder")
-                    .on_hover_text("回到上一级文件夹")
+                    .on_hover_text(tr("Go to parent folder", "回到上一级文件夹"))
                     .clicked()
                 {
                     let parent_route = if let Some((parent, _)) =
@@ -492,7 +493,7 @@ fn error_ui(
                                 ui.text_style_height(&egui::TextStyle::Button) + 2.0 * 4.0;
                             ui.set_min_height(cancel_button_height);
                             ui.loading_indicator("Waiting for login");
-                            ui.label("正在等待登录…");
+                            ui.label(tr("Waiting for login…", "正在等待登录…"));
                             ui.add_space(8.0);
                             if ui
                                 .add(

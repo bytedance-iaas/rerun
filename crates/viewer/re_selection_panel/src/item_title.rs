@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::WidgetText;
 use re_chunk::EntityPath;
 use re_data_ui::item_ui::guess_instance_path_icon;
@@ -72,7 +73,7 @@ impl ItemTitle {
                     item_title.with_tooltip(
                         SyntaxHighlightedBuilder::new()
                             .with(instance_path)
-                            .with_body(" 位于视图 ")
+                            .with_body(tr(" in view ", " 位于视图 "))
                             .with(&view.display_name_or_default())
                             .into_widget_text(&ctx.egui_ctx().global_style()),
                     )
@@ -170,7 +171,7 @@ impl ItemTitle {
         )
         .with_tooltip(format!(
             "{}组件 {}，属于实体 '{}'",
-            if is_static { "静态" } else { "时间轴" },
+            if is_static { tr("Static", "静态") } else { tr("Temporal", "时间轴") },
             component,
             entity_path
         ))
@@ -210,7 +211,7 @@ impl ItemTitle {
                 format!("未知容器 {container_id}"),
                 &icons::VIEW_UNKNOWN,
             )
-            .with_tooltip("在 blueprint 中找不到这个容器")
+            .with_tooltip(tr("Failed to find container in blueprint", "在 blueprint 中找不到这个容器"))
         }
     }
 
@@ -238,7 +239,7 @@ impl ItemTitle {
             .with_tooltip(hover_text)
         } else {
             Self::new(format!("未知视图 {view_id}"), &icons::VIEW_UNKNOWN)
-                .with_tooltip("在 blueprint 中找不到这个视图")
+                .with_tooltip(tr("Failed to find view in blueprint", "在 blueprint 中找不到这个视图"))
         }
     }
 

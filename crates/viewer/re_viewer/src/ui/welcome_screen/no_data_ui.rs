@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::Ui;
 use re_ui::{DesignTokens, UiExt as _};
 
@@ -40,7 +41,7 @@ pub fn no_data_ui(ui: &mut egui::Ui) {
         ui.add_space(9.0);
         if ui
             .button(
-                egui::RichText::new("前往文档 →")
+                egui::RichText::new(tr("Go to documentation →", "前往文档 →"))
                     .weak()
                     .text_style(DesignTokens::welcome_screen_body()),
             )

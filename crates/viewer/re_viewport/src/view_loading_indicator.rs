@@ -1,3 +1,4 @@
+use re_i18n::tr;
 /// Paint the standard loading indicator for views whose required data is still being fetched.
 pub fn paint_view_loading_indicator(
     ui: &mut egui::Ui,
@@ -16,9 +17,9 @@ pub fn paint_view_loading_indicator(
 
     if 0.0 < loading_indicator_opacity {
         let reason = if recording.is_downloading_manifest() {
-            "正在从 redap 下载清单"
+            tr("Downloading manifest from redap", "正在从 redap 下载清单")
         } else {
-            "正在从 redap 读取 chunk"
+            tr("Fetching chunks from redap", "正在从 redap 读取 chunk")
         };
 
         re_ui::loading_indicator::paint_loading_indicator_inside(

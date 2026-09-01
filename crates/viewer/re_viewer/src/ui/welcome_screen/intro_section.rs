@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use eframe::epaint::Margin;
 use egui::{Button, Frame, RichText, TextStyle, Theme, Ui};
 use re_ui::egui_ext::card_layout::{CardLayout, CardLayoutItem};
@@ -52,8 +53,8 @@ pub enum IntroItem {
 
 /// The user guides for this fork's features: label and in-app guide page index.
 const GUIDE_PAGES: &[(&str, usize)] = &[
-    ("Viewer 篇 — 浏览和探索数据集", 0),
-    ("Catalog server 篇 — 查询 TOS 数据集并用于训练", 1),
+    (tr("Viewer — open, visualize & explore datasets", "Viewer 篇 — 浏览和探索数据集"), 0),
+    (tr("Catalog server — query & train on TOS datasets", "Catalog server 篇 — 查询 TOS 数据集并用于训练"), 1),
 ];
 
 impl IntroItem {
@@ -61,38 +62,38 @@ impl IntroItem {
         let mut items = Vec::new();
         if let Some(url) = re_viewer_context::daft_link::base_url() {
             items.push(Self::DeploymentItem {
-                title: "数据质检",
-                link_label: "打开",
+                title: tr("Curate data", "数据质检"),
+                link_label: tr("Open", "打开"),
                 url,
-                body: "在质检台里对火山引擎 TOS 数据集做质量检查。",
+                body: tr("Run quality checks on your Volcengine TOS datasets in the curation console.", "在质检台里对火山引擎 TOS 数据集做质量检查。"),
             });
         }
         if let Some(url) = re_viewer_context::daft_link::downloads_url() {
             items.push(Self::DeploymentItem {
-                title: "下载 SDK",
-                link_label: "下载",
+                title: tr("Get the SDK", "下载 SDK"),
+                link_label: tr("Download", "下载"),
                 url,
-                body: "火山引擎增强版 Python SDK — 各平台 wheel 均内置 Viewer，用 pip 安装即可。",
+                body: tr("Volcengine-enhanced Python SDK — wheels for every platform with the viewer built in. Install with pip.", "火山引擎增强版 Python SDK — 各平台 wheel 均内置 Viewer，用 pip 安装即可。"),
             });
         }
         items.push(Self::GuideItem {
-            title: "用户指南",
+            title: tr("User guide", "用户指南"),
         });
         items.extend([
             Self::DocItem {
-                title: "写入数据",
+                title: tr("Send data in", "写入数据"),
                 url: "https://rerun.io/docs/getting-started/data-in",
-                body: "从机器人日志、传感器、仿真或视频接入多频率、多模态数据。",
+                body: tr("Ingest multi-rate, multimodal data from robot logs, sensors, simulation, or video.", "从机器人日志、传感器、仿真或视频接入多频率、多模态数据。"),
             },
             Self::DocItem {
-                title: "探索数据",
+                title: tr("Explore data", "探索数据"),
                 url: "https://rerun.io/docs/getting-started/configure-the-viewer",
-                body: "可视化并探索管线各环节的多频率、多模态数据。",
+                body: tr("Visualize and explore multi-rate, multimodal data across every stage of the pipeline.", "可视化并探索管线各环节的多频率、多模态数据。"),
             },
             Self::DocItem {
-                title: "查询数据",
+                title: tr("Query data out", "查询数据"),
                 url: "https://rerun.io/docs/getting-started/data-out",
-                body: "用 dataframe 或 SQL 查询原始、中间和派生数据，并流式接入训练。",
+                body: tr("Query raw, intermediate, and derived data with dataframes or SQL, and stream to training.", "用 dataframe 或 SQL 查询原始、中间和派生数据，并流式接入训练。"),
             },
         ]);
         if login_enabled {
@@ -138,7 +139,7 @@ impl IntroItem {
 
                     ui.heading(RichText::new(*title).strong());
                 }, |ui| {
-                    let _response = ui.re_hyperlink("文档", *url, true);
+                    let _response = ui.re_hyperlink(tr("Docs", "文档"), *url, true);
                     #[cfg(feature = "analytics")]
                     if _response.clicked() || _response.clicked_with_open_in_background() {
                         re_analytics::record(|| re_analytics::event::WelcomeScreenNavigation {
@@ -232,11 +233,11 @@ impl IntroItem {
 
                     ui.style_mut().text_styles.get_mut(&TextStyle::Body).expect("Should always have body text style").size = label_size;
                     ui.label(
-                        "Rerun 数据层的生产级后端 — 把你的对象存储变成可查询、可流式读取的数据底座。"
+                        tr("The production backend for the Rerun data layer — turn your object stores into a queryable, streamable foundation. ", "Rerun 数据层的生产级后端 — 把你的对象存储变成可查询、可流式读取的数据底座。")
                     );
-                    link(ui, "了解更多", "https://rerun.io/#rerun-data-platform");
-                    ui.label(" 或 ");
-                    link(ui, "预约演示", "https://calendly.com/d/ctht-4kp-qnt/rerun-demo-meeting");
+                    link(ui, tr("Learn more", "了解更多"), "https://rerun.io/#rerun-data-platform");
+                    ui.label(tr(" or ", " 或 "));
+                    link(ui, tr("book a demo", "预约演示"), "https://calendly.com/d/ctht-4kp-qnt/rerun-demo-meeting");
                     ui.label("。");
                 });
 
@@ -253,37 +254,37 @@ impl IntroItem {
 
                 match cloud_state {
                     CloudState { has_server: None, login: LoginState::NoAuth } => {
-                        if ui.primary_button("添加服务器并登录").clicked() {
+                        if ui.primary_button(tr("Add server and login", "添加服务器并登录")).clicked() {
                             analytics();
                             ctx.command_sender.send_ui(UICommand::AddRedapServer);
                         }
                     }
                     CloudState { has_server: None, login } => {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.primary_button("添加服务器").clicked() {
+                            if ui.primary_button(tr("Add server", "添加服务器")).clicked() {
                                 analytics();
                                 ctx.command_sender.send_ui(UICommand::AddRedapServer);
                             }
                             if let LoginState::Auth { email: Some(email) } = login {
                                 ui.spacing_mut().item_spacing.x = 0.0;
-                                ui.weak("当前登录账号 ");
+                                ui.weak(tr("logged in as ", "当前登录账号 "));
                                 ui.strong(email);
                             }
                         });
                     }
                     CloudState { has_server: Some(origin), login: LoginState::NoAuth } => {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.primary_button("添加凭证").clicked() {
+                            if ui.primary_button(tr("Add credentials", "添加凭证")).clicked() {
                                 analytics();
                                 ctx.command_sender.send_system(SystemCommand::EditRedapServerModal(EditRedapServerModalCommand::new(origin.clone())));
                             }
                             ui.spacing_mut().item_spacing.x = 0.0;
-                            ui.weak("服务器地址 ");
+                            ui.weak(tr("for address ", "服务器地址 "));
                             ui.strong(format!("{}", origin.host));
                         });
                     }
                     CloudState { has_server: Some(origin), login: LoginState::Auth { .. } } => {
-                        if ui.primary_button("探索你的数据").clicked() {
+                        if ui.primary_button(tr("Explore your data", "探索你的数据")).clicked() {
                             analytics();
                             ctx.command_sender.send_system(SystemCommand::set_selection(Item::RedapServer(origin.clone())));
                         }
@@ -302,7 +303,7 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
     if let Some(auth) = ctx.auth_context {
         ui.strong(RichText::new(format!("你好，{}！", auth.email)).size(15.0));
 
-        if ui.add(Button::new("退出登录").secondary().small()).clicked() {
+        if ui.add(Button::new(tr("Log out", "退出登录")).secondary().small()).clicked() {
             ctx.command_sender.send_system(SystemCommand::Logout);
         }
 
@@ -318,8 +319,8 @@ pub fn intro_section(ui: &mut egui::Ui, ctx: &AppContext<'_>, cloud_state: &Clou
         )
     });
     for (header, row) in [
-        ("火山引擎增强功能", ours),
-        ("关于原版 Rerun", upstream),
+        (tr("Volcengine enhancements", "火山引擎增强功能"), ours),
+        (tr("About the original Rerun", "关于原版 Rerun"), upstream),
     ] {
         if row.is_empty() {
             continue;

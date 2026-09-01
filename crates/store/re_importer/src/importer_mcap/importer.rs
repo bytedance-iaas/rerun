@@ -1,5 +1,6 @@
 //! MCAP file importer implementation.
 
+use re_i18n::tr;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -110,7 +111,7 @@ impl McapImporter {
     /// Returns the cached lenses for the given [`re_log_types::TimeType`].
     fn lenses_for(&self, time_type: re_log_types::TimeType) -> Option<Arc<Lenses>> {
         if time_type == re_log_types::TimeType::Sequence {
-            re_log::error_once!("MCAP lens 不支持 Sequence 类型的时间轴");
+            re_log::error_once!("{}", tr("Sequence is not a supported timeline type for MCAP lenses", "MCAP lens 不支持 Sequence 类型的时间轴"));
             return None;
         }
         self.lenses_by_time_type.get(&time_type).cloned()

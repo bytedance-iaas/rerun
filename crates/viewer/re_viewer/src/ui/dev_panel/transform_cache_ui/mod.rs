@@ -2,6 +2,7 @@ mod layout;
 mod model;
 mod paint;
 
+use re_i18n::tr;
 use self::layout::Layout;
 use self::model::{Model, ModelFilter, build_transform_cache_model};
 use self::paint::{draw_transform_cache_contents, scene_legend_ui};
@@ -117,7 +118,7 @@ pub(super) fn ui(
                     ));
 
                     if current_model.any_missing_chunks {
-                        ui.warning_label("有部分 chunk 缺失");
+                        ui.warning_label(tr("Some chunks are missing", "有部分 chunk 缺失"));
                     }
                 });
 
@@ -141,23 +142,23 @@ fn frame_filter_ui(ui: &mut egui::Ui, state: &mut TransformCacheUiState) {
         ui.selectable_value(
             &mut state.frame_filter,
             FrameVisibilityFilter::Implicit,
-            "隐式",
+            tr("Implicit", "隐式"),
         )
-        .on_hover_text("只显示由实体路径派生出的 tf# 坐标系");
+        .on_hover_text(tr("Show only tf# frames derived from entity paths", "只显示由实体路径派生出的 tf# 坐标系"));
         ui.selectable_value(
             &mut state.frame_filter,
             FrameVisibilityFilter::Named,
-            "具名",
+            tr("Named", "具名"),
         )
-        .on_hover_text("显示带变换的、显式命名的坐标系");
+        .on_hover_text(tr("Show explicitly named frames with transforms", "显示带变换的、显式命名的坐标系"));
         ui.selectable_value(
             &mut state.frame_filter,
             FrameVisibilityFilter::Unlinked,
-            "未关联",
+            tr("Unlinked", "未关联"),
         )
-        .on_hover_text("显示没有变换的具名坐标系");
-        ui.selectable_value(&mut state.frame_filter, FrameVisibilityFilter::All, "全部")
-            .on_hover_text("显示隐式、具名和未关联的坐标系");
+        .on_hover_text(tr("Show named coordinate frames without transforms", "显示没有变换的具名坐标系"));
+        ui.selectable_value(&mut state.frame_filter, FrameVisibilityFilter::All, tr("All", "全部"))
+            .on_hover_text(tr("Show implicit, named, and unlinked frames", "显示隐式、具名和未关联的坐标系"));
     });
 }
 
@@ -167,37 +168,37 @@ fn edge_filter_ui(ui: &mut egui::Ui, state: &mut TransformCacheUiState) {
         ui.selectable_value(
             &mut state.edge_filter,
             transform_cache_snapshot::EdgeFilter::Static,
-            "静态",
+            tr("Static", "静态"),
         )
-        .on_hover_text("只显示静态变换");
+        .on_hover_text(tr("Show only static transforms", "只显示静态变换"));
         ui.selectable_value(
             &mut state.edge_filter,
             transform_cache_snapshot::EdgeFilter::Temporal,
-            "时序",
+            tr("Temporal", "时序"),
         )
-        .on_hover_text("只显示时序变换");
+        .on_hover_text(tr("Show only temporal transforms", "只显示时序变换"));
         ui.selectable_value(
             &mut state.edge_filter,
             transform_cache_snapshot::EdgeFilter::All,
-            "全部",
+            tr("All", "全部"),
         )
-        .on_hover_text("显示静态和时序变换");
+        .on_hover_text(tr("Show static and temporal transforms", "显示静态和时序变换"));
     });
 }
 
 /// Draws the horizontal/vertical layout controls.
 fn layout_direction_ui(ui: &mut egui::Ui, state: &mut TransformCacheUiState) {
     ui.horizontal_centered(|ui| {
-        ui.label("布局：");
+        ui.label(tr("Layout:", "布局："));
         ui.selectable_toggle(|ui| {
             ui.selectable_value(
                 &mut state.layout_direction,
                 LayoutDirection::Horizontal,
                 "▶",
             )
-            .on_hover_text("横向排布变换坐标系");
+            .on_hover_text(tr("Lay out transform frames horizontally", "横向排布变换坐标系"));
             ui.selectable_value(&mut state.layout_direction, LayoutDirection::Vertical, "▼")
-                .on_hover_text("纵向排布变换坐标系");
+                .on_hover_text(tr("Lay out transform frames vertically", "纵向排布变换坐标系"));
         })
     });
 }

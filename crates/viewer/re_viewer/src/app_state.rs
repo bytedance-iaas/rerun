@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::borrow::Cow;
 
 use ahash::HashMap;
@@ -657,7 +658,7 @@ impl AppState {
                                 ui.vertical_centered(|ui| {
                                     ui.error_label(format!("加载 {source_name} 失败：{err}"));
 
-                                    if ui.button("返回").clicked() {
+                                    if ui.button(tr("Go Back", "返回")).clicked() {
                                         command_sender.send_system(SystemCommand::ResetRoute);
                                     }
                                 })

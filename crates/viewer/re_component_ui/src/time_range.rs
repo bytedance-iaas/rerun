@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::NumExt as _;
 use re_log_types::{AbsoluteTimeRange, TimeType};
 use re_sdk_types::blueprint::components::TimeRange;
@@ -59,7 +60,7 @@ pub fn time_range_multiline_edit_or_view_ui(
         current_time,
     }) = recording_time_context(ctx)
     else {
-        return ui.weak("没有活动时间轴");
+        return ui.weak(tr("No active timeline", "没有活动时间轴"));
     };
 
     let response = match value {
@@ -148,7 +149,7 @@ pub fn time_range_singleline_view_ui(
         ..
     }) = recording_time_context(ctx)
     else {
-        return ui.weak("没有活动时间轴");
+        return ui.weak(tr("No active timeline", "没有活动时间轴"));
     };
 
     let (text, on_hover) = relative_time_range_label_text(

@@ -1,5 +1,6 @@
 //! An in-memory channel of Rerun data messages
 
+use re_i18n::tr;
 use std::sync::Arc;
 
 pub use crossbeam::channel::{RecvError, RecvTimeoutError, SendError, TryRecvError};
@@ -209,7 +210,7 @@ impl LogSource {
             Self::File { path } => {
                 format!("正在加载 {}…", path.display())
             }
-            Self::Stdin => "正在加载标准输入…".to_owned(),
+            Self::Stdin => tr("Loading stdin…", "正在加载标准输入…").to_owned(),
             Self::HttpStream { url } => {
                 format!("正在等待 {} 的数据…", url_display_name(url))
             }
@@ -222,8 +223,8 @@ impl LogSource {
                     uri.clone().without_query_and_fragment()
                 )
             }
-            Self::RrdWebEvent | Self::JsChannel { .. } => "正在等待日志数据…".to_owned(),
-            Self::Sdk => "正在等待来自 SDK 的日志数据".to_owned(),
+            Self::RrdWebEvent | Self::JsChannel { .. } => tr("Waiting for logging data…", "正在等待日志数据…").to_owned(),
+            Self::Sdk => tr("Waiting for logging data from SDK", "正在等待来自 SDK 的日志数据").to_owned(),
         }
     }
 

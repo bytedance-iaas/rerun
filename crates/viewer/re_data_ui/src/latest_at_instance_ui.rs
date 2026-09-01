@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::NumExt as _;
 use re_chunk_store::UnitChunkShared;
 use re_entity_db::InstancePath;
@@ -126,7 +127,7 @@ impl DataUi for LatestAtInstanceResult<'_> {
                 .header(tokens.deprecated_table_header_height(), |mut header| {
                     re_ui::DesignTokens::setup_table_header(&mut header);
                     header.col(|ui| {
-                        ui.label("索引");
+                        ui.label(tr("Index", "索引"));
                     });
                     header.col(|ui| {
                         ui.label(component_descriptor.display_name());

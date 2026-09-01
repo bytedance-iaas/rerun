@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::str::FromStr as _;
 
 use egui::{Direction, Layout, OpenUrl, RichText};
@@ -169,7 +170,7 @@ impl ServerModal {
             ui.ctx(),
             || {
                 let title = match &self.mode {
-                    ServerModalMode::Add => "添加服务器".to_owned(),
+                    ServerModalMode::Add => tr("Add server", "添加服务器").to_owned(),
                     ServerModalMode::Edit(edit) => {
                         if let Some(title) = &edit.title {
                             title.clone()

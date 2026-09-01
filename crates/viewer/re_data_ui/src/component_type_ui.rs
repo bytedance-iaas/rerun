@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_types_core::ComponentType;
 use re_ui::UiExt as _;
 use re_viewer_context::{StoreViewContext, UiLayout};
@@ -35,7 +36,7 @@ impl DataUi for ComponentType {
 
                 if let Some(url) = self.doc_url() {
                     // Always open in a new tab
-                    ui.re_hyperlink("完整文档", url, true);
+                    ui.re_hyperlink(tr("Full documentation", "完整文档"), url, true);
                 }
             });
         }

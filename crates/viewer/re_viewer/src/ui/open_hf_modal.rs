@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -193,18 +194,18 @@ impl OpenHfModal {
 
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("从 Hugging Face 打开"),
+            || ModalWrapper::new(tr("Open from Hugging Face", "从 Hugging Face 打开")),
             |ui| {
-                ui.strong("从 Hugging Face 流式读取 LeRobot 数据集。");
+                ui.strong(tr("Stream a LeRobot dataset from Hugging Face.", "从 Hugging Face 流式读取 LeRobot 数据集。"));
                 ui.add_space(4.0);
 
                 egui::Grid::new("hf_fields")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
-                        ui.label("数据集：");
+                        ui.label(tr("Dataset:", "数据集："));
                         let edit = egui::TextEdit::singleline(&mut self.dataset)
-                            .hint_text("org/name、hf://org/name 或数据集页面 URL")
+                            .hint_text(tr("org/name, hf://org/name, or the dataset page URL", "org/name、hf://org/name 或数据集页面 URL"))
                             .desired_width(f32::INFINITY)
                             .show(ui);
                         if self.just_opened {
@@ -216,7 +217,7 @@ impl OpenHfModal {
                 // Token: the deployment's docker-secret default is used unless the user opts
                 // into providing their own. Public datasets need no token at all.
                 ui.add_space(2.0);
-                ui.re_checkbox(&mut self.use_custom_token, "使用自带 token");
+                ui.re_checkbox(&mut self.use_custom_token, tr("Use non-default token", "使用自带 token"));
 
                 if self.use_custom_token {
                     egui::Grid::new("hf_token_field")

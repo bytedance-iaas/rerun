@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_log_types::external::re_types_core::datatypes::{TimeInt, TimeRange, TimeRangeBoundary};
 use re_log_types::{AbsoluteTimeRange, TimeType, TimestampFormat};
 
@@ -21,18 +22,18 @@ pub fn relative_time_range_boundary_label_text(
 ) -> &'static str {
     match boundary {
         TimeRangeBoundary::CursorRelative(_) => match time_type {
-            TimeType::DurationNs | TimeType::TimestampNs => "当前时间加偏移",
-            TimeType::Sequence => "当前帧加偏移",
+            TimeType::DurationNs | TimeType::TimestampNs => tr("current time with offset", "当前时间加偏移"),
+            TimeType::Sequence => tr("current frame with offset", "当前帧加偏移"),
         },
         TimeRangeBoundary::Absolute(_) => match time_type {
-            TimeType::DurationNs | TimeType::TimestampNs => "绝对时间",
-            TimeType::Sequence => "绝对帧",
+            TimeType::DurationNs | TimeType::TimestampNs => tr("absolute time", "绝对时间"),
+            TimeType::Sequence => tr("absolute frame", "绝对帧"),
         },
         TimeRangeBoundary::Infinite => {
             if low_bound {
-                "时间轴起点"
+                tr("beginning of timeline", "时间轴起点")
             } else {
-                "时间轴终点"
+                tr("end of timeline", "时间轴终点")
             }
         }
     }

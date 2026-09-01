@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_viewer_context::open_url::ViewerOpenUrl;
 
 /// A description of what happens when opening a [`ViewerOpenUrl`].
@@ -25,7 +26,7 @@ impl ViewerOpenUrlDescription {
     pub fn from_url(open_url: &ViewerOpenUrl) -> Self {
         match open_url {
             ViewerOpenUrl::IntraRecordingSelection(item) => Self {
-                category: "选区",
+                category: tr("Selection", "选区"),
                 target_short: item.entity_path().map(|p| p.to_string()),
             },
 
@@ -34,29 +35,29 @@ impl ViewerOpenUrlDescription {
                 let rrd_file_name = path.split('/').next_back().map(|s| s.to_owned());
 
                 Self {
-                    category: "HTTP 链接",
+                    category: tr("HTTP url", "HTTP 链接"),
                     target_short: rrd_file_name,
                 }
             }
 
             #[cfg(not(target_arch = "wasm32"))]
             ViewerOpenUrl::FilePath(path) => Self {
-                category: "文件",
+                category: tr("File", "文件"),
                 target_short: path.file_name().map(|s| s.display().to_string()),
             },
 
             ViewerOpenUrl::RedapDatasetSegment(uri) => Self {
-                category: "数据段",
+                category: tr("Segment", "数据段"),
                 target_short: Some(uri.segment_id.to_string()),
             },
 
             ViewerOpenUrl::RedapProxy(_) => Self {
-                category: "gRPC 代理",
+                category: tr("GRPC proxy", "gRPC 代理"),
                 target_short: None,
             },
 
             ViewerOpenUrl::TosDataset { location, .. } => Self {
-                category: "TOS 数据集",
+                category: tr("TOS dataset", "TOS 数据集"),
                 target_short: location
                     .to_string()
                     .trim_end_matches('/')
@@ -67,22 +68,22 @@ impl ViewerOpenUrlDescription {
             },
 
             ViewerOpenUrl::RedapCatalog(uri) => Self {
-                category: "目录",
+                category: tr("Catalog", "目录"),
                 target_short: Some(uri.origin.host.to_string()),
             },
 
             ViewerOpenUrl::RedapEntry(uri) => Self {
-                category: "Redap 条目",
+                category: tr("Redap entry", "Redap 条目"),
                 target_short: Some(uri.entry_id.to_string()),
             },
 
             ViewerOpenUrl::RedapFolder(uri) => Self {
-                category: "文件夹",
+                category: tr("Folder", "文件夹"),
                 target_short: Some(uri.path.clone()),
             },
 
             ViewerOpenUrl::WebEventListener => Self {
-                category: "Web 事件监听器",
+                category: tr("Web event listener", "Web 事件监听器"),
                 target_short: None,
             },
 
@@ -91,19 +92,19 @@ impl ViewerOpenUrlDescription {
                     Self::from_url(url_parameters.first())
                 } else {
                     Self {
-                        category: "多个 URL",
+                        category: tr("Several URLs", "多个 URL"),
                         target_short: Some(format!("{} 个 URL", url_parameters.len())),
                     }
                 }
             }
 
             ViewerOpenUrl::Settings => Self {
-                category: "设置",
+                category: tr("Settings", "设置"),
                 target_short: None,
             },
 
             ViewerOpenUrl::ChunkStoreBrowser { .. } => Self {
-                category: "Chunk store 浏览器",
+                category: tr("Chunk store browser", "Chunk store 浏览器"),
                 target_short: None,
             },
         }

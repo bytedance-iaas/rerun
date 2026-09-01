@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::sync::Arc;
 
 use egui::collapsing_header::CollapsingState;
@@ -60,8 +61,8 @@ impl RecordingPanel {
 
         ui.panel_content(|ui| {
             ui.panel_title_bar_with_buttons(
-                "数据来源",
-                Some("已连接的服务器、已打开的录制文件和表格。"),
+                tr("Sources", "数据来源"),
+                Some(tr("Your connected servers, opened recordings and tables.", "已连接的服务器、已打开的录制文件和表格。")),
                 |ui| {
                     add_button_ui(ctx, ui, &recording_panel_data);
                 },
@@ -118,8 +119,8 @@ fn add_button_ui(
     _recording_panel_data: &RecordingPanelData<'_>,
 ) {
     ui.add(
-        ui.small_icon_button_widget(&re_ui::icons::ADD, "添加…")
-            .on_hover_text("打开文件、数据集，或连接服务器")
+        ui.small_icon_button_widget(&re_ui::icons::ADD, tr("Add…", "添加…"))
+            .on_hover_text(tr("Open a file, dataset or connect to a server", "打开文件、数据集，或连接服务器"))
             .on_menu(|ui| {
                 if re_ui::UICommand::Open
                     .menu_button_ui(ui, ctx.command_sender())
@@ -144,7 +145,7 @@ fn add_button_ui(
                 ui.separator();
                 ui.add_enabled(
                     false,
-                    egui::Button::new(egui::RichText::new("扩展功能").italics()),
+                    egui::Button::new(egui::RichText::new(tr("Extended", "扩展功能")).italics()),
                 );
                 if re_ui::UICommand::OpenTosDataset
                     .menu_button_ui(ui, ctx.command_sender())
@@ -201,7 +202,7 @@ fn all_sections_ui(
 
     if recording_panel_data.is_empty() {
         ui.add_space(ui.tokens().panel_margin().left as f32);
-        ui.weak("点击 + 添加录制文件、连接服务器，或直接把文件拖进 Viewer");
+        ui.weak(tr("Click + to add a recording, connect to a server or drag and drop a file directly to the viewer", "点击 + 添加录制文件、连接服务器，或直接把文件拖进 Viewer"));
     }
 
     //
@@ -225,7 +226,7 @@ fn all_sections_ui(
                 ui,
                 id,
                 true,
-                list_item::LabelContent::header("火山引擎 TOS"),
+                list_item::LabelContent::header(tr("Volcengine TOS", "火山引擎 TOS")),
                 |ui| {
                     for app_id_data in &recording_panel_data.tos_apps {
                         app_id_section_ui(ctx, ui, app_id_data);
@@ -284,7 +285,7 @@ fn all_sections_ui(
                 ui,
                 id,
                 true,
-                list_item::LabelContent::header("本地"),
+                list_item::LabelContent::header(tr("Local", "本地")),
                 |ui| {
                     for app_id_data in &recording_panel_data.local_apps {
                         app_id_section_ui(ctx, ui, app_id_data);
@@ -326,7 +327,7 @@ fn welcome_item_ui(
         Route::RedapServer(origin) if origin == &*EXAMPLES_ORIGIN
     );
 
-    let title = list_item::LabelContent::header("欢迎使用 Rerun").with_icon(&icons::HOME);
+    let title = list_item::LabelContent::header(tr("Welcome to rerun", "欢迎使用 Rerun")).with_icon(&icons::HOME);
 
     let list_item = ui.list_item().header().selected(selected).active(active);
 
@@ -360,7 +361,7 @@ fn welcome_item_ui(
 
 fn server_title(ctx: &AppContext<'_>, origin: &re_uri::Origin, is_internal: bool) -> String {
     if is_internal {
-        "Viewer 目录".to_owned()
+        tr("Viewer catalog", "Viewer 目录").to_owned()
     } else {
         let host = origin.format_host();
         if origin.scheme == re_uri::Scheme::RerunHttps && origin.port == 443 {
@@ -389,7 +390,7 @@ fn server_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, server_data: &Serv
     }
 
     let content = list_item::LabelContent::header(server_title(ctx, origin, *is_internal))
-        .with_menu_button(&icons::MORE, "操作", move |ui| {
+        .with_menu_button(&icons::MORE, tr("Actions", "操作"), move |ui| {
             for command in re_ui::RedapServerCommand::all_for_server(origin) {
                 if command.requires_editable_server() && *is_internal {
                     continue;
@@ -438,9 +439,9 @@ fn server_entries_ui(
             is_auth_error,
         } => {
             let (label, color) = if *is_auth_error {
-                ("需要身份验证", ui.visuals().weak_text_color())
+                (tr("Authentication required", "需要身份验证"), ui.visuals().weak_text_color())
             } else {
-                ("加载条目失败", ui.visuals().error_fg_color)
+                (tr("Failed to load entries", "加载条目失败"), ui.visuals().error_fg_color)
             };
             ui.list_item_flat_noninteractive(list_item::LabelContent::new(
                 egui::RichText::new(label).color(color),
@@ -542,8 +543,8 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
         list_item_content = list_item_content.with_buttons(|ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, "关闭该数据集中的所有录制文件")
-                .on_hover_text("从 Viewer 中移除该数据集");
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"))
+                .on_hover_text(tr("Remove this dataset from the viewer", "从 Viewer 中移除该数据集"));
 
             if resp.clicked() {
                 for db in displayed_segments.iter().filter_map(SegmentData::entity_db) {
@@ -597,8 +598,8 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
         let url = ViewerOpenUrl::from_route(ctx.store_hub(), &new_route)
             .and_then(|url| url.sharable_url(None));
         if ui
-            .add_enabled(url.is_ok(), egui::Button::new("复制数据集链接"))
-            .on_disabled_hover_text("无法复制该数据集的链接")
+            .add_enabled(url.is_ok(), egui::Button::new(tr("Copy link to dataset", "复制数据集链接")))
+            .on_disabled_hover_text(tr("Can't copy a link to this dataset", "无法复制该数据集的链接"))
             .clicked()
             && let Ok(url) = url
         {
@@ -606,12 +607,12 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
                 .send_system(SystemCommand::CopyViewerUrl(url));
         }
 
-        if ui.button("复制数据集名称").clicked() {
+        if ui.button(tr("Copy dataset name", "复制数据集名称")).clicked() {
             re_log::info!("已把 {name:?} 复制到剪贴板");
             ui.copy_text(name.to_string());
         }
 
-        if ui.button("复制数据集 ID").clicked() {
+        if ui.button(tr("Copy dataset id", "复制数据集 ID")).clicked() {
             let id = entry_id.id.to_string();
             re_log::info!("已把 {id:?} 复制到剪贴板");
             ui.copy_text(id);
@@ -751,9 +752,9 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
         list_item_content = list_item_content.with_buttons(move |ui| {
             if streaming {
                 let (icon, tooltip) = if paused {
-                    (&icons::PLAY, "继续下载该数据集")
+                    (&icons::PLAY, tr("Resume downloading this dataset", "继续下载该数据集"))
                 } else {
-                    (&icons::PAUSE, "暂停下载该数据集")
+                    (&icons::PAUSE, tr("Pause downloading this dataset", "暂停下载该数据集"))
                 };
                 if ui.small_icon_button(icon, tooltip).clicked() {
                     re_data_source::lerobot_remote::set_dataset_paused(app_id.as_str(), !paused);
@@ -762,8 +763,8 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
 
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, "关闭该数据集中的所有录制文件")
-                .on_hover_text("从 Viewer 中移除该数据集");
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"))
+                .on_hover_text(tr("Remove this dataset from the viewer", "从 Viewer 中移除该数据集"));
 
             if resp.clicked() {
                 ctx.command_sender()
@@ -776,8 +777,8 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
             // in front of the row furniture, where a feature belongs.
             if let Some(url) = diagnose_url {
                 let resp = ui
-                    .add(egui::Button::new("质检").small())
-                    .on_hover_text("对该数据集进行数据质检");
+                    .add(egui::Button::new(tr("Diagnose", "质检")).small())
+                    .on_hover_text(tr("Run data curation on this dataset", "对该数据集进行数据质检"));
                 if resp.clicked() {
                     ui.open_url(egui::OpenUrl::new_tab(url));
                 }
@@ -864,9 +865,9 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                         egui::Button::new(format!("删除全部 rrd 转换产物（{artifact_count}）…")),
                     )
                     .on_disabled_hover_text(if no_permission {
-                        "当前凭证没有删除权限"
+                        tr("These credentials have no delete permission", "当前凭证没有删除权限")
                     } else {
-                        "正在删除…"
+                        tr("Deletion in progress…", "正在删除…")
                     })
                     .clicked()
                 {
@@ -945,8 +946,8 @@ fn receiver_ui(
         })
         .with_buttons(|ui| {
             let resp = ui
-                .small_icon_button(&re_ui::icons::REMOVE, "断开连接")
-                .on_hover_text("断开与该数据来源的连接");
+                .small_icon_button(&re_ui::icons::REMOVE, tr("Disconnect", "断开连接"))
+                .on_hover_text(tr("Disconnect from this source", "断开与该数据来源的连接"));
 
             if resp.clicked() {
                 ctx.connected_receivers.remove(receiver);
@@ -966,11 +967,11 @@ fn receiver_ui(
     response.context_menu(|ui| {
         let url = ViewerOpenUrl::from_data_source(receiver).and_then(|url| url.sharable_url(None));
         if ui
-            .add_enabled(url.is_ok(), egui::Button::new("复制分段链接"))
+            .add_enabled(url.is_ok(), egui::Button::new(tr("Copy link to segment", "复制分段链接")))
             .on_disabled_hover_text(if let Err(err) = url.as_ref() {
                 format!("无法复制该分段的链接：{err}")
             } else {
-                "无法复制该分段的链接".to_owned()
+                tr("Can't copy a link to this segment", "无法复制该分段的链接").to_owned()
             })
             .clicked()
             && let Ok(url) = url
@@ -979,7 +980,7 @@ fn receiver_ui(
                 .send_system(SystemCommand::CopyViewerUrl(url));
         }
 
-        if ui.button("复制分段名称").clicked() {
+        if ui.button(tr("Copy segment name", "复制分段名称")).clicked() {
             re_log::info!("已把 {name:?} 复制到剪贴板");
             ui.copy_text(name);
         }

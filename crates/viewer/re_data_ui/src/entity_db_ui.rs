@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::fmt::Write as _;
 
 use egui::NumExt as _;
@@ -56,7 +57,7 @@ impl crate::AppUi for EntityDb {
                             (true, false) => {
                                 ui.add_space(8.0);
                                 ui.label(
-                                    "这是当前应用的默认 blueprint。",
+                                    tr("This is the default blueprint for the current application.", "这是当前应用的默认 blueprint。"),
                                 );
 
                                 if let Some(active_blueprint) =
@@ -66,10 +67,10 @@ impl crate::AppUi for EntityDb {
                                     // The active blueprint is a clone of the selected blueprint.
                                     if self.latest_row_id() == active_blueprint.latest_row_id() {
                                         ui.label(
-                                            "当前生效的 blueprint 是这个 blueprint 的克隆。",
+                                            tr("The active blueprint is a clone of this blueprint.", "当前生效的 blueprint 是这个 blueprint 的克隆。"),
                                         );
                                     } else {
-                                        ui.label("当前生效的 blueprint 是这个 blueprint 的克隆，并有改动。");
+                                        ui.label(tr("The active blueprint is a modified clone of this blueprint.", "当前生效的 blueprint 是这个 blueprint 的克隆，并有改动。"));
                                     }
                                 }
                             }
@@ -84,7 +85,7 @@ impl crate::AppUi for EntityDb {
                         }
                     } else {
                         ui.add_space(8.0);
-                        ui.label("这个 blueprint 不属于当前活跃的应用");
+                        ui.label(tr("This blueprint is not for the active application", "这个 blueprint 不属于当前活跃的应用"));
                     }
                 }
             }
@@ -114,7 +115,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         ..
     }) = &db.data_source
     {
-        ui.grid_left_hand_label("片段 ID");
+        ui.grid_left_hand_label(tr("Segment ID", "片段 ID"));
         ui.label(segment_id.to_string());
         ui.end_row();
     }
@@ -130,28 +131,28 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         } = store_info;
 
         if let Some(cloned_from) = cloned_from {
-            ui.grid_left_hand_label("克隆自");
+            ui.grid_left_hand_label(tr("Clone of", "克隆自"));
             crate::item_ui::store_id_button_ui(ctx, ui, cloned_from, ui_layout);
             ui.end_row();
         }
 
-        ui.grid_left_hand_label("应用 ID");
+        ui.grid_left_hand_label(tr("Application ID", "应用 ID"));
         app_id_button_ui(ctx, ui, store_id.application_id());
         ui.end_row();
 
-        ui.grid_left_hand_label("来源");
+        ui.grid_left_hand_label(tr("Source", "来源"));
         ui.label(store_source.to_string());
         ui.end_row();
 
         if let Some(store_version) = store_version {
-            ui.grid_left_hand_label("来源 RRD 版本");
+            ui.grid_left_hand_label(tr("Source RRD version", "来源 RRD 版本"));
             ui.label(store_version.to_string());
             ui.end_row();
         } else {
             re_log::trace_once!("store version is undefined for this recording, this is a bug");
         }
 
-        ui.grid_left_hand_label("类型");
+        ui.grid_left_hand_label(tr("Kind", "类型"));
         ui.label(store_id.kind().to_string());
         ui.end_row();
     }
@@ -163,7 +164,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         && let Ok(nanos_since_epoch) = i64::try_from(latest_row_id.nanos_since_epoch())
     {
         let time = re_log_types::Timestamp::from_nanos_since_epoch(nanos_since_epoch);
-        ui.grid_left_hand_label("修改时间");
+        ui.grid_left_hand_label(tr("Modified", "修改时间"));
         ui.label(time.format(ctx.app_options.timestamp_format));
         ui.end_row();
     }
@@ -184,14 +185,14 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 
         let pretty = printer.duration_to_string(&duration);
 
-        ui.grid_left_hand_label("时长");
+        ui.grid_left_hand_label(tr("Duration", "时长"));
         ui.label(pretty)
-            .on_hover_text("最早与最晚 log_time 之间的时长。");
+            .on_hover_text(tr("Duration between earliest and latest log_time.", "最早与最晚 log_time 之间的时长。"));
         ui.end_row();
     }
 
     {
-        ui.grid_left_hand_label("大小");
+        ui.grid_left_hand_label(tr("Size", "大小"));
 
         let current_size_bytes = db.byte_size_of_physical_chunks();
         let full_size_bytes = if db.rrd_manifest_index().has_manifest() {

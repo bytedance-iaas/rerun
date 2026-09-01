@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use anyhow::Context as _;
 use itertools::Itertools as _;
 use re_build_info::CrateVersion;
@@ -205,7 +206,7 @@ impl App {
                         .replace(Route::LocalRecording { recording_id });
                 } else {
                     // TODO(RR-3713): show a blueprint for it anyway
-                    re_log::warn_once!("无法切换应用 ID — 没有对应的录制文件");
+                    re_log::warn_once!(tr("Can't switch app-id - we have no recording for it", "无法切换应用 ID — 没有对应的录制文件"));
                     // If we can't go where we want to go, then go nowhere.
                 }
             }
@@ -1121,7 +1122,7 @@ impl App {
                             }
                         } else {
                             re_log::warn!(
-                                "当前录制文件不支持分享时间范围"
+                                tr("The current recording doesn't support sharing a time range", "当前录制文件不支持分享时间范围")
                             );
                         }
 
@@ -1243,7 +1244,7 @@ impl App {
                     } else {
                         // Save all selected recordings to a folder:
                         if let Some(folder) = rfd::FileDialog::new()
-                            .set_title("保存录制文件到文件夹")
+                            .set_title(tr("Save recordings to folder", "保存录制文件到文件夹"))
                             .pick_folder()
                         {
                             self.save_many_recordings(&selected_stores, &folder);
@@ -1499,12 +1500,12 @@ impl App {
         hierarchy_text.push_str(&entity_db.format_with_components());
 
         if hierarchy_text.is_empty() {
-            hierarchy_text = "（没有实体）".to_owned();
+            hierarchy_text = tr("(no entities)", "（没有实体）").to_owned();
         }
 
         egui_ctx.copy_text(hierarchy_text.clone());
         self.notifications
-            .success("已复制实体层级（含 schema）到剪贴板".to_owned());
+            .success(tr("Copied entity hierarchy with schema to clipboard", "已复制实体层级（含 schema）到剪贴板").to_owned());
     }
 
     /// Reset the viewer to how it looked the first time you ran it.
@@ -1777,7 +1778,7 @@ fn open_file_dialog_native(_: crate::MainThreadToken) -> Vec<std::path::PathBuf>
 
     // If there's at least one external loader registered, then literally anything goes!
     if !supported.is_empty() {
-        dialog = dialog.add_filter("支持的文件", &supported);
+        dialog = dialog.add_filter(tr("Supported files", "支持的文件"), &supported);
     }
 
     dialog.pick_files().unwrap_or_default()
@@ -1788,7 +1789,7 @@ async fn async_open_rrd_dialog() -> Vec<web_sys::File> {
     let supported: Vec<_> = re_importer::supported_extensions().collect();
 
     rfd::AsyncFileDialog::new()
-        .add_filter("支持的文件", &supported)
+        .add_filter(tr("Supported files", "支持的文件"), &supported)
         .pick_files()
         .await
         .unwrap_or_default()
@@ -1829,9 +1830,9 @@ fn save_recording(
     };
 
     let title = if loop_selection.is_some() {
-        "保存循环选区"
+        tr("Save loop selection", "保存循环选区")
     } else {
-        "保存录制文件"
+        tr("Save recording", "保存录制文件")
     };
 
     save_entity_db(
@@ -1891,7 +1892,7 @@ fn save_blueprint(
         "{}.rbl",
         crate::saving::sanitize_app_id(store_context.application_id())
     );
-    let title = "保存 blueprint";
+    let title = tr("Save blueprint", "保存 blueprint");
 
     save_entity_db(app, rrd_version, file_name, title.to_owned(), messages)
 }

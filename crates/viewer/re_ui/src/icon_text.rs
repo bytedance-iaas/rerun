@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::iter::once;
 
 use egui::os::OperatingSystem;
@@ -92,9 +93,9 @@ impl From<MouseButtonText> for Atom<'_> {
         match value.0 {
             egui::PointerButton::Primary => icons::LEFT_MOUSE_CLICK.into(),
             egui::PointerButton::Secondary => icons::RIGHT_MOUSE_CLICK.into(),
-            egui::PointerButton::Middle => "鼠标中键".into(),
-            egui::PointerButton::Extra1 => "鼠标附加键 1".into(),
-            egui::PointerButton::Extra2 => "鼠标附加键 2".into(),
+            egui::PointerButton::Middle => tr("middle mouse button", "鼠标中键").into(),
+            egui::PointerButton::Extra1 => tr("extra 1 mouse button", "鼠标附加键 1").into(),
+            egui::PointerButton::Extra2 => tr("extra 2 mouse button", "鼠标附加键 2").into(),
         }
     }
 }

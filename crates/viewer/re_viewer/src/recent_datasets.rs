@@ -1,3 +1,4 @@
+use re_i18n::tr;
 //! Remembers which remote datasets (TOS / Hugging Face) were opened, across viewer restarts.
 //!
 //! Converted data lives only in RAM, so restarting the viewer starts blank. This list — persisted
@@ -69,13 +70,13 @@ pub fn remember(list: &mut Vec<RecentDataset>, mut entry: RecentDataset) {
 pub fn relative_time_label(last_opened_unix: i64, now_unix: i64) -> String {
     let secs = now_unix.saturating_sub(last_opened_unix);
     if secs < 60 {
-        "刚刚".to_owned()
+        tr("just now", "刚刚").to_owned()
     } else if secs < 60 * 60 {
         format!("{} 分钟前", secs / 60)
     } else if secs < 24 * 60 * 60 {
         format!("{} 小时前", secs / (60 * 60))
     } else if secs < 2 * 24 * 60 * 60 {
-        "昨天".to_owned()
+        tr("yesterday", "昨天").to_owned()
     } else {
         format!("{} 天前", secs / (24 * 60 * 60))
     }
