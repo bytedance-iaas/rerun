@@ -638,7 +638,7 @@ typos = ">=1.45.1"
 wasm-pack = "0.15.*"
 urllib3 = "<2.6.0" # TODO(googleapis/google-resumable-media-python#491)
 gh = ">=2.79.0,<3"
-binaryen = "117.*" # for `wasm-opt`
+binaryen = "121.*" # for `wasm-opt`
 nodejs = ">=22.0" # rerun_notebook needs nodejs to build the wheel
 packaging = ">=24.0,<25" # For `publish_wheels.py`
 pip = ">=23"
