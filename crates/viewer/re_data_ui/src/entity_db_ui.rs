@@ -106,7 +106,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 
     {
         ui.grid_left_hand_label(match db.store_id().kind() {
-            re_log_types::StoreKind::Recording => tr("Recording ID", "episode ID"),
+            re_log_types::StoreKind::Recording => "Recording ID",
             re_log_types::StoreKind::Blueprint => tr("Blueprint ID", "Blueprint ID"),
         });
         ui.label(db.store_id().recording_id().to_string());
@@ -157,7 +157,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 
         ui.grid_left_hand_label(tr("Kind", "类型"));
         ui.label(match store_id.kind() {
-            re_log_types::StoreKind::Recording => tr("Recording", "episode"),
+            re_log_types::StoreKind::Recording => "Recording",
             re_log_types::StoreKind::Blueprint => "Blueprint",
         });
         ui.end_row();

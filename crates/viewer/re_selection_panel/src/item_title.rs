@@ -121,7 +121,7 @@ impl ItemTitle {
 
         Self::new(title, icon).with_tooltip(trf!(
             "Store kind: {}\nApplication ID: {}\nRecording ID: {}",
-            "存储类型：{}\n应用 ID：{}\nepisode ID：{}",
+            "存储类型：{}\n应用 ID：{}\nRecording ID：{}",
             store_id.kind(),
             store_id.application_id(),
             store_id.recording_id(),
