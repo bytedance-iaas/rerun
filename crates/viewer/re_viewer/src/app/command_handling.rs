@@ -1922,7 +1922,7 @@ fn save_active_recording(
 ) -> anyhow::Result<()> {
     let Some(store_context) = store_context else {
         // NOTE: Can only happen if saving through the command palette.
-        anyhow::bail!(tr("No recording data to save", "没有可保存的录制数据"));
+        anyhow::bail!(tr("No recording data to save", "没有可保存的 episode 数据"));
     };
 
     save_recording(app, store_context.recording, store_context.loop_selection())
