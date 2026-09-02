@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use std::collections::BTreeMap;
 
 use arrow::datatypes::Field;
@@ -17,19 +18,19 @@ pub fn column_header_tooltip_ui(
         extras_column_descriptor_ui(ui, desc, migrated_column_field);
     } else {
         ui.separator();
-        ui.weak("Hold `Alt` to see extras");
+        ui.weak(tr("Hold `Alt` to see extras", "按住 `Alt` 查看更多信息"));
     }
 }
 
 fn column_descriptor_ui(ui: &mut egui::Ui, column: &ColumnDescriptorRef<'_>, column_field: &Field) {
-    header_property_ui(ui, "Physical name", column_field.name());
+    header_property_ui(ui, tr("Physical name", "物理名称"), column_field.name());
 
     match *column {
         ColumnDescriptorRef::RowId(desc) => {
             let re_sorbet::RowIdColumnDescriptor { is_sorted } = desc;
 
-            header_property_ui(ui, "Type", "row id");
-            header_property_ui(ui, "Sorted", sorted_text(*is_sorted));
+            header_property_ui(ui, tr("Type", "类型"), "row id");
+            header_property_ui(ui, tr("Sorted", "是否排序"), sorted_text(*is_sorted));
         }
         ColumnDescriptorRef::Time(desc) => {
             let re_sorbet::IndexColumnDescriptor {
@@ -38,9 +39,9 @@ fn column_descriptor_ui(ui: &mut egui::Ui, column: &ColumnDescriptorRef<'_>, col
                 is_sorted,
             } = desc;
 
-            header_property_ui(ui, "Type", "index");
-            header_property_ui(ui, "Timeline", timeline.name());
-            header_property_ui(ui, "Sorted", sorted_text(*is_sorted));
+            header_property_ui(ui, tr("Type", "类型"), "index");
+            header_property_ui(ui, tr("Timeline", "时间轴"), timeline.name());
+            header_property_ui(ui, tr("Sorted", "是否排序"), sorted_text(*is_sorted));
             datatype_ui(ui, &column.display_name(), datatype);
         }
         ColumnDescriptorRef::Component(desc) => {
@@ -55,18 +56,18 @@ fn column_descriptor_ui(ui: &mut egui::Ui, column: &ColumnDescriptorRef<'_>, col
                 is_semantically_empty: _,
             } = desc;
 
-            header_property_ui(ui, "Column type", "Component");
-            header_property_ui(ui, "Entity path", entity_path.ui_string());
+            header_property_ui(ui, tr("Column type", "列类型"), "Component");
+            header_property_ui(ui, tr("Entity path", "实体路径"), entity_path.ui_string());
             datatype_ui(ui, &column.display_name(), store_datatype);
             header_property_ui(
                 ui,
                 "Archetype",
                 archetype.map(|a| a.full_name()).unwrap_or("-"),
             );
-            header_property_ui(ui, "Component", component);
+            header_property_ui(ui, tr("Component", "组件"), component);
             header_property_ui(
                 ui,
-                "Component type",
+                tr("Component type", "组件类型"),
                 component_type.map(|a| a.as_str()).unwrap_or("-"),
             );
         }
@@ -89,7 +90,7 @@ fn column_arrow_metadata_ui(ui: &mut egui::Ui, column_field: &Field, show_extras
     // user metadata
     if !user_metadata.is_empty() {
         ui.separator();
-        ui.weak("Arrow metadata");
+        ui.weak(tr("Arrow metadata", "Arrow 元数据"));
         for (key, value) in user_metadata {
             header_property_ui(ui, key, value);
         }
@@ -98,7 +99,7 @@ fn column_arrow_metadata_ui(ui: &mut egui::Ui, column_field: &Field, show_extras
     // sorbet metadata
     if !sorbet_metadata.is_empty() && show_extras {
         ui.separator();
-        ui.weak("Sorbet metadata");
+        ui.weak(tr("Sorbet metadata", "Sorbet 元数据"));
         for (key, value) in sorbet_metadata {
             header_property_ui(ui, key, value);
         }
@@ -111,7 +112,7 @@ fn extras_column_descriptor_ui(
     migrated_field: &Field,
 ) {
     ui.separator();
-    ui.weak("Extras");
+    ui.weak(tr("Extras", "更多信息"));
 
     header_property_ui(ui, "Migrated physical name", migrated_field.name());
     header_property_ui(
@@ -148,7 +149,7 @@ fn header_property_ui(ui: &mut egui::Ui, label: &str, value: impl AsRef<str>) {
 fn datatype_ui(ui: &mut egui::Ui, column_name: &str, datatype: &arrow::datatypes::DataType) {
     egui::Sides::new().show(
         ui,
-        |ui| ui.strong("Datatype"),
+        |ui| ui.strong(tr("Datatype", "数据类型")),
         |ui| {
             // We don't want the copy button to stand out next to the other properties. The copy
             // icon already indicates that it's a button.
@@ -167,7 +168,7 @@ fn datatype_ui(ui: &mut egui::Ui, column_name: &str, datatype: &arrow::datatypes
                 .clicked()
             {
                 ui.copy_text(format!("{datatype:#?}")); // TODO(apache/arrow-rs#8351): use Display once arrow 57 is released
-                re_log::info!("Copied full datatype of column `{column_name}` to clipboard");
+                re_log::info!("{}", trf!("Copied full datatype of column `{column_name}` to clipboard", "已复制列 `{column_name}` 的完整数据类型到剪贴板"));
             }
         },
     );

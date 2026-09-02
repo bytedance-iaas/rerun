@@ -1,5 +1,6 @@
 use egui::KeyboardShortcut;
 use egui::os::OperatingSystem;
+use re_i18n::tr;
 use smallvec::{SmallVec, smallvec};
 
 use super::CommandEnvironment;
@@ -115,12 +116,27 @@ impl RedapServerCommandKind {
     pub fn text_and_tooltip(self) -> (&'static str, &'static str) {
         match self {
             Self::Refresh => (
-                "Refresh server",
-                "Refresh the contents (datasets & tables) of the server",
+                tr("Refresh server", "刷新服务器"),
+                tr(
+                    "Refresh the contents (datasets & tables) of the server",
+                    "刷新服务器上的内容（数据集和表）",
+                ),
             ),
-            Self::Edit => ("Edit server…", "Edit the URL and credentials of the server"),
-            Self::CopyUrl => ("Copy server URL", "Copy the URL of the server"),
-            Self::Remove => ("Remove server", "Remove the server"),
+            Self::Edit => (
+                tr("Edit server…", "编辑服务器…"),
+                tr(
+                    "Edit the URL and credentials of the server",
+                    "修改服务器的 URL 和访问凭证",
+                ),
+            ),
+            Self::CopyUrl => (
+                tr("Copy server URL", "复制服务器 URL"),
+                tr("Copy the URL of the server", "复制服务器的 URL"),
+            ),
+            Self::Remove => (
+                tr("Remove server", "移除服务器"),
+                tr("Remove the server", "移除该服务器"),
+            ),
         }
     }
 

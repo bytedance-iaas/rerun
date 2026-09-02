@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_arrow_ui::arrow_ui;
 use re_ui::UiExt as _;
 use re_viewer_context::{ComponentUiRegistry, StoreViewContext};
@@ -61,7 +62,7 @@ pub fn add_to_registry<C: EntityDataUi + re_sdk_types::Component>(
                         ),
                     },
                     Err(err) => {
-                        ui.error_with_details_on_hover("(failed to deserialize)")
+                        ui.error_with_details_on_hover(tr("(failed to deserialize)", "（反序列化失败）"))
                             .on_hover_text(err.to_string());
                     }
                 }

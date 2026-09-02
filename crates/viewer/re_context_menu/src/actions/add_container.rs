@@ -1,4 +1,5 @@
 use egui_tiles::ContainerKind;
+use re_i18n::tr;
 use re_ui::icons;
 use re_viewer_context::{ContainerId, Item};
 
@@ -36,7 +37,12 @@ impl ContextMenuAction for AddContainerAction {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        format!("{:?}", self.0)
+        match self.0 {
+            ContainerKind::Tabs => tr("Tabs", "标签页").to_owned(),
+            ContainerKind::Horizontal => tr("Horizontal", "水平排列").to_owned(),
+            ContainerKind::Vertical => tr("Vertical", "垂直排列").to_owned(),
+            ContainerKind::Grid => tr("Grid", "网格").to_owned(),
+        }
     }
 
     fn process_container(&self, ctx: &ContextMenuContext<'_>, container_id: &ContainerId) {

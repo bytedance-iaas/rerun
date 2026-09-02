@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_data_ui::item_ui;
 use re_renderer::external::wgpu;
 use re_renderer::renderer::ColormappedTexture;
@@ -329,7 +330,7 @@ fn pixel_value_ui(
     meter: Option<f32>,
 ) {
     egui::Grid::new("hovered pixel properties").show(ui, |ui| {
-        ui.label("Position:");
+        ui.label(tr("Position:", "位置："));
         ui.label(format!("{x}, {y}"));
         ui.end_row();
 
@@ -339,7 +340,7 @@ fn pixel_value_ui(
                 && let Some(raw_value) = image.get_xyc(x, y, 0)
                 && let Some(u16_val) = raw_value.try_as_u16()
             {
-                ui.label("Label:");
+                ui.label(tr("Label:", "标签："));
                 ui.label(
                     annotations
                         .resolved_class_description(Some(re_sdk_types::components::ClassId::from(
@@ -382,14 +383,14 @@ fn pixel_value_ui(
             ui.label(label);
             ui.monospace(value);
         } else {
-            ui.label("No value");
+            ui.label(tr("No value", "无数值"));
         }
     });
 }
 
 fn show_depth_at_hover(ui: &mut egui::Ui, raw_value: f64, meter: f32) {
     let meters = raw_value / (meter as f64);
-    ui.label("Depth:");
+    ui.label(tr("Depth:", "深度："));
     if meters < 1.0 {
         ui.monospace(format!("{:.1} mm", meters * 1e3));
     } else {

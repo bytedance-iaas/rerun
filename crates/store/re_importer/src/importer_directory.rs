@@ -1,3 +1,5 @@
+use re_i18n::trf;
+
 /// Recursively imports entire directories, using the appropriate [`crate::Importer`]s for each
 /// file within.
 //
@@ -40,7 +42,7 @@ impl crate::Importer for DirectoryImporter {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(err) => {
-                    re_log::error!(importer = self.name(), ?dirpath, %err, "Failed to open filesystem entry");
+                    re_log::error!(importer = self.name(), ?dirpath, %err, "{}", trf!("Failed to open filesystem entry", "打开文件系统条目失败"));
                     continue;
                 }
             };
@@ -62,7 +64,7 @@ impl crate::Importer for DirectoryImporter {
                         let data = match crate::import_file::import(&settings, &filepath, None) {
                             Ok(data) => data,
                             Err(err) => {
-                                re_log::error!(?filepath, %err, "Failed to load directory entry");
+                                re_log::error!(?filepath, %err, "{}", trf!("Failed to load directory entry", "加载目录条目失败"));
                                 return;
                             }
                         };

@@ -24,6 +24,7 @@ default = []
 
 
 [dependencies]
+re_i18n.workspace = true
 re_arrow_util.workspace = true
 re_chunk.workspace = true
 re_error.workspace = true

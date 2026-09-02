@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::task::Poll;
@@ -295,8 +296,7 @@ impl Server {
             ui.horizontal(|ui| {
                 // Navigate up one level.
                 if ui
-                    .small_icon_button(&icons::ARROW_UP, "Go to parent folder")
-                    .on_hover_text("Go to parent folder")
+                    .small_icon_button(&icons::ARROW_UP, tr("Go to parent folder", "回到上一级文件夹"))
                     .clicked()
                 {
                     let parent_route = if let Some((parent, _)) =
@@ -492,7 +492,7 @@ fn error_ui(
                                 ui.text_style_height(&egui::TextStyle::Button) + 2.0 * 4.0;
                             ui.set_min_height(cancel_button_height);
                             ui.loading_indicator("Waiting for login");
-                            ui.label("Waiting for login…");
+                            ui.label(tr("Waiting for login…", "正在等待登录…"));
                             ui.add_space(8.0);
                             if ui
                                 .add(
@@ -541,7 +541,13 @@ fn error_ui(
                                                 Some((origin.clone(), Box::new(flow)));
                                         }
                                         Err(err) => {
-                                            re_log::error!("Failed to start login: {err}");
+                                            re_log::error!(
+                                                "{}",
+                                                trf!(
+                                                    "Failed to start login: {err}",
+                                                    "启动登录失败：{err}"
+                                                )
+                                            );
                                         }
                                     }
                                 }
@@ -965,7 +971,7 @@ impl RedapServers {
                         .ok();
                 }
                 LoginFlowResult::Failure(err) => {
-                    re_log::warn!("Login failed: {err}");
+                    re_log::warn!("{}", trf!("Login failed: {err}", "登录失败：{err}"));
                 }
             }
             self.inline_login_flow = None;

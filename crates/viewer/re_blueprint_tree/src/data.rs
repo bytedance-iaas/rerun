@@ -8,6 +8,7 @@
 //! to the overall cost of having large blueprint trees (a.k.a the many-entities performance
 //! issues: <https://github.com/rerun-io/rerun/issues/8233>).
 
+use re_i18n::trf;
 use std::ops::{ControlFlow, Range};
 
 use itertools::Itertools as _;
@@ -125,7 +126,11 @@ impl ContainerData {
                         .map(ContentsData::Container)
                     } else {
                         re_log::warn_once!(
-                            "Failed to find container {container_id} in ViewportBlueprint"
+                            "{}",
+                            trf!(
+                                "Failed to find container {container_id} in ViewportBlueprint",
+                                "在 ViewportBlueprint 中找不到容器 {container_id}"
+                            )
                         );
                         None
                     }
@@ -135,7 +140,13 @@ impl ContainerData {
                         ViewData::from_blueprint_and_filter(ctx, view_blueprint, filter_matcher)
                             .map(ContentsData::View)
                     } else {
-                        re_log::warn_once!("Failed to find view {view_id} in ViewportBlueprint");
+                        re_log::warn_once!(
+                            "{}",
+                            trf!(
+                                "Failed to find view {view_id} in ViewportBlueprint",
+                                "在 ViewportBlueprint 中找不到视图 {view_id}"
+                            )
+                        );
                         None
                     }
                 }

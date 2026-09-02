@@ -1,5 +1,6 @@
 //! TOS/S3 backend for the remote `LeRobot` dataset streaming in [`crate::lerobot_remote`].
 
+use re_i18n::trf;
 use std::ops::Range;
 
 use re_log_channel::LogReceiver;
@@ -87,7 +88,7 @@ impl DatasetStore for TosStore {
                 // The listing itself succeeded, so the object definitively does not exist —
                 // callers use the typed 404 to tell this apart from transient fetch trouble.
                 anyhow::Error::new(crate::lerobot_remote::HttpStatusError(404))
-                    .context(format!("No such object: {key}"))
+                    .context(trf!("No such object: {key}", "对象不存在：{key}"))
             })
     }
 

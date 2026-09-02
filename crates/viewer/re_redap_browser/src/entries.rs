@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::future;
 use std::sync::Arc;
 use std::task::Poll;
@@ -402,7 +403,13 @@ fn start_streaming_segment_table_blueprint(
         )
         .await
         {
-            re_log::warn!("Failed to stream segment table blueprint: {err}");
+            re_log::warn!(
+                "{}",
+                trf!(
+                    "Failed to stream segment table blueprint: {err}",
+                    "流式读取分段表 blueprint 失败：{err}"
+                )
+            );
         }
     });
 }
@@ -446,7 +453,13 @@ fn start_registered_table_blueprint_stream(
         )
         .await
         {
-            re_log::warn!("Failed to stream table blueprint: {err}");
+            re_log::warn!(
+                "{}",
+                trf!(
+                    "Failed to stream table blueprint: {err}",
+                    "流式读取表 blueprint 失败：{err}"
+                )
+            );
         }
     });
 }

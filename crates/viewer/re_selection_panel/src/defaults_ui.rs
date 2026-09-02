@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use std::collections::BTreeMap;
 
 use arrow::array::ArrayRef;
@@ -62,7 +63,7 @@ pub fn view_components_defaults_section_ui(
 
     let mut add_button_is_open = false;
     let mut add_button = ui
-        .small_icon_button_widget(&re_ui::icons::ADD, "Add overrides…")
+        .small_icon_button_widget(&re_ui::icons::ADD, tr("Add overrides…", "添加覆盖…"))
         .on_menu(|ui| {
             add_button_is_open = true;
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
@@ -74,17 +75,16 @@ pub fn view_components_defaults_section_ui(
                 components_to_show_in_add_menu.unwrap_or_default(),
             );
         })
-        .on_hover_text("Add more component defaults");
+        .on_hover_text(tr("Add more component defaults", "添加更多组件默认值"));
 
     if let Some(reason) = reason_we_cannot_add_more {
         add_button = add_button.enabled(false).on_disabled_hover_text(reason);
     }
 
-    let markdown = "# Component defaults\n
-This section lists default values for components in the scope of the present view. The visualizers \
-corresponding to this view's entities use these defaults when no per-entity store value or \
-override is specified.\n
-Click on the `+` button to add a new default value.";
+    let markdown = "# 组件默认值\n
+这里列出当前视图范围内各组件的默认值。当某个实体既没有存储值、也没有设置覆盖时，\
+该视图下对应实体的可视化器就会使用这些默认值。\n
+点击 `+` 按钮可以添加新的默认值。";
 
     let body = |ui: &mut egui::Ui| {
         active_default_ui(
@@ -96,7 +96,7 @@ Click on the `+` button to add a new default value.";
             view,
         );
     };
-    ui.section_collapsing_header("Component defaults")
+    ui.section_collapsing_header("组件默认值")
         .with_button(add_button)
         .with_help_markdown(markdown)
         .show(ui, body);
@@ -122,7 +122,7 @@ fn active_default_ui(
         ui.spacing_mut().item_spacing.y = 0.0;
 
         if active_defaults.is_empty() {
-            ui.list_item_flat_noninteractive(LabelContent::new("none").weak(true).italics(true));
+            ui.list_item_flat_noninteractive(LabelContent::new("无").weak(true).italics(true));
         }
 
         let mut previous_archetype_name = None;
@@ -165,7 +165,7 @@ fn active_default_ui(
             let response = ui.list_item_flat_noninteractive(
                 re_ui::list_item::PropertyContent::new(component_descr.archetype_field_name())
                     .min_desired_width(150.0)
-                    .with_action_button(&re_ui::icons::CLOSE, "Clear blueprint component", || {
+                    .with_action_button(&re_ui::icons::CLOSE, "清除 blueprint 组件", || {
                         ctx.clear_blueprint_component(
                             view.defaults_path.clone(),
                             component_descr.clone(),
@@ -207,9 +207,13 @@ fn visualized_components_by_archetype(
                 // TODO(andreas): In theory this is perfectly valid: A visualizer may be interested in an untagged component!
                 // Practically this never happens and we don't handle this in the ui here yet.
                 re_log::warn_once!(
-                    "Visualizer {} queried untagged component {}. It won't show in the defaults ui.",
-                    id,
-                    descr
+                    "{}",
+                    trf!(
+                        "Visualizer {} queried untagged component {}. It won't show in the defaults ui.",
+                        "可视化器 {} 查询了未打标签的组件 {}，它不会显示在默认值界面里。",
+                        id,
+                        descr
+                    )
                 );
                 continue;
             };
@@ -262,7 +266,7 @@ fn components_to_show_in_add_menu(
     active_defaults: &BTreeMap<ComponentIdentifier, ArrayRef>,
 ) -> Result<BTreeMap<ArchetypeName, Vec<DefaultOverrideEntry>>, String> {
     if visualized_components_by_archetype.is_empty() {
-        return Err("No components to visualize".to_owned());
+        return Err("没有可供可视化的组件".to_owned());
     }
 
     let mut components_to_show_in_add_menu = visualized_components_by_archetype.clone();
@@ -275,7 +279,7 @@ fn components_to_show_in_add_menu(
         components_to_show_in_add_menu.retain(|_, components| !components.is_empty());
 
         if components_to_show_in_add_menu.is_empty() {
-            return Err("All components already have active defaults".to_owned());
+            return Err("所有组件都已设置默认值".to_owned());
         }
     }
     {
@@ -302,8 +306,9 @@ fn components_to_show_in_add_menu(
         components_to_show_in_add_menu.retain(|_, components| !components.is_empty());
 
         if components_to_show_in_add_menu.is_empty() {
-            return Err(format!(
+            return Err(trf!(
                 "Rerun lacks edit UI for: {}",
+                "Rerun 没有以下组件的编辑界面：{}",
                 missing_editors.iter().map(|c| c.display_name()).join(", ")
             ));
         }
@@ -391,7 +396,13 @@ fn add_new_default(
                 ));
         }
         Err(err) => {
-            re_log::warn!("Failed to create Chunk for blueprint component: {err}");
+            re_log::warn!(
+                "{}",
+                trf!(
+                    "Failed to create Chunk for blueprint component: {err}",
+                    "创建 blueprint 组件的 Chunk 失败：{err}"
+                )
+            );
         }
     }
 }

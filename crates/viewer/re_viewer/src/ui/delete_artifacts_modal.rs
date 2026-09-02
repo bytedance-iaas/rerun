@@ -1,4 +1,5 @@
 use re_data_source::rrd_artifacts::ArtifactDeletionRequest;
+use re_i18n::{tr, trf};
 use re_ui::modal::{ModalHandler, ModalWrapper};
 
 /// Confirmation dialog for deleting rrd artifacts from the store.
@@ -24,35 +25,38 @@ impl DeleteArtifactsModal {
 
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("Delete rrd artifacts?"),
+            || ModalWrapper::new(tr("Delete rrd artifacts?", "删除 rrd 制品？")),
             |ui| {
                 if request.episode.is_some() {
-                    ui.label(
-                        "This deletes the converted rrd of this episode from the \
-                         artifacts store:",
-                    );
+                    ui.label(tr(
+                        "This deletes this episode's converted rrd from the artifacts store:",
+                        "这会从缓存桶中删除这一集转换出的 rrd："
+                    ));
                 } else {
                     let count = re_data_source::lerobot_remote::dataset_artifact_count(
                         &request.application_id,
                     );
-                    ui.label(format!(
+                    ui.label(trf!(
                         "This deletes ALL converted rrds of this dataset ({count} known) \
                          from the artifacts store:",
+                        "这会从缓存桶中删除这个数据集转换出的全部 rrd（已知 {count} 个）：",
                     ));
                 }
                 ui.add_space(4.0);
                 ui.monospace(&request.target_url);
                 ui.add_space(4.0);
-                ui.label(
-                    "Viewing keeps working: affected episodes are simply re-converted from \
-                     their sources on the next open (and re-uploaded if upload is enabled). \
-                     This cannot be undone.",
-                );
+                ui.label(tr(
+                    "Viewing is unaffected: the affected episodes are re-converted from the \
+                     source data the next time they are opened (and re-uploaded if uploading \
+                     is enabled). This cannot be undone.",
+                    "查看不受影响：受影响的集下次打开时会从源数据重新转换\
+                    （若开启了上传，还会重新上传）。此操作无法撤销。"
+                ));
                 ui.add_space(12.0);
 
                 ui.horizontal(|ui| {
                     let delete = ui.add(egui::Button::new(
-                        egui::RichText::new("Delete").color(ui.visuals().error_fg_color),
+                        egui::RichText::new(tr("Delete", "删除")).color(ui.visuals().error_fg_color),
                     ));
                     if delete.clicked() {
                         match re_data_source::lerobot_remote::dataset_artifacts_config(
@@ -66,16 +70,20 @@ impl DeleteArtifactsModal {
                             }
                             None => {
                                 re_log::warn!(
-                                    "Cannot delete rrd artifacts: the dataset's stream is no \
-                                     longer active\nDataset: {}",
-                                    request.dataset_url
+                                    "{}",
+                                    trf!(
+                                        "Cannot delete rrd artifacts: the dataset's stream is no \
+                                         longer active\nDataset: {}",
+                                        "无法删除 rrd 制品：这个数据集的流式读取已不再活跃\n数据集：{}",
+                                        request.dataset_url
+                                    )
                                 );
                             }
                         }
                         self.request = None;
                         ui.close();
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr("Cancel", "取消")).clicked() {
                         self.request = None;
                         ui.close();
                     }

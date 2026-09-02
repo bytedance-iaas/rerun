@@ -1,5 +1,6 @@
 use egui::Rect;
 use re_format::format_f32;
+use re_i18n::tr;
 use re_sdk_types::blueprint::components::VisualBounds2D;
 use re_ui::UiExt as _;
 use re_viewer_context::ViewState;
@@ -20,8 +21,11 @@ impl GraphViewState {
         let Some(rect) = self.layout_state.bounding_rect() else {
             return;
         };
-        ui.grid_left_hand_label("Bounding box")
-            .on_hover_text("The bounding box encompassing all entities in the view right now");
+        ui.grid_left_hand_label(tr("Bounding box", "包围盒"))
+            .on_hover_text(tr(
+                "The bounding box encompassing all entities in the view right now",
+                "当前视图中包含所有实体的包围盒",
+            ));
         ui.vertical(|ui| {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
             let egui::Rect { min, max } = rect;
@@ -32,7 +36,7 @@ impl GraphViewState {
     }
 
     pub fn simulation_ui(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Reset simulation").clicked() {
+        if ui.button(tr("Reset simulation", "重置模拟")).clicked() {
             self.layout_state.reset();
         }
     }

@@ -8,6 +8,8 @@
 
 use std::path::PathBuf;
 
+use re_i18n::trf;
+
 /// Reads the local viewer config file, mirroring the web deployment's `config.json`.
 ///
 /// Looks at `$RERUN_CONFIG` first, then `~/.rerun/config.json`. Returns the raw bytes
@@ -21,8 +23,12 @@ pub fn load_local_config_bytes() -> Option<Vec<u8>> {
         Err(err) => {
             if err.kind() != std::io::ErrorKind::NotFound {
                 re_log::warn!(
-                    "Failed to read local viewer config: {err}\nFile path: {}",
-                    path.display()
+                    "{}",
+                    trf!(
+                        "Failed to read local viewer config: {err}\nFile path: {}",
+                        "读取本地 Viewer 配置失败：{err}\n文件路径：{}",
+                        path.display()
+                    )
                 );
             }
             None

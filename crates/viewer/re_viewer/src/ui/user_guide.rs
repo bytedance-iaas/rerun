@@ -6,6 +6,7 @@
 //! `docs/release/user-guide/`; the web deployment additionally serves it as HTML at
 //! `/docs/` (see deploy/Dockerfile) for reading or sharing outside the viewer.
 
+use re_i18n::tr;
 use std::sync::OnceLock;
 
 struct Page {
@@ -13,23 +14,18 @@ struct Page {
     markdown: &'static str,
 }
 
-const PAGES: &[Page] = &[
-    Page {
-        tab: "Viewer",
-        markdown: include_str!("../../../../../docs/release/user-guide/01-viewer.md"),
-    },
-    Page {
-        tab: "Catalog server",
-        markdown: include_str!("../../../../../docs/release/user-guide/02-catalog.md"),
-    },
-];
-
-/// A CJK font for the (Chinese) guide text — egui's built-in fonts have no CJK glyphs.
-/// Noto Sans SC (SIL OFL 1.1, see LICENSE-NotoSansSC.txt next to it), subset to the
-/// common CJK ranges. Registered lazily on first open, as a fallback for both font
-/// families, so it also fixes CJK anywhere else in the UI once loaded.
-const CJK_FONT: &[u8] =
-    include_bytes!("../../../../../crates/viewer/re_viewer/data/fonts/NotoSansSC-subset.otf");
+fn pages() -> [Page; 2] {
+    [
+        Page {
+            tab: tr("Viewer", "Viewer 篇"),
+            markdown: include_str!("../../../../../docs/release/user-guide/01-viewer.md"),
+        },
+        Page {
+            tab: tr("Catalog server", "Catalog server 篇"),
+            markdown: include_str!("../../../../../docs/release/user-guide/02-catalog.md"),
+        },
+    ]
+}
 
 /// The screenshots the pages reference, embedded alongside them.
 const IMAGES: &[(&str, &[u8])] = &[
@@ -80,7 +76,7 @@ const IMAGES: &[(&str, &[u8])] = &[
 fn processed_markdown(page: usize) -> &'static str {
     static CACHE: OnceLock<Vec<String>> = OnceLock::new();
     let pages = CACHE.get_or_init(|| {
-        PAGES
+        pages()
             .iter()
             .map(|page| {
                 page.markdown
@@ -123,7 +119,7 @@ impl UserGuideModal {
             requested
         });
         if let Some(page) = requested {
-            self.selected = page.min(PAGES.len() - 1);
+            self.selected = page.min(pages().len() - 1);
             self.open = true;
 
             if !self.images_registered {
@@ -131,20 +127,6 @@ impl UserGuideModal {
                     ui.ctx()
                         .include_bytes(format!("bytes://user-guide/images/{name}"), *bytes);
                 }
-                ui.ctx().add_font(egui::epaint::text::FontInsert::new(
-                    "NotoSansSC",
-                    egui::FontData::from_static(CJK_FONT),
-                    vec![
-                        egui::epaint::text::InsertFontFamily {
-                            family: egui::FontFamily::Proportional,
-                            priority: egui::epaint::text::FontPriority::Lowest,
-                        },
-                        egui::epaint::text::InsertFontFamily {
-                            family: egui::FontFamily::Monospace,
-                            priority: egui::epaint::text::FontPriority::Lowest,
-                        },
-                    ],
-                ));
                 self.images_registered = true;
             }
         }
@@ -156,7 +138,7 @@ impl UserGuideModal {
         let commonmark_cache = &mut self.commonmark_cache;
         let mut open = self.open;
         let default_size = egui::vec2(840.0, 620.0);
-        egui::Window::new("User guide")
+        egui::Window::new(tr("User Guide", "用户指南"))
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
@@ -165,7 +147,7 @@ impl UserGuideModal {
             .default_pos(ui.ctx().content_rect().center() - 0.5 * default_size)
             .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
-                    for (index, page) in PAGES.iter().enumerate() {
+                    for (index, page) in pages().iter().enumerate() {
                         ui.selectable_value(selected, index, page.tab);
                     }
                 });

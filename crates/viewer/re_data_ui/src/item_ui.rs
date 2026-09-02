@@ -2,6 +2,7 @@
 //!
 //! TODO(andreas): This is not a `data_ui`, can this go somewhere else, shouldn't be in `re_data_ui`.
 
+use re_i18n::{tr, trf};
 use re_entity_db::entity_db::EntityDbClass;
 use re_entity_db::{EntityTree, InstancePath};
 use re_format::format_uint;
@@ -289,9 +290,9 @@ fn entity_tree_stats_ui(
     let subtree_caveat = if tree.children.is_empty() {
         ""
     } else if include_subtree {
-        " (including subtree)"
+        tr(" (including subtree)", "（含子树）")
     } else {
-        " (excluding subtree)"
+        tr(" (excluding subtree)", "（不含子树）")
     };
 
     let engine = db.storage_engine();
@@ -315,18 +316,21 @@ fn entity_tree_stats_ui(
     if total_stats.num_rows == 0 {
         return;
     } else if timeline_stats.num_rows == 0 {
-        ui.label(format!(
+        ui.label(trf!(
             "{} static rows{subtree_caveat}",
+            "{} 行静态数据{subtree_caveat}",
             format_uint(total_stats.num_rows)
         ));
     } else if static_stats.num_rows == 0 {
-        ui.label(format!(
+        ui.label(trf!(
             "{} rows on timeline '{timeline}'{subtree_caveat}",
+            "时间轴 '{timeline}' 上有 {} 行{subtree_caveat}",
             format_uint(total_stats.num_rows),
         ));
     } else {
-        ui.label(format!(
+        ui.label(trf!(
             "{} rows = {} static + {} on timeline '{timeline}'{subtree_caveat}",
+            "共 {} 行 = {} 行静态数据 + 时间轴 '{timeline}' 上 {} 行{subtree_caveat}",
             format_uint(total_stats.num_rows),
             format_uint(static_stats.num_rows),
             format_uint(timeline_stats.num_rows),
@@ -377,14 +381,16 @@ fn entity_tree_stats_ui(
     }
 
     if let Some(data_rate) = data_rate {
-        ui.label(format!(
+        ui.label(trf!(
             "Using ~{}{subtree_caveat} ≈ {}",
+            "占用约 {}{subtree_caveat} ≈ {}",
             format_bytes(total_stats.total_size_bytes as f64),
             data_rate
         ));
     } else {
-        ui.label(format!(
+        ui.label(trf!(
             "Using ~{}{subtree_caveat}",
+            "占用约 {}{subtree_caveat}",
             format_bytes(total_stats.total_size_bytes as f64)
         ));
     }
@@ -454,7 +460,7 @@ pub fn timeline_button_to(
 
     let response = ui
         .selectable_label(is_selected, text)
-        .on_hover_text("Click to switch to this timeline");
+        .on_hover_text(tr("Click to switch to this timeline", "点击切换到这条时间轴"));
     if response.clicked() {
         ctx.send_time_commands_to_active_recording([
             TimeControlCommand::SetActiveTimeline(*timeline_name),
@@ -496,15 +502,15 @@ pub fn instance_hover_card_ui(
     include_subtree: bool,
 ) {
     if !ctx.db.is_known_entity(&instance_path.entity_path) {
-        ui.label("Unknown entity.");
+        ui.label(tr("Unknown entity.", "未知实体。"));
         return;
     }
 
     ui.horizontal(|ui| {
         let subtype_string = if instance_path.instance.is_all() {
-            "Entity"
+            tr("Entity", "实体")
         } else {
-            "Entity instance"
+            tr("Entity instance", "实体实例")
         };
         ui.strong(subtype_string);
         ui.label(instance_path.syntax_highlighted(ui.style()));
@@ -690,12 +696,12 @@ pub fn entity_db_button_ui(
         title = format!("{app_id_prefix}{short_name}");
         match progress.phase {
             LoadPhase::Converting => {
-                write!(title, " · converting…").ok();
+                write!(title, " · {}", tr("converting…", "正在转换…")).ok();
             }
             LoadPhase::Downloading => {
                 // Name the file type ("downloading parquet"): it tells apart fetching
                 // sources for a conversion from fetching a ready-made rrd artifact.
-                write!(title, " · downloading").ok();
+                write!(title, " · {}", tr("downloading", "正在下载")).ok();
                 if let Some(kind) = progress.kind.label() {
                     write!(title, " {kind}").ok();
                 }
@@ -712,9 +718,9 @@ pub fn entity_db_button_ui(
                 }
                 if let Some(eta) = progress.eta_secs {
                     if eta >= 90.0 {
-                        write!(title, " · ~{:.0}min left", (eta / 60.0).ceil()).ok();
+                        write!(title, "{}", trf!(" · ~{:.0}min left", " · 约剩 {:.0} 分钟", (eta / 60.0).ceil())).ok();
                     } else {
-                        write!(title, " · ~{eta:.0}s left").ok();
+                        write!(title, "{}", trf!(" · ~{eta:.0}s left", " · 约剩 {eta:.0} 秒")).ok();
                     }
                 }
             }
@@ -746,7 +752,7 @@ pub fn entity_db_button_ui(
                 rect,
                 1.0,
                 None,
-                "downloading episode",
+                tr("downloading episode", "正在下载 episode"),
             );
         })
     } else {
@@ -785,11 +791,11 @@ pub fn entity_db_button_ui(
         item_content = item_content.with_buttons(move |ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, "Close recording")
+                .add(ui.small_icon_button_widget(&icons::CLOSE_SMALL, tr("Close recording", "关闭 episode")))
                 .on_hover_text(match store_id.kind() {
-                    re_log_types::StoreKind::Recording => "Close this recording",
+                    re_log_types::StoreKind::Recording => tr("Remove this episode from the viewer", "从 Viewer 中移除该 episode"),
                     re_log_types::StoreKind::Blueprint => {
-                        "Close this blueprint (unsaved data will be lost)"
+                        tr("Close this blueprint (unsaved data will be lost)", "关闭这个 blueprint（未保存的数据会丢失）")
                     }
                 });
             if resp.clicked() {
@@ -805,15 +811,13 @@ pub fn entity_db_button_ui(
             if can_hide {
                 if is_hidden {
                     if ui
-                        .small_icon_button(&icons::VISIBLE, "Move the episode back to the list")
-                        .on_hover_text("Move the episode back to the list")
+                        .small_icon_button(&icons::VISIBLE, tr("Move the episode back to the list", "把这个 episode 移回列表"))
                         .clicked()
                     {
                         re_viewer_context::hidden_recordings::unhide(&store_id);
                     }
                 } else if ui
-                    .small_icon_button(&icons::INVISIBLE, "Hide the episode")
-                    .on_hover_text("Hide the episode")
+                    .small_icon_button(&icons::INVISIBLE, tr("Hide the episode", "隐藏这个 episode"))
                     .clicked()
                 {
                     re_viewer_context::hidden_recordings::hide(store_id.clone());
@@ -834,11 +838,11 @@ pub fn entity_db_button_ui(
                 ui.add_enabled_ui(!dataset_paused, |ui| {
                     if episode_loading {
                         if ui
-                            .small_icon_button(&icons::PAUSE, "Pause downloading this episode")
-                            .on_hover_text(
-                                "Pause downloading this episode. \
-                             Click the episode (or its resume button) to restart it.",
-                            )
+                            .add(ui.small_icon_button_widget(&icons::PAUSE, tr("Pause downloading this episode", "暂停下载这个 episode")))
+                            .on_hover_text(tr(
+                                "Pause downloading this episode. Click the episode (or its resume button) to start again.",
+                                "暂停下载这个 episode。点击该 episode（或它的继续按钮）可重新开始。",
+                            ))
                             .clicked()
                         {
                             re_data_source::lerobot_remote::pause_current_item(
@@ -847,16 +851,14 @@ pub fn entity_db_button_ui(
                         }
                     } else if episode_parked {
                         if ui
-                            .small_icon_button(&icons::PLAY, "Resume downloading this episode")
-                            .on_hover_text("Resume downloading this episode")
+                            .small_icon_button(&icons::PLAY, tr("Resume downloading this episode", "继续下载这个 episode"))
                             .clicked()
                         {
                             re_data_source::lerobot_remote::prioritize_episode_for_store(&store_id);
                         }
                     } else if (has_data || episode_failed)
                         && ui
-                            .small_icon_button(&icons::RESET, "Re-download this episode")
-                            .on_hover_text("Re-download this episode")
+                            .small_icon_button(&icons::RESET, tr("Redownload this episode", "重新下载这个 episode"))
                             .clicked()
                     {
                         // Arm the re-download marker, then close the recording to drop the old
@@ -886,37 +888,55 @@ pub fn entity_db_button_ui(
     }
 
     let mut response = list_item::list_item_scope(ui, "entity db button", |ui| {
-        list_item
-            .show_hierarchical(ui, item_content)
-            .on_hover_ui(|ui| {
-                entity_db.app_ui(ctx, ui, re_viewer_context::UiLayout::Tooltip);
-            })
+        list_item.show_hierarchical(ui, item_content)
     })
     .inner;
 
-    if let Some(reason) = &episode_failure {
+    // Only request the hover card (and the extra hover lines below) while the row itself
+    // is hovered: egui keeps an open tooltip alive by rect-containment, which would
+    // otherwise suppress the tooltips of the buttons sitting inside this row.
+    let row_hovered = response.hovered();
+    if row_hovered {
+        response = response.on_hover_ui(|ui| {
+            entity_db.app_ui(ctx, ui, re_viewer_context::UiLayout::Tooltip);
+        });
+    }
+
+    if let Some(reason) = &episode_failure
+        && row_hovered
+    {
         response = response.on_hover_text(reason.clone());
     }
 
     // A converted copy of this episode lives in the rrd artifacts store: show where. The address is
     // copyable via the context menu ("Copy rrd artifact address").
-    if episode_queued {
+    if episode_queued && row_hovered {
         response = response
-            .on_hover_text("Not downloaded yet — click to move it to the front of the queue.");
+            .on_hover_text(tr(
+                "Not downloaded yet — click to move it to the front of the download queue.",
+                "尚未下载 — 点击后移到下载队列最前。",
+            ));
     }
 
     if let Some(artifact_url) = re_data_source::lerobot_remote::episode_rrd_artifact_url(&store_id)
+        && row_hovered
     {
-        response = response.on_hover_text(format!("Rrd artifact: {artifact_url}"));
+        response = response.on_hover_text(trf!(
+            "rrd artifact: {artifact_url}",
+            "rrd 缓存文件：{artifact_url}"
+        ));
     }
 
-    if let Some(progress) = &download_progress {
+    if let Some(progress) = &download_progress
+        && row_hovered
+    {
         let total = progress.bytes_total.map_or_else(
-            || "unknown size".to_owned(),
+            || tr("unknown size", "大小未知").to_owned(),
             |total| re_format::format_bytes(total as _),
         );
-        response = response.on_hover_text(format!(
+        response = response.on_hover_text(trf!(
             "Downloading: {} of {} · {}/s",
+            "正在下载：{} / {} · {}/s",
             re_format::format_bytes(progress.bytes_done as _),
             total,
             re_format::format_bytes(progress.bytes_per_sec),
@@ -933,11 +953,11 @@ pub fn entity_db_button_ui(
         let url = ViewerOpenUrl::from_route(ctx.store_hub(), &new_entry.route())
             .and_then(|url| url.sharable_url(None));
         if ui
-            .add_enabled(url.is_ok(), egui::Button::new("Copy link to segment"))
+            .add_enabled(url.is_ok(), egui::Button::new("复制该片段的链接"))
             .on_disabled_hover_text(if let Err(err) = url.as_ref() {
-                format!("Can't copy a link to this segment: {err}")
+                trf!("Can't copy a link to this segment: {err}", "无法复制该片段的链接：{err}")
             } else {
-                "Can't copy a link to this segment".to_owned()
+                "无法复制该片段的链接".to_owned()
             })
             .clicked()
             && let Ok(url) = url
@@ -946,8 +966,8 @@ pub fn entity_db_button_ui(
                 .send_system(SystemCommand::CopyViewerUrl(url));
         }
 
-        if ui.button("Copy segment name").clicked() {
-            re_log::info!("Copied {recording_name:?} to clipboard");
+        if ui.button("复制片段名称").clicked() {
+            re_log::info!("{}", trf!("Copied {recording_name:?} to clipboard", "已复制 {recording_name:?} 到剪贴板"));
             ui.copy_text(recording_name);
         }
 
@@ -965,18 +985,18 @@ pub fn entity_db_button_ui(
                     == Some(false);
 
             ui.separator();
-            if ui.button("Copy rrd artifact address").clicked() {
+            if ui.button("复制 rrd artifact 地址").clicked() {
                 ui.copy_text(artifact_url.clone());
             }
             if ui
                 .add_enabled(
                     !deleting && !no_permission,
-                    egui::Button::new("Delete rrd artifact…"),
+                    egui::Button::new("删除 rrd artifact…"),
                 )
                 .on_disabled_hover_text(if no_permission {
-                    "These credentials have no delete permission"
+                    "当前凭证没有删除权限"
                 } else {
-                    "Deletion in progress…"
+                    "正在删除…"
                 })
                 .clicked()
             {
@@ -1029,8 +1049,7 @@ pub fn table_id_button_ui(
         item_content = item_content.with_buttons(|ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, "Close table")
-                .on_hover_text("Close this table (all data will be lost)");
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close this table (all data will be lost)", "关闭这个表格（所有数据都会丢失）"));
             if resp.clicked() {
                 ctx.command_sender()
                     .send_system(SystemCommand::CloseRecordingOrTable(
@@ -1053,7 +1072,7 @@ pub fn table_id_button_ui(
         list_item
             .show_hierarchical(ui, item_content)
             .on_hover_ui(|ui| {
-                ui.label(format!("Table: {table_id}"));
+                ui.label(trf!("Table: {table_id}", "表格：{table_id}"));
             })
     })
     .inner;

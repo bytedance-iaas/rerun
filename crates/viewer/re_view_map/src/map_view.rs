@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::mem::size_of;
 
 use egui::{Modifiers, NumExt as _, Rect, Response};
@@ -137,14 +138,14 @@ impl ViewClass for MapView {
     }
 
     fn help(&self, os: egui::os::OperatingSystem) -> Help {
-        Help::new("Map view")
+        Help::new(tr("Map view", "Map 视图"))
             .docs_link("https://rerun.io/docs/reference/types/views/map_view")
-            .control("Pan", (icons::LEFT_MOUSE_CLICK, "+", "drag"))
+            .control(tr("Pan", "平移"), (icons::LEFT_MOUSE_CLICK, "+", tr("drag", "拖动")))
             .control(
-                "Zoom",
+                tr("Zoom", "缩放"),
                 IconText::from_modifiers_and(os, Modifiers::COMMAND, icons::SCROLL),
             )
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control(tr("Reset view", "重置视角"), (tr("double", "双击"), icons::LEFT_MOUSE_CLICK))
     }
 
     fn on_register(

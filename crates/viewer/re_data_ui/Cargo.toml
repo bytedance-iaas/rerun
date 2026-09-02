@@ -20,6 +20,7 @@ all-features = true
 
 
 [dependencies]
+re_i18n.workspace = true
 re_arrow_ui.workspace = true
 re_capabilities = { workspace = true, features = ["egui"] }
 re_chunk_store.workspace = true

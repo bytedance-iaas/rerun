@@ -2,6 +2,7 @@ use egui::{Response, Ui, WidgetInfo, WidgetType};
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item_with_context};
 use re_data_ui::item_ui::guess_instance_path_icon;
 use re_entity_db::InstancePath;
+use re_i18n::{tr, trf};
 use re_log_types::{ApplicationId, EntityPath, EntityPathHash};
 use re_ui::drag_and_drop::DropTarget;
 use re_ui::filter_widget::format_matching_text;
@@ -92,17 +93,21 @@ impl BlueprintTree {
                     list_item::CustomContent::new(|ui, _| {
                         let title_response = self
                             .filter_state
-                            .section_title_ui(ui, egui::RichText::new("Blueprint").strong());
+                            .section_title_ui(
+                                ui,
+                                egui::RichText::new(re_i18n::tr("Blueprint", "蓝图")).strong(),
+                            );
 
                         if let Some(title_response) = title_response {
-                            title_response.on_hover_text(
+                            title_response.on_hover_text(tr(
                                 "The blueprint is where you can configure the Rerun Viewer",
-                            );
+                                "Blueprint 面板用于配置 Rerun Viewer",
+                            ));
                         }
                     })
                     .menu_button(
                         &re_ui::icons::MORE,
-                        "Open menu with more options",
+                        tr("Open menu with more options", "打开更多选项菜单"),
                         |ui| {
                             let recording_id = ctx.store_context.recording_store_id();
                             re_ui::RecordingCommandKind::AddViewOrContainer.menu_button_ui(
@@ -223,8 +228,9 @@ impl BlueprintTree {
             .drop_target_style(self.is_candidate_drop_parent_container(&container_data.id))
             .show_flat(
                 ui,
-                list_item::LabelContent::new(format!(
+                list_item::LabelContent::new(trf!(
                     "Viewport ({})",
+                    "视口（{}）",
                     container_data.name.as_ref()
                 ))
                 .label_style(contents_name_style(&container_data.name))
@@ -338,7 +344,7 @@ impl BlueprintTree {
             .with_buttons(|ui| {
                 visibility_button_ui(ui, parent_visible, &mut visible);
 
-                if remove_button_ui(ui, "Remove container").clicked() {
+                if remove_button_ui(ui, tr("Remove container", "移除容器")).clicked() {
                     viewport_blueprint.mark_user_interaction(ctx);
                     viewport_blueprint.remove_contents(content);
                 }
@@ -379,7 +385,13 @@ impl BlueprintTree {
             );
 
         viewport_blueprint.set_content_visibility(ctx, &content, visible);
-        let response = response.on_hover_text(format!("{:?} container", container_data.kind));
+        let kind_name = match container_data.kind {
+            egui_tiles::ContainerKind::Tabs => tr("Tabs", "标签页"),
+            egui_tiles::ContainerKind::Horizontal => tr("Horizontal", "水平排列"),
+            egui_tiles::ContainerKind::Vertical => tr("Vertical", "垂直排列"),
+            egui_tiles::ContainerKind::Grid => tr("Grid", "网格"),
+        };
+        let response = response.on_hover_text(trf!("{kind_name} container", "{kind_name}容器"));
 
         self.handle_interactions_for_item(
             ctx,
@@ -438,7 +450,9 @@ impl BlueprintTree {
             .with_buttons(|ui| {
                 visibility_button_ui(ui, container_visible, &mut visible);
 
-                if remove_button_ui(ui, "Remove view from the viewport").clicked() {
+                if remove_button_ui(ui, tr("Remove view from the viewport", "从视口中移除视图"))
+                    .clicked()
+                {
                     viewport_blueprint.mark_user_interaction(ctx);
                     viewport_blueprint.remove_contents(Contents::View(view_data.id));
                 }
@@ -477,7 +491,8 @@ impl BlueprintTree {
                         .interactive(false)
                         .show_flat(
                             ui,
-                            list_item::LabelContent::new("Projections:").italics(true),
+                            list_item::LabelContent::new(tr("Projections:", "投影："))
+                                .italics(true),
                         );
 
                     for projection in &view_data.projection_trees {
@@ -494,7 +509,7 @@ impl BlueprintTree {
                 }
             });
 
-        let response = response.on_hover_text(format!("{} view", class.display_name()));
+        let response = response.on_hover_text(trf!("{} view", "{} 视图", class.display_name()));
 
         if response.clicked() {
             viewport_blueprint.focus_tab(view_data.id);
@@ -590,7 +605,10 @@ impl BlueprintTree {
 
                             if remove_button_ui(
                                 ui,
-                                "Remove this entity and all its children from the view",
+                                tr(
+                                    "Remove this entity and all its children from the view",
+                                    "从视图中移除该实体及其所有子实体",
+                                ),
                             )
                             .clicked()
                             {
@@ -612,10 +630,10 @@ impl BlueprintTree {
                             .italics(true)
                             .with_icon(&re_ui::icons::INTERNAL_LINK),
                     )
-                    .on_hover_text(
-                        "This subtree corresponds to the view's origin, and is displayed above \
-                        the 'Projections' section. Click to select it.",
-                    )
+                    .on_hover_text(tr(
+                        "This subtree corresponds to the view's origin, and is displayed above the 'Projections' section. Click to select it.",
+                        "该子树对应视图的原点，显示在\"投影\"部分上方。点击可选中它。",
+                    ))
                     .clicked()
                 {
                     ctx.command_sender()
@@ -685,9 +703,10 @@ impl BlueprintTree {
                 data_result_data.kind,
                 DataResultKind::EmptyOriginPlaceholder
             ) {
-                ui.label(ui.warning_text(
+                ui.label(ui.warning_text(tr(
                     "This view's query did not match any data under the space origin",
-                ));
+                    "该视图的查询在空间原点下没有匹配到任何数据",
+                )));
             }
         });
 
@@ -1244,14 +1263,17 @@ fn set_blueprint_to_default_menu_buttons(ctx: &ViewerContext<'_>, ui: &mut egui:
     let default_blueprint = default_blueprint_id.and_then(|id| ctx.store_bundle().get(id));
 
     let disabled_reason = match default_blueprint {
-        None => Some("No default blueprint is set for this app"),
+        None => Some(tr(
+            "No default blueprint is set for this app",
+            "该应用没有设置默认 blueprint",
+        )),
         Some(default_blueprint) => {
             let active_is_clone_of_default =
                 Some(default_blueprint.store_id()) == ctx.store_context.blueprint.cloned_from();
             let last_modified_at_the_same_time =
                 default_blueprint.latest_row_id() == ctx.store_context.blueprint.latest_row_id();
             if active_is_clone_of_default && last_modified_at_the_same_time {
-                Some("No modifications have been made")
+                Some(tr("No modifications have been made", "尚未做任何修改"))
             } else {
                 None // it is valid to reset to default
             }
@@ -1310,14 +1332,13 @@ fn list_views_with_entity(
 
 fn remove_button_ui(ui: &mut Ui, alt_text_and_tooltip: &str) -> Response {
     ui.small_icon_button(&re_ui::icons::REMOVE, alt_text_and_tooltip)
-        .on_hover_text(alt_text_and_tooltip)
 }
 
 fn visibility_button_ui(ui: &mut egui::Ui, enabled: bool, visible: &mut bool) -> egui::Response {
     ui.add_enabled_ui(enabled, |ui| {
         ui.visibility_toggle_button(visible)
-            .on_hover_text("Toggle visibility")
-            .on_disabled_hover_text("A parent is invisible")
+            .on_hover_text(tr("Toggle visibility", "切换可见性"))
+            .on_disabled_hover_text(tr("A parent is invisible", "上级项处于隐藏状态"))
     })
     .inner
 }

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_ui::modal::{ModalHandler, ModalWrapper};
 use re_ui::{UICommand, UiExt as _};
 use re_viewer_context::open_url::ViewerOpenUrl;
@@ -23,10 +24,10 @@ impl OpenUrlModal {
     pub fn ui(&mut self, ui: &egui::Ui) {
         self.modal.ui(
             ui.ctx(),
-            || ModalWrapper::new("Open from URL"),
+            || ModalWrapper::new(tr("Open from URL", "从 URL 打开")),
             |ui| {
                 ui.horizontal(|ui| {
-                    ui.strong("Paste a URL below.");
+                    ui.strong(tr("Paste a URL below.", "在下面粘贴 URL。"));
 
                     // Repeat shortcut on the right to remind users of how to open this modal quickly.
                     if !self.hide_shortcut {
@@ -64,7 +65,7 @@ impl OpenUrlModal {
                         let description = ViewerOpenUrlDescription::from_url(url);
                         if let Some(target_short) = description.target_short {
                             ui.horizontal(|ui| {
-                                ui.label(format!("{}:", description.category));
+                                ui.label(format!("{}：", description.category));
                                 ui.strong(target_short);
                             });
                         } else {
@@ -76,11 +77,15 @@ impl OpenUrlModal {
                     // Our parse errors aren't terribly informative when you're just typing malformed links.
                     Err(_err) => {
                         if self.url.is_empty() {
-                            ui.error_label("Please paste a valid URL.");
+                            ui.error_label(tr(
+                                "Please paste a valid URL.",
+                                "请粘贴一个有效的 URL。",
+                            ));
                         } else {
-                            ui.error_label(
+                            ui.error_label(tr(
                                 "Can't open this link - it doesn't appear to be a valid URL.",
-                            );
+                                "无法打开这个链接 — 它看起来不是有效的 URL。",
+                            ));
                         }
                         false
                     }
@@ -91,7 +96,8 @@ impl OpenUrlModal {
 
                     let open_response = ui.add_enabled(
                         can_import,
-                        egui::Button::new("Open").min_size(egui::vec2(button_width, 0.0)),
+                        egui::Button::new(tr("Open", "打开"))
+                            .min_size(egui::vec2(button_width, 0.0)),
                     );
                     if open_response.clicked()
                         || can_import && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -100,8 +106,10 @@ impl OpenUrlModal {
                         ui.close();
                     }
 
-                    let cancel_response =
-                        ui.add(egui::Button::new("Cancel").min_size(egui::vec2(button_width, 0.0)));
+                    let cancel_response = ui.add(
+                        egui::Button::new(tr("Cancel", "取消"))
+                            .min_size(egui::vec2(button_width, 0.0)),
+                    );
                     if cancel_response.clicked() {
                         ui.close();
                     }

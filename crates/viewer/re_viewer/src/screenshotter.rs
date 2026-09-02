@@ -1,6 +1,7 @@
 //! Screenshotting not implemented on web yet because we
 //! haven't implemented "copy image to clipboard" there.
 
+use re_i18n::{tr, trf};
 /// Marker attached as [`egui::UserData`] to the full-app screenshot request, so we can identify
 /// the resulting [`egui::Event::Screenshot`] as ours.
 #[cfg(not(target_arch = "wasm32"))]
@@ -100,7 +101,10 @@ impl Screenshotter {
                     .expect("Failed to create image");
             match image.save(&path) {
                 Ok(()) => {
-                    re_log::info!("Screenshot saved to {path:?}");
+                    re_log::info!(
+                        "{}",
+                        trf!("Screenshot saved to {path:?}", "截图已保存到 {path:?}")
+                    );
                     self.quit = true;
                 }
                 Err(err) => {
@@ -109,7 +113,10 @@ impl Screenshotter {
             }
         } else {
             egui_ctx.copy_image(image.clone());
-            re_log::info!("Screenshot copied to clipboard");
+            re_log::info!(
+                "{}",
+                tr("Screenshot copied to clipboard", "截图已复制到剪贴板")
+            );
         }
     }
 }

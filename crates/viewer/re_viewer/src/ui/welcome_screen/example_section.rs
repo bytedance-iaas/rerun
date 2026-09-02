@@ -2,6 +2,7 @@ use egui::{Color32, NumExt as _, Theme, Ui};
 use ehttp::{Request, fetch};
 use itertools::Itertools as _;
 use poll_promise::Promise;
+use re_i18n::{tr, trf};
 
 use crate::ui::CloudState;
 use crate::ui::welcome_screen::intro_section::intro_section;
@@ -91,7 +92,14 @@ impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Deserialize(err) => {
-                write!(f, "manifest is invalid, it may be outdated: {err}")
+                write!(
+                    f,
+                    "{}",
+                    trf!(
+                        "manifest is invalid, it may be outdated: {err}",
+                        "manifest 无效，可能已过期：{err}"
+                    )
+                )
             }
             Self::Fetch(err) => f.write_str(err),
         }
@@ -241,7 +249,15 @@ impl ExampleSection {
     /// │                               │    │
     /// │                               │    │
     /// ```
-    pub(super) fn ui(&mut self, ui: &mut egui::Ui, ctx: &AppContext<'_>, login_state: &CloudState) {
+    pub(super) fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &AppContext<'_>,
+        login_state: &CloudState,
+        recent_datasets: &[crate::recent_datasets::RecentDataset],
+    ) -> Option<super::RecentAction> {
+        let mut recent_action = None;
+
         let examples = self
             .examples
             .get_or_insert_with(|| load_manifest(ui.ctx(), self.manifest_url.clone()));
@@ -268,13 +284,17 @@ impl ExampleSection {
                 welcome_section_ui(ui);
                 intro_section(ui, ctx, login_state);
 
+                // The "recently opened" list sits below the feature cards: the cards are
+                // the stable landmarks of this screen, the recents change all the time.
+                recent_action = super::recent_section::recent_datasets_ui(ui, recent_datasets);
+
                 ui.add_space(AFTER_HEADER_VSPACE);
 
                 let Some(examples) = examples.ready_mut() else {
                     // Still waiting for example to load
                     ui.separator();
 
-                    ui.loading_indicator("Fetching example list"); // Placeholder for the examples
+                    ui.loading_indicator(tr("Fetching example list", "正在获取示例列表")); // Placeholder for the examples
                     return;
                 };
 
@@ -282,19 +302,22 @@ impl ExampleSection {
                     Ok(examples) => examples,
                     Err(err) => {
                         // Examples failed to load.
-                        re_log::warn_once!("Failed to load examples: {err}");
+                        re_log::warn_once!(
+                            "{}",
+                            trf!("Failed to load examples: {err}", "加载示例失败：{err}")
+                        );
 
                         return;
                     }
                 };
 
                 if examples.is_empty() {
-                    ui.label("No examples found.");
+                    ui.label(tr("No examples found.", "没有找到示例。"));
                     return;
                 }
 
                 ui.add(egui::Label::new(
-                    egui::RichText::new("View example recordings")
+                    egui::RichText::new(tr("View example recordings", "查看示例数据"))
                         .strong()
                         .line_height(Some(32.0))
                         .text_style(DesignTokens::welcome_screen_h2()),
@@ -417,6 +440,8 @@ impl ExampleSection {
                     });
             });
         });
+
+        recent_action
     }
 }
 
@@ -518,10 +543,14 @@ impl ExampleDescLayout {
                 if ui
                     .add_enabled(
                         source_url.is_some(),
-                        re_ui::icons::GITHUB.as_button_with_label(ui.tokens(), "Source code"),
+                        re_ui::icons::GITHUB
+                            .as_button_with_label(ui.tokens(), tr("Source code", "源代码")),
                     )
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .on_disabled_hover_text("Source code is not available for this example")
+                    .on_disabled_hover_text(tr(
+                        "Source code is not available for this example",
+                        "这个示例没有提供源代码",
+                    ))
                     .clicked()
                     && let Some(source_url) = source_url
                 {

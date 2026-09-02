@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_log_types::EntityPath;
 use re_sdk_types::blueprint::archetypes::{
     ForceCenter, ForceCollisionRadius, ForceLink, ForceManyBody, ForcePosition, GraphBackground,
@@ -45,14 +46,20 @@ impl ViewClass for GraphView {
     fn help(&self, os: egui::os::OperatingSystem) -> Help {
         let egui::InputOptions { zoom_modifier, .. } = egui::InputOptions::default(); // This is OK, since we don't allow the user to change this modifier.
 
-        Help::new("Graph view")
+        Help::new(tr("Graph view", "Graph 视图"))
             .docs_link("https://rerun.io/docs/reference/types/views/graph_view")
-            .control("Pan", (MouseButtonText(DRAG_PAN2D_BUTTON), "+", "drag"))
             .control(
-                "Zoom",
+                tr("Pan", "平移"),
+                (MouseButtonText(DRAG_PAN2D_BUTTON), "+", tr("drag", "拖动")),
+            )
+            .control(
+                tr("Zoom", "缩放"),
                 IconText::from_modifiers_and(os, zoom_modifier, icons::SCROLL),
             )
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control(
+                tr("Reset view", "重置视角"),
+                (tr("double", "双击"), icons::LEFT_MOUSE_CLICK),
+            )
     }
 
     /// Register all systems (contexts & parts) that the view needs.

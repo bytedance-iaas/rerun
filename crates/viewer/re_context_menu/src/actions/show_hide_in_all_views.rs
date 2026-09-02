@@ -1,4 +1,5 @@
 use re_entity_db::{EntityPath, InstancePath};
+use re_i18n::tr;
 use re_viewer_context::{Item, ViewId};
 
 use crate::visibility_actions::{
@@ -50,8 +51,8 @@ impl ContextMenuAction for ShowHideInAllViewsAction {
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
         match self {
-            Self::Show => "Show in all views".to_owned(),
-            Self::Hide => "Hide in all views".to_owned(),
+            Self::Show => tr("Show in all views", "在所有视图中显示").to_owned(),
+            Self::Hide => tr("Hide in all views", "在所有视图中隐藏").to_owned(),
         }
     }
 

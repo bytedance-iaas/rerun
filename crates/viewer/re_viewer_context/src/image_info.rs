@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
+use re_i18n::trf;
+
 use re_chunk::RowId;
 use re_log_types::hash::Hash64;
 use re_sdk_types::components::{self, Colormap};
@@ -516,11 +518,11 @@ impl ImageInfo {
                 &mut std::io::Cursor::new(&mut png_bytes),
                 image::ImageFormat::Png,
             ) {
-                anyhow::bail!("Failed to encode PNG: {err}");
+                anyhow::bail!(trf!("Failed to encode PNG: {err}", "编码 PNG 失败：{err}"));
             }
             Ok(png_bytes)
         } else {
-            anyhow::bail!("Invalid image");
+            anyhow::bail!(trf!("Invalid image", "无效的图片"));
         }
     }
 }

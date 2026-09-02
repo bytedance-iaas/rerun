@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::any::Any;
 
 use re_chunk_store::{ColumnDescriptor, SparseFillStrategy};
@@ -67,15 +68,20 @@ impl ViewClass for DataframeView {
     }
 
     fn help(&self, _os: egui::os::OperatingSystem) -> Help {
-        Help::new("Dataframe view")
+        Help::new(tr("Dataframe view", "Dataframe 视图"))
             .docs_link("https://rerun.io/docs/reference/types/views/dataframe_view")
             .markdown(
-                "This view displays entity content in a tabular form.
+                tr("This view displays entity content in a tabular form.
 
 Configure in the selection panel:
  - Handling of empty cells
  - Column visibility
- - Row filtering by time range",
+ - Row filtering by time range", "该视图以表格形式展示实体内容。
+
+可在 Selection 面板中配置：
+ - 空单元格的处理方式
+ - 列的显示与隐藏
+ - 按时间范围过滤行"),
             )
     }
 
@@ -232,12 +238,11 @@ fn timeline_not_found_ui(ctx: &ViewerContext<'_>, ui: &mut egui::Ui, view_id: Vi
     egui::Frame::new()
         .inner_margin(tokens.view_padding())
         .show(ui, |ui| {
-            ui.warning_label("Unknown timeline");
+            ui.warning_label(tr("Unknown timeline", "未知的时间轴"));
 
             ui.label(
-                "The timeline currently configured for this view does not exist in the current \
-                recording. Select another timeline in the view properties found in the selection \
-                panel.",
+                "该视图当前配置的时间轴在当前 episode 中不存在。请在 Selection 面板的视图属性中\
+                选择另一个时间轴。",
             )
         });
 

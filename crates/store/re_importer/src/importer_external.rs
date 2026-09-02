@@ -5,6 +5,7 @@ use std::sync::{Arc, LazyLock};
 
 use ahash::HashMap;
 use indexmap::IndexSet;
+use re_i18n::trf;
 
 use crate::{ImportedData, Importer as _};
 
@@ -182,19 +183,19 @@ impl crate::Importer for ExternalImporter {
                 let mut child = match child {
                     Ok(child) => child,
                     Err(err) => {
-                        re_log::error!(?filepath, importer = ?exe, %err, "Failed to execute external importer");
+                        re_log::error!(?filepath, importer = ?exe, %err, "执行外部导入器失败");
                         return;
                     }
                 };
 
                 let Some(stdout) = child.stdout.take() else {
                     let reason = "stdout unreachable";
-                    re_log::error!(?filepath, importer = ?exe, %reason, "Failed to execute external importer");
+                    re_log::error!(?filepath, importer = ?exe, %reason, "执行外部导入器失败");
                     return;
                 };
                 let Some(stderr) = child.stderr.take() else {
                     let reason = "stderr unreachable";
-                    re_log::error!(?filepath, importer = ?exe, %reason, "Failed to execute external importer");
+                    re_log::error!(?filepath, importer = ?exe, %reason, "执行外部导入器失败");
                     return;
                 };
 
@@ -219,7 +220,7 @@ impl crate::Importer for ExternalImporter {
                                 move || decode_and_stream(&filepath, &tx, is_sending_data, decoder)
                             })
                         {
-                            re_log::error!(?filepath, importer = ?exe, %err, "Failed to open spawn IO thread");
+                            re_log::error!(?filepath, importer = ?exe, %err, "启动 IO 线程失败");
                             return;
                         }
                     }
@@ -230,7 +231,7 @@ impl crate::Importer for ExternalImporter {
                         // down, still.
                     }
                     Err(err) => {
-                        re_log::error!(?filepath, importer = ?exe, %err, "Failed to decode external importer's output");
+                        re_log::error!(?filepath, importer = ?exe, %err, "解码外部导入器的输出失败");
                         return;
                     }
                 }
@@ -259,7 +260,7 @@ impl crate::Importer for ExternalImporter {
                             std::thread::yield_now();
                         }
                         Err(err) => {
-                            re_log::error!(?filepath, importer = ?exe, %err, "Failed to execute external importer");
+                            re_log::error!(?filepath, importer = ?exe, %err, "执行外部导入器失败");
                             return;
                         }
                     }
@@ -269,7 +270,7 @@ impl crate::Importer for ExternalImporter {
                 let status = match child.wait() {
                     Ok(output) => output,
                     Err(err) => {
-                        re_log::error!(?filepath, importer = ?exe, %err, "Failed to execute external importer");
+                        re_log::error!(?filepath, importer = ?exe, %err, "执行外部导入器失败");
                         return;
                     }
                 };
@@ -292,7 +293,7 @@ impl crate::Importer for ExternalImporter {
 
                         re_quota_channel::send_crossbeam(&tx_feedback, CompatibleImporterFound).ok();
                     } else {
-                        re_log::error!(?filepath, importer = ?exe, %stderr_str, "Failed to execute external importer");
+                        re_log::error!(?filepath, importer = ?exe, %stderr_str, "执行外部导入器失败");
                     }
                 }
             })?;
@@ -341,7 +342,7 @@ fn decode_and_stream(
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
-                re_log::warn!(?filepath, "Failed to decode message: {err}");
+                re_log::warn!(?filepath, "{}", trf!("Failed to decode message: {err}", "解码消息失败：{err}"));
                 continue;
             }
         };

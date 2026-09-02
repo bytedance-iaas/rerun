@@ -1,5 +1,6 @@
 use re_byte_size::NamedMemUsageTree;
 use re_entity_db::LogSource;
+use re_i18n::tr;
 use re_renderer::WgpuResourcePoolStatistics;
 use re_ui::{HasDesignTokens as _, UiExt as _, WindowFrameConfig};
 use re_viewer_context::{ActiveStoreContext, StorageContext, store_hub::StoreHubStats};
@@ -560,8 +561,8 @@ pub(super) fn file_saver_progress_ui(
                 .auto_sized()
                 .show(egui_ctx, |ui| {
                     ui.horizontal(|ui| {
-                        ui.loading_indicator("Writing file to disk");
-                        ui.label("Writing file to disk…");
+                        ui.loading_indicator(tr("Writing file to disk", "正在把文件写入磁盘"));
+                        ui.label(tr("Writing file to disk…", "正在把文件写入磁盘…"));
                     })
                 });
         }

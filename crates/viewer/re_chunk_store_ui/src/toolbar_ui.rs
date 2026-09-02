@@ -11,13 +11,13 @@ pub(crate) fn info_toggle_button_ui(
 }
 
 pub(crate) fn copy_button_ui(ui: &mut egui::Ui, label: &str, hover: &str) -> bool {
-    ui.small_icon_button(&re_ui::icons::COPY, label)
+    ui.add(ui.small_icon_button_widget(&re_ui::icons::COPY, label))
         .on_hover_text(hover)
         .clicked()
 }
 
 pub(crate) fn reset_button_ui(ui: &mut egui::Ui, label: &str, hover: &str) -> bool {
-    ui.small_icon_button(&re_ui::icons::RESET, label)
+    ui.add(ui.small_icon_button_widget(&re_ui::icons::RESET, label))
         .on_hover_text(hover)
         .clicked()
 }
@@ -27,7 +27,7 @@ pub(crate) fn close_button_right_ui(ui: &mut egui::Ui, label: &str, hover: &str)
 
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         if ui
-            .small_icon_button(&re_ui::icons::CLOSE, label)
+            .add(ui.small_icon_button_widget(&re_ui::icons::CLOSE, label))
             .on_hover_text(hover)
             .clicked()
         {

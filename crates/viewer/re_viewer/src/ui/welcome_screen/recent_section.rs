@@ -4,6 +4,7 @@
 //! datasets were open before (with their metadata) and re-opens one with a click — by bringing
 //! up the matching "Open from …" dialog pre-filled, so credential handling stays in one place.
 
+use re_i18n::{tr, trf};
 use re_ui::{DesignTokens, UiExt as _, icons};
 
 use crate::recent_datasets::{RecentDataset, RecentKind, now_unix, relative_time_label};
@@ -26,13 +27,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
     let mut action = None;
     let now = now_unix();
 
-    ui.add(egui::Label::new(
-        egui::RichText::new("Recently opened")
-            .strong()
-            .line_height(Some(32.0))
-            .text_style(DesignTokens::welcome_screen_example_title()),
-    ));
-    ui.add_space(8.0);
+    super::section_heading_ui(ui, tr("Recently opened datasets", "最近打开的数据集"));
 
     for (index, recent) in recents.iter().enumerate() {
         let source_label = match recent.kind {
@@ -45,7 +40,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
         );
         if let Some(count) = recent.item_count {
             use std::fmt::Write as _;
-            write!(meta, " · {count} items").ok();
+            write!(meta, "{}", trf!(" · {count} items", " · {count} 项")).ok();
         }
 
         ui.horizontal(|ui| {
@@ -68,7 +63,10 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
             ));
 
             if ui
-                .small_icon_button(&icons::CLOSE, "Remove from this list")
+                .small_icon_button(
+                    &icons::CLOSE,
+                    tr("Remove from this list", "从这个列表中移除"),
+                )
                 .clicked()
             {
                 action = Some(RecentAction::Remove(index));

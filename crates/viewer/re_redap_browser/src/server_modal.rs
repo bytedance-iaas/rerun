@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use std::str::FromStr as _;
 
 use egui::{Direction, Layout, OpenUrl, RichText};
@@ -169,12 +170,12 @@ impl ServerModal {
             ui.ctx(),
             || {
                 let title = match &self.mode {
-                    ServerModalMode::Add => "Add server".to_owned(),
+                    ServerModalMode::Add => tr("Add server", "添加服务器").to_owned(),
                     ServerModalMode::Edit(edit) => {
                         if let Some(title) = &edit.title {
                             title.clone()
                         } else {
-                            format!("Edit server: {}", edit.origin.host)
+                            trf!("Edit server: {}", "编辑服务器：{}", edit.origin.host)
                         }
                     }
                 };
@@ -190,7 +191,7 @@ impl ServerModal {
                     );
                 }
 
-                let label = ui.label("Address:");
+                let label = ui.label("地址：");
 
                 egui::Sides::new()
                     .shrink_left()
@@ -225,7 +226,7 @@ impl ServerModal {
                                 ui.add(
                                     egui::TextEdit::singleline(&mut self.host)
                                         .lock_focus(false)
-                                        .hint_text("Host name")
+                                        .hint_text("主机名")
                                         .desired_width(ui.available_width()),
                                 )
                                 .labelled_by(label.id);
@@ -266,7 +267,7 @@ impl ServerModal {
 
                 ui.add_space(14.0);
 
-                ui.label("Authentication:");
+                ui.label("身份验证：");
 
                 let login_enabled = app_ctx.login_enabled;
                 ui.selectable_toggle(|ui| {
@@ -280,7 +281,7 @@ impl ServerModal {
                                     if ui
                                         .selectable_label(
                                             matches!(self.auth.kind, AuthKind::RerunAccount(_)),
-                                            "Account login",
+                                            "账号登录",
                                         )
                                         .clicked()
                                     {
@@ -293,7 +294,7 @@ impl ServerModal {
                                 if ui
                                     .selectable_label(
                                         matches!(self.auth.kind, AuthKind::Token(_)),
-                                        "Access token",
+                                        "访问令牌",
                                     )
                                     .clicked()
                                 {
@@ -305,7 +306,7 @@ impl ServerModal {
                                 if ui
                                     .selectable_label(
                                         matches!(self.auth.kind, AuthKind::None),
-                                        "No authentication",
+                                        "免验证",
                                     )
                                     .clicked()
                                 {
@@ -320,8 +321,8 @@ impl ServerModal {
                 ui.add_space(24.0);
 
                 let save_text = match &self.mode {
-                    ServerModalMode::Add => "Add",
-                    ServerModalMode::Edit(_) => "Save",
+                    ServerModalMode::Add => "添加",
+                    ServerModalMode::Edit(_) => "保存",
                 };
 
                 let origin = host.map(|host| re_uri::Origin {
@@ -396,7 +397,7 @@ impl ServerModal {
                         .ok();
                     }
 
-                    let cancel_button_response = ui.add(ReButton::new("Cancel").small());
+                    let cancel_button_response = ui.add(ReButton::new("取消").small());
                     if cancel_button_response.clicked() {
                         self.auth = Authentication::new(AuthKind::RerunAccount(None));
                         self.auth.reset_login_flow();
@@ -417,7 +418,7 @@ impl ServerModal {
 fn auth_ui(ui: &mut egui::Ui, ctx: &AppContext<'_>, auth: &mut Authentication) {
     match &mut auth.kind {
         AuthKind::RerunAccount(login_flow) => {
-            ui.label("Account login:");
+            ui.label("账号登录：");
 
             if let Some(flow) = login_flow {
                 // Login flow is in progress - show login buttons or loading indicator
@@ -436,13 +437,13 @@ fn auth_ui(ui: &mut egui::Ui, ctx: &AppContext<'_>, auth: &mut Authentication) {
             } else if let Some(logged_in) = &ctx.auth_context {
                 // User is logged in
                 ui.horizontal(|ui| {
-                    ui.label("Continue as");
+                    ui.label("继续使用");
                     ui.label(RichText::new(&logged_in.email).strong());
 
-                    ui.weak("or");
+                    ui.weak("或");
 
                     if ui
-                        .link(RichText::new("log out").color(ui.tokens().text_subdued))
+                        .link(RichText::new("退出登录").color(ui.tokens().text_subdued))
                         .clicked()
                     {
                         ctx.command_sender.send_system(SystemCommand::Logout);
@@ -459,7 +460,7 @@ fn auth_ui(ui: &mut egui::Ui, ctx: &AppContext<'_>, auth: &mut Authentication) {
         }
 
         AuthKind::Token(token) => {
-            ui.label("Access token (will be stored in plain text):");
+            ui.label("访问令牌（将以明文存储）：");
 
             ui.scope(|ui| {
                 let jwt = (!token.is_empty())

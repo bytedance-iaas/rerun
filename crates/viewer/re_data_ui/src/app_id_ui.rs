@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use itertools::Itertools as _;
 use re_entity_db::EntityDb;
 use re_log_types::ApplicationId;
@@ -12,14 +13,14 @@ impl crate::AppUi for ApplicationId {
         egui::Grid::new("application_id")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("Application ID");
+                ui.label(tr("Application ID", "应用 ID"));
 
                 let mut label = self.to_string();
                 if ctx
                     .active_store_context
                     .is_some_and(|sc| self == sc.application_id())
                 {
-                    label.push_str(" (active)");
+                    label.push_str(tr(" (active)", "（当前活跃）"));
                 }
                 UiLayout::List.label(ui, label);
                 ui.end_row();
@@ -43,10 +44,11 @@ impl crate::AppUi for ApplicationId {
             }
             UiLayout::Tooltip => {
                 if recordings.len() == 1 {
-                    ui.label("There is 1 loaded recording for this app.");
+                    ui.label(tr("There is 1 loaded recording for this app.", "该应用已加载 1 个 episode。"));
                 } else {
-                    ui.label(format!(
+                    ui.label(trf!(
                         "There are {} loaded recordings for this app.",
+                        "该应用已加载 {} 个 episode。",
                         re_format::format_uint(recordings.len()),
                     ));
                 }
@@ -57,7 +59,7 @@ impl crate::AppUi for ApplicationId {
                         ui.spacing_mut().item_spacing.y = 0.0;
 
                         ui.add_space(8.0);
-                        ui.strong("Loaded recordings for this app");
+                        ui.strong(tr("Loaded recordings for this app", "该应用已加载的 episode"));
                         for entity_db in recordings {
                             entity_db_button_ui(ctx, entity_db, ui, ui_layout, true);
                         }

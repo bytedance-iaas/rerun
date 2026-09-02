@@ -35,15 +35,22 @@ impl ContextMenuAction for CopyEntityPathToClipboard {
             }
         }
 
-        let descriptor = match (components, entities) {
-            (true, true) | (false, false) => "",
-            (true, false) => "component ",
-            (false, true) => "entity ",
-        };
-
-        let s = if ctx.selection.len() == 1 { "" } else { "s" };
-
-        format!("Copy {descriptor}path{s}")
+        if re_i18n::is_chinese() {
+            let descriptor = match (components, entities) {
+                (true, true) | (false, false) => "",
+                (true, false) => "组件",
+                (false, true) => "实体",
+            };
+            format!("复制{descriptor}路径")
+        } else {
+            let descriptor = match (components, entities) {
+                (true, true) | (false, false) => "",
+                (true, false) => "component ",
+                (false, true) => "entity ",
+            };
+            let s = if ctx.selection.len() == 1 { "" } else { "s" };
+            format!("Copy {descriptor}path{s}")
+        }
     }
 
     fn process_selection(&self, ctx: &ContextMenuContext<'_>) {

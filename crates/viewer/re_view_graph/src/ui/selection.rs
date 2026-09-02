@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use re_sdk_types::blueprint::components::Enabled;
 use re_sdk_types::{Archetype, ArchetypeReflectionMarker, Component as _};
 use re_view::{view_property_component_ui, view_property_component_ui_custom};
@@ -18,8 +19,12 @@ pub fn view_property_force_ui<A: Archetype + ArchetypeReflectionMarker>(
     let Some(reflection) = reflection.archetypes.get(&property.archetype_name) else {
         // The `ArchetypeReflectionMarker` bound should make this impossible.
         re_log::warn_once!(
-            "Missing reflection data for archetype {:?}.",
-            property.archetype_name
+            "{}",
+            trf!(
+                "Missing reflection data for archetype {:?}.",
+                "缺少 archetype {:?} 的 reflection 数据。",
+                property.archetype_name
+            )
         );
         return;
     };

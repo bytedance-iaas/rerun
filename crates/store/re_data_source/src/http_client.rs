@@ -13,6 +13,7 @@
 //! On the web there is no such stack — the browser makes the request and already uses the
 //! OS/browser trust store — so we fall through to `ehttp`.
 
+use re_i18n::trf;
 /// The hard cap for requests without an explicit deadline — must accommodate the largest
 /// legitimate transfer (a 64 MiB range on a slow link).
 pub const DEFAULT_HARD_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(5);
@@ -48,9 +49,11 @@ pub async fn fetch_async_with_timeout(
     // `ureq` is blocking; run it on the blocking pool so we don't stall the async executor.
     let task = tokio::task::spawn_blocking(move || fetch_blocking(&request));
     match tokio::time::timeout(hard_timeout, task).await {
-        Ok(result) => result.map_err(|err| format!("HTTP task failed to run: {err}"))?,
-        Err(_elapsed) => Err(format!(
+        Ok(result) => result
+            .map_err(|err| trf!("HTTP task failed to run: {err}", "HTTP 任务未能运行：{err}"))?,
+        Err(_elapsed) => Err(trf!(
             "Request did not finish within {}s (stalled connection?)\nUrl: {url}",
+            "请求在 {} 秒内未完成（连接可能已停滞？）\nURL：{url}",
             hard_timeout.as_secs()
         )),
     }
@@ -98,7 +101,12 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
             }
             builder.send(&request.body[..])
         }
-        other => return Err(format!("Unsupported HTTP method: {other:?}")),
+        other => {
+            return Err(trf!(
+                "Unsupported HTTP method: {other:?}",
+                "不支持的 HTTP 方法：{other:?}"
+            ));
+        }
     }
     .map_err(|err| err.to_string())?;
 
@@ -135,7 +143,12 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
             .with_config()
             .limit(u64::MAX)
             .read_to_vec()
-            .map_err(|err| format!("Failed to read response body: {err}"))?
+            .map_err(|err| {
+                trf!(
+                    "Failed to read response body: {err}",
+                    "读取响应体失败：{err}"
+                )
+            })?
     };
 
     Ok(ehttp::Response {
@@ -241,7 +254,10 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(err.contains("did not finish"), "unexpected error: {err}");
+        assert!(
+            err.contains("did not finish") || err.contains("未完成"),
+            "unexpected error: {err}"
+        );
 
         // Unblock the abandoned ureq thread (the runtime waits for blocking tasks on
         // shutdown — without this, the test lingers until ureq's own 30s timeout).
@@ -347,7 +363,7 @@ mod tests {
         // The method check runs before any connection is made, so the unroutable port never hurts.
         let request = ehttp::Request::post("http://127.0.0.1:9/", Vec::new());
         let err = super::fetch_async(request).await.unwrap_err();
-        assert!(err.contains("Unsupported HTTP method"));
+        assert!(err.contains("Unsupported HTTP method") || err.contains("不支持的 HTTP 方法"));
     }
 
     /// Reaches a public HTTPS endpoint and asserts the TLS handshake succeeds.

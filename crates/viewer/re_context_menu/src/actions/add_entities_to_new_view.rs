@@ -1,6 +1,7 @@
 use egui::{Response, Ui};
 use itertools::Itertools as _;
 use nohash_hasher::IntSet;
+use re_i18n::tr;
 use re_log_types::{EntityPath, EntityPathFilter, EntityPathRule, RuleEffect};
 use re_sdk_types::ViewClassIdentifier;
 use re_ui::UiExt as _;
@@ -35,7 +36,7 @@ impl ContextMenuAction for AddEntitiesToNewViewAction {
             .copied()
             .collect();
 
-        ui.menu_button("Add to new view", |ui| {
+        ui.menu_button(tr("Add to new view", "添加到新视图"), |ui| {
             let buttons_for_view_classes =
                 |ui: &mut egui::Ui, view_classes: &IntSet<ViewClassIdentifier>| {
                     for (identifier, class) in view_classes
@@ -63,14 +64,14 @@ impl ContextMenuAction for AddEntitiesToNewViewAction {
                     }
                 };
             if recommended_view_classes.is_empty() {
-                ui.label("None");
+                ui.label(tr("None", "无"));
             } else {
                 buttons_for_view_classes(ui, &recommended_view_classes);
             }
 
             if !other_view_classes.is_empty() {
                 ui.separator();
-                ui.menu_button("Other views", |ui| {
+                ui.menu_button(tr("Other views", "其他视图"), |ui| {
                     buttons_for_view_classes(ui, &other_view_classes);
                 });
             }

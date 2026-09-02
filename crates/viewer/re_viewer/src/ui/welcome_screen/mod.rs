@@ -15,6 +15,17 @@ use re_log_channel::LogSource;
 use crate::app_state::WelcomeScreenState;
 
 pub use intro_section::{CloudState, LoginState};
+
+/// The uniform section heading of the welcome screen ("Volcengine enhancements",
+/// "About the original Rerun", "Recently opened datasets"): same size, bold.
+/// (No underline: with mixed CJK/Latin text the two fonts disagree on the
+/// underline position and egui draws it broken.)
+pub(super) fn section_heading_ui(ui: &mut egui::Ui, text: &str) {
+    ui.add(egui::Label::new(
+        egui::RichText::new(text).strong().size(18.0),
+    ));
+    ui.add_space(10.0);
+}
 use re_viewer_context::AppContext;
 
 #[derive(Default)]
@@ -64,9 +75,10 @@ impl WelcomeScreen {
                     ..Default::default()
                 }
                 .show(ui, |ui| {
-                    recent_action = recent_section::recent_datasets_ui(ui, recent_datasets);
-
                     if welcome_screen_state.hide_examples {
+                        // No cards on this minimal screen, so the recents lead.
+                        recent_action = recent_section::recent_datasets_ui(ui, recent_datasets);
+
                         if let Some(loading_text) =
                             loading_data_ui::loading_text_for_data_sources(log_sources)
                         {
@@ -75,7 +87,9 @@ impl WelcomeScreen {
                             no_data_ui::no_data_ui(ui);
                         }
                     } else {
-                        self.example_page.ui(ui, ctx, login_state);
+                        // The full welcome screen draws the recents below the feature cards.
+                        recent_action =
+                            self.example_page.ui(ui, ctx, login_state, recent_datasets);
                     }
                 });
             });

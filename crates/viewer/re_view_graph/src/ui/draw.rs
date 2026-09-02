@@ -8,6 +8,7 @@ use egui::{
 use re_chunk::EntityPath;
 use re_data_ui::{DataUi as _, item_ui};
 use re_entity_db::InstancePath;
+use re_i18n::trf;
 use re_sdk_types::ArrowString;
 use re_ui::list_item;
 use re_viewer_context::{
@@ -388,8 +389,9 @@ pub fn draw_graph(
                 response
             }
             Node::Implicit { graph_node, .. } => {
-                draw_node(ui, center, node.label(), Default::default(), lod).on_hover_text(format!(
+                draw_node(ui, center, node.label(), Default::default(), lod).on_hover_text(trf!(
                     "Implicit node {} created via a reference in a GraphEdge component",
+                    "隐式节点 {}，通过 GraphEdge 组件中的引用创建",
                     graph_node.as_str(),
                 ))
             }

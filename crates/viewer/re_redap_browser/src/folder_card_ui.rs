@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::collections::BTreeMap;
 
 use egui::{Frame, Margin};
@@ -34,7 +35,7 @@ pub fn folder_cards_ui(
     let children = collect_cards(entries, path_prefix);
 
     if children.is_empty() {
-        ui.label("This folder is empty.");
+        ui.label(tr("This folder is empty.", "这个文件夹是空的。"));
         return;
     }
 

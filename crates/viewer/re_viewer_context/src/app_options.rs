@@ -26,6 +26,9 @@ pub struct AppOptions {
     /// Use Rerun's custom window decorations instead of the native OS decorations.
     pub custom_window_decorations: bool,
 
+    /// UI language (Chinese or English). Applied to the global [`re_i18n`] switch.
+    pub language: re_i18n::Language,
+
     /// Include the "Welcome screen" application in the recordings panel?
     #[serde(alias = "include_welcome_screen_button_in_recordings_panel")]
     pub include_rerun_examples_button_in_recordings_panel: bool,
@@ -96,6 +99,8 @@ impl AppOptions {
             show_notification_toasts: true,
 
             custom_window_decorations,
+
+            language: re_i18n::Language::default(),
 
             include_rerun_examples_button_in_recordings_panel: true,
 

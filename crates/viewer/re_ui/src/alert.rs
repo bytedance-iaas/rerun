@@ -1,4 +1,5 @@
 use egui::{InnerResponse, Response, Ui, Vec2};
+use re_i18n::tr;
 
 use crate::design_tokens::AlertVisuals;
 use crate::{Icon, UiExt as _, icons};
@@ -111,7 +112,7 @@ impl Alert {
                         ui.label(full_text);
                         ui.add_space(8.0);
                     }
-                    ui.label("Click to copy text.");
+                    ui.label(tr("Click to copy text.", "点击复制文本。"));
                 });
             if response.clicked() {
                 ui.copy_text(full_text.unwrap_or(visible_text));

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use re_sdk_types::blueprint::components::TextLogColumn;
 use re_viewer_context::{AppContext, MaybeMutRef};
 
@@ -38,7 +39,7 @@ pub fn edit_or_view_columns_multiline(
             .filter(|column| column.visible.into())
             .map(|column| ui.strong(column.kind.name()))
             .reduce(|a, b| a.union(b))
-            .unwrap_or_else(|| ui.weak("Empty")),
+            .unwrap_or_else(|| ui.weak(tr("Empty", "空"))),
         MaybeMutRef::MutRef(columns) => visible_dnd(
             ui,
             "text_log_columns_dnd",

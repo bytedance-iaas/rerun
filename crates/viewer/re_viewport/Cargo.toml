@@ -23,6 +23,7 @@ all-features = true
 testing = []
 
 [dependencies]
+re_i18n.workspace = true
 re_context_menu.workspace = true
 re_entity_db.workspace = true
 re_format.workspace = true

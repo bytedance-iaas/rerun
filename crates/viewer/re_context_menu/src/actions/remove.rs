@@ -1,4 +1,5 @@
 use re_entity_db::InstancePath;
+use re_i18n::tr;
 use re_viewer_context::{ContainerId, Contents, Item, ViewId};
 
 use crate::{ContextMenuAction, ContextMenuContext};
@@ -21,7 +22,7 @@ impl ContextMenuAction for RemoveAction {
     }
 
     fn label(&self, _ctx: &ContextMenuContext<'_>) -> String {
-        "Remove".to_owned()
+        tr("Remove", "移除").to_owned()
     }
 
     fn process_container(&self, ctx: &ContextMenuContext<'_>, container_id: &ContainerId) {

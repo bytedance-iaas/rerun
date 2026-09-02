@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::epaint::TextShape;
 use egui::{Align2, NumExt as _, Vec2};
 use ndarray::Axis;
@@ -67,12 +68,14 @@ impl ViewClass for TensorView {
     }
 
     fn help(&self, _os: egui::os::OperatingSystem) -> Help {
-        Help::new("Tensor view")
+        Help::new(tr("Tensor view", "Tensor 视图"))
             .docs_link("https://rerun.io/docs/reference/types/views/tensor_view")
             .markdown(
-                "An N-dimensional tensor displayed as a 2D slice with a custom colormap.
+                tr("An N-dimensional tensor displayed as a 2D slice with a custom colormap.
 
-Set the displayed dimensions in a selection panel.",
+Set the displayed dimensions in a selection panel.", "把 N 维张量以 2D 切片配合自定义色彩映射的方式显示。
+
+在 Selection 面板里设置要显示的维度。"),
             )
     }
 
@@ -164,7 +167,7 @@ Set the displayed dimensions in a selection panel.",
             )?;
 
             ui.separator();
-            ui.strong("Dimension Mapping");
+            ui.strong(tr("Dimension Mapping", "维度映射"));
             dimension_mapping_ui(
                 ctx,
                 ui,
@@ -176,7 +179,7 @@ Set the displayed dimensions in a selection panel.",
             // TODO(andreas): this is a bit too inconsistent with the other UIs - we don't offer the same reset/option buttons here
             if ui
                 .button("Reset to default blueprint")
-                .on_hover_text("Reset dimension mapping to the previously set default blueprint")
+                .on_hover_text(tr("Reset dimension mapping to the previously set default blueprint", "把维度映射重置为之前设置的默认 blueprint"))
                 .clicked()
             {
                 slice_property.reset_all_components(ctx);
@@ -187,7 +190,7 @@ Set the displayed dimensions in a selection panel.",
                     slice_property.any_non_empty(),
                     egui::Button::new("Reset to heuristic"),
                 )
-                .on_hover_text("Reset dimension mapping to the heuristic, i.e. as if never set")
+                .on_hover_text(tr("Reset dimension mapping to the heuristic, i.e. as if never set", "把维度映射重置为自动推断的结果，即恢复到从未设置过的状态"))
                 .on_disabled_hover_text("No custom dimension mapping set")
                 .clicked()
             {

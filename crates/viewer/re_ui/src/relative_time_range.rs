@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use re_log_types::external::re_types_core::datatypes::{TimeInt, TimeRange, TimeRangeBoundary};
 use re_log_types::{AbsoluteTimeRange, TimeType, TimestampFormat};
 
@@ -21,18 +22,20 @@ pub fn relative_time_range_boundary_label_text(
 ) -> &'static str {
     match boundary {
         TimeRangeBoundary::CursorRelative(_) => match time_type {
-            TimeType::DurationNs | TimeType::TimestampNs => "current time with offset",
-            TimeType::Sequence => "current frame with offset",
+            TimeType::DurationNs | TimeType::TimestampNs => {
+                tr("current time with offset", "当前时间加偏移")
+            }
+            TimeType::Sequence => tr("current frame with offset", "当前帧加偏移"),
         },
         TimeRangeBoundary::Absolute(_) => match time_type {
-            TimeType::DurationNs | TimeType::TimestampNs => "absolute time",
-            TimeType::Sequence => "absolute frame",
+            TimeType::DurationNs | TimeType::TimestampNs => tr("absolute time", "绝对时间"),
+            TimeType::Sequence => tr("absolute frame", "绝对帧"),
         },
         TimeRangeBoundary::Infinite => {
             if low_bound {
-                "beginning of timeline"
+                tr("beginning of timeline", "时间轴起点")
             } else {
-                "end of timeline"
+                tr("end of timeline", "时间轴终点")
             }
         }
     }
@@ -71,9 +74,15 @@ fn edit_boundary_ui(
             relative_time_range_boundary_label_text(rel_time, time_type, low_bound),
         )
         .on_hover_text(if low_bound {
-            "Show data from a time point relative to the current time."
+            tr(
+                "Show data from a time point relative to the current time.",
+                "从相对于当前时间的某个时间点开始显示数据。",
+            )
         } else {
-            "Show data until a time point relative to the current time."
+            tr(
+                "Show data until a time point relative to the current time.",
+                "显示数据直到相对于当前时间的某个时间点。",
+            )
         });
         ui.selectable_value(
             boundary,
@@ -81,9 +90,15 @@ fn edit_boundary_ui(
             relative_time_range_boundary_label_text(abs_time, time_type, low_bound),
         )
         .on_hover_text(if low_bound {
-            "Show data from an absolute time point."
+            tr(
+                "Show data from an absolute time point.",
+                "从某个绝对时间点开始显示数据。",
+            )
         } else {
-            "Show data until an absolute time point."
+            tr(
+                "Show data until an absolute time point.",
+                "显示数据直到某个绝对时间点。",
+            )
         });
         ui.selectable_value(
             boundary,
@@ -95,9 +110,15 @@ fn edit_boundary_ui(
             ),
         )
         .on_hover_text(if low_bound {
-            "Show data from the beginning of the timeline"
+            tr(
+                "Show data from the beginning of the timeline",
+                "从时间轴起点开始显示数据",
+            )
         } else {
-            "Show data until the end of the timeline"
+            tr(
+                "Show data until the end of the timeline",
+                "显示数据直到时间轴终点",
+            )
         });
     });
 
@@ -127,14 +148,14 @@ fn edit_boundary_ui(
                     timestamp_format,
                 )
                 .on_hover_text(match time_type {
-                    TimeType::DurationNs | TimeType::TimestampNs => {
-                        "Time duration before/after the current time to use as a \
-                         time range boundary"
-                    }
-                    TimeType::Sequence => {
-                        "Number of frames before/after the current time to use a \
-                         time range boundary"
-                    }
+                    TimeType::DurationNs | TimeType::TimestampNs => tr(
+                        "Time duration before/after the current time to use as a time range boundary",
+                        "作为时间范围边界的时长，相对当前时间之前/之后",
+                    ),
+                    TimeType::Sequence => tr(
+                        "Number of frames before/after the current time to use a time range boundary",
+                        "作为时间范围边界的帧数，相对当前时间之前/之后",
+                    ),
                 });
 
             *value = edit_value.into();
@@ -159,15 +180,24 @@ fn edit_boundary_ui(
                     );
 
                     if let Some(base_time_resp) = base_time_resp {
-                        base_time_resp.on_hover_text("Base time used to set time range boundaries");
+                        base_time_resp.on_hover_text(tr(
+                            "Base time used to set time range boundaries",
+                            "用于设置时间范围边界的基准时间",
+                        ));
                     }
 
-                    drag_resp.on_hover_text("Absolute time to use as time range boundary");
+                    drag_resp.on_hover_text(tr(
+                        "Absolute time to use as time range boundary",
+                        "作为时间范围边界的绝对时间",
+                    ));
                 }
                 TimeType::Sequence => {
                     time_drag_value
                         .sequence_drag_value_ui(ui, &mut edit_value, true, low_bound_override)
-                        .on_hover_text("Absolute frame number to use as time range boundary");
+                        .on_hover_text(tr(
+                            "Absolute frame number to use as time range boundary",
+                            "作为时间范围边界的绝对帧号",
+                        ));
                 }
             }
             *value = edit_value.into();
@@ -186,22 +216,34 @@ pub fn relative_time_range_label_text(
     if time_range.start == TimeRangeBoundary::Infinite
         && time_range.end == TimeRangeBoundary::Infinite
     {
-        ("Entire timeline".to_owned(), None)
+        (tr("Entire timeline", "整条时间轴").to_owned(), None)
     } else if time_range.start == TimeRangeBoundary::AT_CURSOR
         && time_range.end == TimeRangeBoundary::AT_CURSOR
     {
         let current_time = time_type.format(current_time, timestamp_format);
-        (format!("At {current_time}"),
-
-            Some("Does not perform a latest-at query, shows only data logged at exactly the current time cursor position.".to_owned()))
+        (
+            trf!("At {current_time}", "位于 {current_time}"),
+            Some(tr(
+                "Does not perform a latest-at query, shows only data logged at exactly the current time cursor position.",
+                "不执行 latest-at 查询，只显示恰好记录在当前时间标记位置的数据。",
+            )
+            .to_owned()),
+        )
     } else {
         let absolute_range = AbsoluteTimeRange::from_relative_time_range(time_range, current_time);
         let from_formatted = time_type.format(absolute_range.min(), timestamp_format);
         let to_formatted = time_type.format(absolute_range.max(), timestamp_format);
 
         (
-            format!("{from_formatted} to {to_formatted}"),
-            Some("Showing data in this range (inclusive).".to_owned()),
+            trf!(
+                "{from_formatted} to {to_formatted}",
+                "{from_formatted} 到 {to_formatted}"
+            ),
+            Some(tr(
+                "Showing data in this range (inclusive).",
+                "显示此范围内的数据（含边界）。",
+            )
+            .to_owned()),
         )
     }
 }
@@ -210,7 +252,7 @@ impl RelativeTimeRange<'_> {
     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
         let response_x = ui.list_item().interactive(false).show_hierarchical(
             ui,
-            list_item::PropertyContent::new("start").value_fn(|ui, _| {
+            list_item::PropertyContent::new(tr("start", "起点")).value_fn(|ui, _| {
                 edit_boundary_ui(
                     ui,
                     &mut self.value.start,
@@ -226,7 +268,7 @@ impl RelativeTimeRange<'_> {
 
         let response_y = ui.list_item().interactive(false).show_hierarchical(
             ui,
-            list_item::PropertyContent::new("end").value_fn(|ui, _| {
+            list_item::PropertyContent::new(tr("end", "终点")).value_fn(|ui, _| {
                 edit_boundary_ui(
                     ui,
                     &mut self.value.end,

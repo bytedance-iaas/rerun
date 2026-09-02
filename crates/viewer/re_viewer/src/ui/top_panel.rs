@@ -3,6 +3,7 @@ use egui::{
 };
 use emath::{Rect, RectAlign, Vec2};
 use re_format::format_uint;
+use re_i18n::{tr, trf};
 use re_renderer::WgpuResourcePoolStatistics;
 use re_sorbet::TimestampLocation;
 use re_ui::{ContextExt as _, UICommand, UiExt as _, icons};
@@ -170,6 +171,8 @@ fn top_bar_ui(
             ui.add_space(extra_margin);
         }
 
+        language_toggle_ui(app, ui);
+
         panel_buttons_r2l(app, app_blueprint, ui, store_hub);
 
         if app.app_options().show_metrics && !app.is_screenshotting() && !app.app_env().is_test() {
@@ -181,6 +184,20 @@ fn top_bar_ui(
             );
         }
     });
+}
+
+/// A one-click Chinese/English toggle. Shows the language you would switch *to*.
+fn language_toggle_ui(app: &mut crate::App, ui: &mut egui::Ui) {
+    let current = app.state.app_options.language;
+    let (en_tip, zh_tip) = ("Switch to Chinese", "切换到英文");
+    let response = ui
+        .button(current.toggle_label())
+        .on_hover_text(re_i18n::tr(en_tip, zh_tip));
+    if response.clicked() {
+        app.state.app_options.language = current.toggled();
+        // Immediate-mode UI: the next frame re-renders everything in the new language.
+        ui.ctx().request_repaint();
+    }
 }
 
 fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppEnvironment) {
@@ -210,11 +227,14 @@ fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppE
         show_warning(ui, &mut has_shown_warning, |ui| {
             // Warn if in debug build
             ui.label(
-                egui::RichText::new("⚠ Debug build")
+                egui::RichText::new(tr("⚠ Debug build", "⚠ Debug 构建"))
                     .small()
                     .color(ui.visuals().warn_fg_color),
             )
-            .on_hover_text("Rerun was compiled with debug assertions enabled.");
+            .on_hover_text(tr(
+                "Rerun was compiled with debug assertions enabled.",
+                "Rerun 编译时启用了 debug assertions。",
+            ));
         });
     }
 
@@ -235,8 +255,8 @@ fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppE
                 .color(ui.visuals().warn_fg_color);
             let url = "https://github.com/rerun-io/rerun/issues/6835";
             ui.hyperlink_to(text,url).on_hover_ui(|ui| {
-                ui.label("It looks like the Rerun Viewer is running inside a Docker container. This is not officially supported, and may lead to subtle bugs. ");
-                ui.label("Click for more info.");
+                ui.label(tr("It looks like the Rerun Viewer is running inside a Docker container. This is not officially supported, and may lead to subtle bugs. ", "Rerun Viewer 似乎运行在 Docker 容器里。这不在官方支持范围内，可能引发一些不易察觉的问题。"));
+                ui.label(tr("Click for more info.", "点击了解更多。"));
             });
         });
     }
@@ -244,15 +264,21 @@ fn show_warnings(frame: &eframe::Frame, ui: &mut egui::Ui, app_env: &crate::AppE
 
 fn software_rasterizer_warning_ui(ui: &mut egui::Ui, info: &wgpu::AdapterInfo) {
     ui.hyperlink_to(
-        egui::RichText::new("⚠ Software rasterizer")
+        egui::RichText::new(tr("⚠ Software rasterizer", "⚠ 软件光栅化"))
             .small()
             .color(ui.visuals().warn_fg_color),
         "https://www.rerun.io/docs/overview/installing-rerun/troubleshooting#graphics-issues",
     )
     .on_hover_ui(|ui| {
-        ui.label("Software rasterizer detected - expect poor performance.");
-        ui.label("Rerun requires hardware accelerated graphics (i.e. a GPU) for good performance.");
-        ui.label("Click for troubleshooting.");
+        ui.label(tr(
+            "Software rasterizer detected - expect poor performance.",
+            "检测到软件光栅化 — 性能会很差。",
+        ));
+        ui.label(tr(
+            "Rerun requires hardware accelerated graphics (i.e. a GPU) for good performance.",
+            "Rerun 需要硬件图形加速（即 GPU）才能获得好的性能。",
+        ));
+        ui.label(tr("Click for troubleshooting.", "点击查看排查方法。"));
         ui.add_space(8.0);
         ui.label(format!(
             "wgpu adapter {}",
@@ -329,7 +355,7 @@ fn connection_status_ui(
         match latency {
             LatencyResult::ToBeAssigned => {}
             LatencyResult::NoConnection => {
-                ui.label(format!("no connection to {url}"));
+                ui.label(trf!("no connection to {url}", "未连接到 {url}"));
             }
             LatencyResult::MostRecent(duration) => {
                 let mut layout_job = egui::text::LayoutJob::default();
@@ -345,7 +371,7 @@ fn connection_status_ui(
                         egui::Align::Center,
                     );
 
-                RichText::new(format!(" latency for {url}")).append_to(
+                RichText::new(trf!(" latency for {url}", " — 到 {url} 的延迟")).append_to(
                     &mut layout_job,
                     ui.style(),
                     egui::FontSelection::Default,
@@ -370,14 +396,14 @@ fn panel_buttons_r2l(
     #[cfg(target_arch = "wasm32")]
     if app.is_fullscreen_allowed() {
         let (icon, label) = if app.is_fullscreen_mode() {
-            (&re_ui::icons::MINIMIZE, "Minimize")
+            (&re_ui::icons::MINIMIZE, tr("Minimize", "还原"))
         } else {
-            (&re_ui::icons::MAXIMIZE, "Maximize")
+            (&re_ui::icons::MAXIMIZE, tr("Maximize", "最大化"))
         };
 
         if ui
             .medium_icon_toggle_button(icon, label, &mut true)
-            .on_hover_text("Toggle fullscreen")
+            .on_hover_text(tr("Toggle fullscreen", "切换全屏"))
             .clicked()
         {
             app.toggle_fullscreen();
@@ -391,7 +417,7 @@ fn panel_buttons_r2l(
             if ui
                 .medium_icon_toggle_button(
                     &re_ui::icons::RIGHT_PANEL_TOGGLE,
-                    "Selection panel toggle",
+                    "显示/隐藏 Selection 面板",
                     &mut app_blueprint.selection_panel_state().is_expanded(),
                 )
                 .on_hover_ui(|ui| UICommand::ToggleSelectionPanel.tooltip_ui(ui))
@@ -409,7 +435,7 @@ fn panel_buttons_r2l(
             if ui
                 .medium_icon_toggle_button(
                     &re_ui::icons::BOTTOM_PANEL_TOGGLE,
-                    "Time panel toggle",
+                    "显示/隐藏时间面板",
                     &mut app_blueprint.time_panel_state().is_expanded(),
                 )
                 .on_hover_ui(|ui| re_ui::RecordingCommandKind::ToggleTimePanel.tooltip_ui(ui))
@@ -427,7 +453,7 @@ fn panel_buttons_r2l(
             if ui
                 .medium_icon_toggle_button(
                     &re_ui::icons::LEFT_PANEL_TOGGLE,
-                    "Blueprint panel toggle",
+                    "显示/隐藏 Blueprint 面板",
                     &mut app_blueprint.blueprint_panel_state().is_expanded(),
                 )
                 .on_hover_ui(|ui| UICommand::ToggleBlueprintPanel.tooltip_ui(ui))
@@ -490,7 +516,11 @@ fn panel_buttons_r2l(
                 if !ui.is_sizing_pass() {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
-                            .add(re_ui::ReButton::new("Log out").small().primary())
+                            .add(
+                                re_ui::ReButton::new(tr("Log out", "退出登录"))
+                                    .small()
+                                    .primary(),
+                            )
                             .clicked()
                         {
                             app.command_sender.send_system(SystemCommand::Logout);
@@ -533,7 +563,10 @@ fn frame_time_label_ui(ui: &mut egui::Ui, app: &App) {
         // we use monospace so the width doesn't fluctuate as the numbers change.
         let text = format!("{ms:.1} ms");
         ui.label(egui::RichText::new(text).monospace().color(color))
-            .on_hover_text("CPU time used by Rerun Viewer each frame. Lower is better.");
+            .on_hover_text(tr(
+                "CPU time used by Rerun Viewer each frame. Lower is better.",
+                "Rerun Viewer 每帧占用的 CPU 时间。越低越好。",
+            ));
     }
 }
 
@@ -567,7 +600,7 @@ fn fps_ui(ui: &mut egui::Ui, app: &App) {
         // we use monospace so the width doesn't fluctuate as the numbers change.
         let text = format!("{fps:.0} FPS");
         ui.label(egui::RichText::new(text).monospace().color(color))
-            .on_hover_text("Frames per second. Higher is better.");
+            .on_hover_text("每秒帧数。越高越好。");
     }
 }
 
@@ -627,12 +660,12 @@ fn memory_use_label_ui(
                     ui.end_row();
 
                     if external_mem > 0 {
-                        ui.label("External");
+                        ui.label("外部");
                         ui.monospace(re_format::format_bytes(external_mem as _));
                         ui.end_row();
                     }
 
-                    ui.label("Allocations");
+                    ui.label("内存分配次数");
                     ui.monospace(format_uint(count.count));
                     ui.end_row();
 
@@ -642,44 +675,43 @@ fn memory_use_label_ui(
                     ));
                     ui.end_row();
 
-                    ui.label("GPU textures");
+                    ui.label("GPU 纹理数");
                     ui.monospace(format_uint(gpu_resource_stats.num_textures));
                     ui.end_row();
 
-                    ui.label("GPU buffers");
+                    ui.label("GPU 缓冲区数");
                     ui.monospace(format_uint(gpu_resource_stats.num_buffers));
                     ui.end_row();
                 });
 
-            ui.weak("See dev panel for more info");
+            ui.weak("更多信息见开发者面板");
         });
     } else if let Some(rss) = mem.resident {
         let bytes_used_text = re_format::format_bytes(rss as _);
         click_to_copy(ui, &bytes_used_text, |ui| {
             ui.label(format!(
-                "Rerun Viewer is using {} of Resident memory (RSS),\n\
-                plus {} of GPU memory in {} textures and {} buffers.",
+                "Rerun Viewer 正在使用 {} 常驻内存（RSS），\n\
+                另有 {} GPU 内存（{} 个纹理、{} 个缓冲区）。",
                 bytes_used_text,
                 re_format::format_bytes(gpu_resource_stats.total_bytes() as _),
                 format_uint(gpu_resource_stats.num_textures),
                 format_uint(gpu_resource_stats.num_buffers),
             ));
             ui.label(
-                "To get more accurate memory reportings, consider configuring your Rerun \n\
-                 viewer to use an AccountingAllocator by adding the following to your \n\
-                 code's main entrypoint:",
+                "想获得更精确的内存统计，可以在代码的 main 入口\n\
+                 加上以下内容，让 Rerun Viewer 使用 AccountingAllocator：",
             );
             ui.code(CODE);
-            ui.label("(click to copy to clipboard)");
+            ui.label("（点击复制到剪贴板）");
         });
     } else {
         click_to_copy(ui, "N/A MiB", |ui| {
             ui.label(
-                "The Rerun viewer was not configured to run with an AccountingAllocator,\n\
-                consider adding the following to your code's main entrypoint:",
+                "Rerun Viewer 没有配置 AccountingAllocator，\n\
+                可以在代码的 main 入口加上以下内容：",
             );
             ui.code(CODE);
-            ui.label("(click to copy to clipboard)");
+            ui.label("（点击复制到剪贴板）");
         });
     }
 }
@@ -698,7 +730,11 @@ fn latency_snapshot_button_ui(
         return None; // Probably an old recording and not live data.
     }
 
-    let text = format!("Latency: {}", latency_text(ui.visuals(), e2e).text());
+    let text = trf!(
+        "Latency: {}",
+        "延迟：{}",
+        latency_text(ui.visuals(), e2e).text()
+    );
     let response = ui.weak(text);
 
     let response = response.on_hover_ui(|ui| {
@@ -710,22 +746,22 @@ fn latency_snapshot_button_ui(
 
 fn latency_details_ui(ui: &mut egui::Ui, latency: re_entity_db::LatencySnapshot) {
     let Some(e2e) = latency.e2e() else {
-        ui.label("No latency data available.");
+        ui.label("没有可用的延迟数据。");
         return;
     };
 
     // The user is interested in the latency, so keep it updated.
     ui.request_repaint();
 
-    let e2e_hover_text = "End-to-end latency from when the data was logged by the SDK to when it is shown in the viewer.\n\
-    This includes time for encoding, network latency, and decoding.\n\
-    It is also affected by the frame rate of the viewer.\n\
-    This latency is inaccurate if the logging was done on a different machine, since it is clock-based.";
+    let e2e_hover_text = "端到端延迟：从 SDK 记录数据到数据显示在 Viewer 里的耗时。\n\
+    包括编码、网络传输和解码的时间。\n\
+    也受 Viewer 帧率影响。\n\
+    这个延迟基于时钟计算，如果记录发生在另一台机器上，结果会不准确。";
 
     let re_entity_db::LatencySnapshot { secs_since_log } = latency;
 
     ui.horizontal(|ui| {
-        ui.label("end-to-end:").on_hover_text(e2e_hover_text);
+        ui.label("端到端：").on_hover_text(e2e_hover_text);
         latency_label(ui, e2e);
     });
     ui.separator();

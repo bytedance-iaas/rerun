@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::{NumExt as _, Rangef, Vec2};
 use re_capabilities::MainThreadToken;
 use re_chunk_store::UnitChunkShared;
@@ -257,13 +258,13 @@ fn show_image_preview(
 
         download_image_button(
             &re_ui::icons::DOWNLOAD,
-            "Save preview texture…",
+            tr("Save preview texture…", "保存预览图…"),
             DownloadAction::Save,
         );
 
         download_image_button(
             &re_ui::icons::COPY,
-            "Copy preview texture…",
+            tr("Copy preview texture…", "复制预览图…"),
             DownloadAction::CopyToClipboard,
         );
     }
@@ -429,7 +430,7 @@ impl ImageUi {
         ctx: &'a AppContext<'_>,
         property_content: list_item::PropertyContent<'a>,
     ) -> list_item::PropertyContent<'a> {
-        property_content.with_action_button(&icons::COPY, "Copy image", move || {
+        property_content.with_action_button(&icons::COPY, tr("Copy image", "复制图像"), move || {
             self.copy_image(ctx);
         })
     }
@@ -441,9 +442,9 @@ impl ImageUi {
                 bytemuck::cast_slice(rgba.as_raw()),
             );
             ctx.egui_ctx.copy_image(egui_image);
-            re_log::info!("Copied image to clipboard");
+            re_log::info!("{}", tr("Copied image to clipboard", "已复制图像到剪贴板"));
         } else {
-            re_log::error!("Invalid image");
+            re_log::error!("{}", tr("Invalid image", "图像无效"));
         }
     }
 
@@ -454,7 +455,7 @@ impl ImageUi {
         entity_path: &'a re_log_types::EntityPath,
         property_content: list_item::PropertyContent<'a>,
     ) -> list_item::PropertyContent<'a> {
-        property_content.with_action_button(&icons::DOWNLOAD, "Save image", move || {
+        property_content.with_action_button(&icons::DOWNLOAD, tr("Save image", "保存图像"), move || {
             self.download_image(ctx, main_thread_token, entity_path);
         })
     }
@@ -477,7 +478,7 @@ impl ImageUi {
                 ctx.command_sender.save_file_dialog(
                     main_thread_token,
                     &file_name,
-                    "Save image".to_owned(),
+                    tr("Save image", "保存图像").to_owned(),
                     png_bytes,
                 );
             }
@@ -515,7 +516,7 @@ impl ImageUi {
         }
 
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new("Image format").value_text(image.format.to_string()),
+            list_item::PropertyContent::new(tr("Image format", "图像格式")).value_text(image.format.to_string()),
         );
 
         // TODO(emilk): we should really support histograms for all types of images
@@ -523,7 +524,7 @@ impl ImageUi {
             && image.format.color_model() == ColorModel::RGB
             && image.format.datatype() == ChannelDatatype::U8
         {
-            ui.section_collapsing_header("Histogram")
+            ui.section_collapsing_header(tr("Histogram", "直方图"))
                 .default_open(false)
                 .show(ui, |ui| {
                     rgb8_histogram_ui(ctx, ui, image);

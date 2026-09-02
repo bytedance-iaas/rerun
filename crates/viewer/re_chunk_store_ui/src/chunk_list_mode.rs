@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::ops::RangeInclusive;
 
 use re_chunk_store::ChunkStore;
@@ -61,7 +62,7 @@ impl ChunkListMode {
         ui.selectable_toggle(|ui| {
             if ui
                 .selectable_label(matches!(self, Self::All), "All")
-                .on_hover_text("Display all chunks")
+                .on_hover_text(tr("Display all chunks", "显示所有 chunk"))
                 .clicked()
             {
                 *self = Self::All;
@@ -78,7 +79,7 @@ impl ChunkListMode {
                     ),
                     "Latest-at",
                 )
-                .on_hover_text("Display chunks relevant to the provided latest-at query")
+                .on_hover_text(tr("Display chunks relevant to the provided latest-at query", "显示与给定 latest-at 查询相关的 chunk"))
                 .clicked()
             {
                 *self = Self::Query {
@@ -100,7 +101,7 @@ impl ChunkListMode {
                     ),
                     "Range",
                 )
-                .on_hover_text("Display chunks relevant to the provided range query")
+                .on_hover_text(tr("Display chunks relevant to the provided range query", "显示与给定范围查询相关的 chunk"))
                 .clicked()
             {
                 *self = Self::Query {
@@ -138,7 +139,7 @@ impl ChunkListMode {
 
         ui.horizontal(|ui| {
             ui.horizontal(|ui| {
-                ui.label("Timeline:");
+                ui.label(tr("Timeline:", "时间轴："));
                 egui::ComboBox::new("timeline", "")
                     .selected_text(current_timeline.name().as_str())
                     .show_ui(ui, |ui| {
@@ -149,7 +150,7 @@ impl ChunkListMode {
                         }
                     });
 
-                ui.label("Entity:");
+                ui.label(tr("Entity:", "实体："));
                 egui::ComboBox::new("entity_path", "")
                     .selected_text(current_entity.to_string())
                     .show_ui(ui, |ui| {
@@ -160,7 +161,7 @@ impl ChunkListMode {
                         }
                     });
 
-                ui.label("Component:");
+                ui.label(tr("Component:", "组件："));
                 //TODO(ab): this should be a text edit with auto-complete (like view origin)
                 egui::ComboBox::new("component", "")
                     .selected_text(current_component.as_str())
@@ -187,16 +188,16 @@ impl ChunkListMode {
 
             match query {
                 ChunkListQueryMode::LatestAt(time) => {
-                    ui.label("At:");
+                    ui.label(tr("At:", "时刻："));
                     time_drag_value.drag_value_ui(ui, time_typ, time, true, None, format);
                 }
                 ChunkListQueryMode::Range(range) => {
                     let (mut min, mut max) = (range.min(), range.max());
 
-                    ui.label("From:");
+                    ui.label(tr("From:", "从："));
                     time_drag_value.drag_value_ui(ui, time_typ, &mut min, true, None, format);
 
-                    ui.label("To:");
+                    ui.label(tr("To:", "到："));
                     time_drag_value.drag_value_ui(ui, time_typ, &mut max, true, Some(min), format);
 
                     range.set_min(min);

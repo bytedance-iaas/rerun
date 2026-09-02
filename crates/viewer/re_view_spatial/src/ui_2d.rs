@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::emath::RectTransform;
 use egui::{Align2, Pos2, Rect, Shape, Vec2, pos2, vec2};
 use macaw::IsoTransform;
@@ -181,14 +182,14 @@ fn clamp_zoom_out(
 pub fn help(os: egui::os::OperatingSystem) -> Help {
     let egui::InputOptions { zoom_modifier, .. } = egui::InputOptions::default(); // This is OK, since we don't allow the user to change this modifier.
 
-    Help::new("2D view")
+    Help::new(tr("2D view", "2D 视图"))
         .docs_link("https://rerun.io/docs/reference/types/views/spatial2d_view")
-        .control("Pan", (MouseButtonText(DRAG_PAN2D_BUTTON), "+", "drag"))
+        .control(tr("Pan", "平移"), (MouseButtonText(DRAG_PAN2D_BUTTON), "+", tr("drag", "拖动")))
         .control(
-            "Zoom",
+            tr("Zoom", "缩放"),
             re_ui::IconText::from_modifiers_and(os, zoom_modifier, icons::SCROLL),
         )
-        .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+        .control(tr("Reset view", "重置视角"), (tr("double", "双击"), icons::LEFT_MOUSE_CLICK))
 }
 
 /// Create the outer 2D view, which consists of a scrollable region
@@ -479,7 +480,7 @@ fn setup_target_config(
         pinhole.principal_point().extend(0.0),
         -glam::Vec3::Y,
     )
-    .ok_or_else(|| anyhow::format_err!("Failed to compute camera transform for 2D view."))?;
+    .ok_or_else(|| anyhow::format_err!(tr("Failed to compute camera transform for 2D view.", "计算 2D 视图的相机变换失败。")))?;
 
     // "pan-and-scan" to look at a particular part (scene_bounds) of the scene (pinhole_rect).
     let mut viewport_transformation = re_renderer::RectTransform {

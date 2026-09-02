@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use itertools::Itertools as _;
 use re_log_types::EntityPath;
 use re_log_types::hash::Hash64;
@@ -86,13 +87,13 @@ pub fn tensor_summary_ui_grid_contents(
 ) {
     let TensorData { shape, names, .. } = tensor;
 
-    ui.grid_left_hand_label("Data type")
-        .on_hover_text("Data type used for all individual elements within the tensor");
+    ui.grid_left_hand_label(tr("Data type", "数据类型"))
+        .on_hover_text(tr("Data type used for all individual elements within the tensor", "张量中每个元素所用的数据类型"));
     ui.label(tensor.dtype().to_string());
     ui.end_row();
 
-    ui.grid_left_hand_label("Shape")
-        .on_hover_text("Extent of every dimension");
+    ui.grid_left_hand_label(tr("Shape", "形状"))
+        .on_hover_text(tr("Extent of every dimension", "每个维度的大小"));
     ui.vertical(|ui| {
         // For unnamed tensor dimension more than a single line usually doesn't make sense!
         // But what if some are named and some are not?
@@ -113,8 +114,8 @@ pub fn tensor_summary_ui_grid_contents(
     } = tensor_stats;
 
     if let Some((min, max)) = range {
-        ui.label("Data range")
-            .on_hover_text("All values of the tensor range within these bounds");
+        ui.label(tr("Data range", "数据范围"))
+            .on_hover_text(tr("All values of the tensor range within these bounds", "张量的所有值都落在这个区间内"));
         ui.monospace(format!(
             "[{} - {}]",
             re_format::format_f64(*min),
@@ -124,8 +125,8 @@ pub fn tensor_summary_ui_grid_contents(
     }
     // Show finite range only if it is different from the actual range.
     if range != &Some(*finite_range) {
-        ui.label("Finite data range").on_hover_text(
-            "The finite values (ignoring all NaN & -Inf/+Inf) of the tensor range within these bounds"
+        ui.label(tr("Finite data range", "有限值数据范围")).on_hover_text(
+            tr("The finite values (ignoring all NaN & -Inf/+Inf) of the tensor range within these bounds", "张量的有限值（忽略所有 NaN 和 -Inf/+Inf）都落在这个区间内")
         );
         let (min, max) = finite_range;
         ui.monospace(format!(

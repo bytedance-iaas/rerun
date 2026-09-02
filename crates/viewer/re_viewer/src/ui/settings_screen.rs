@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use std::str::FromStr as _;
 
 use egui::{NumExt as _, Ui};
@@ -43,7 +44,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
 
     ui.horizontal(|ui| {
         ui.add(egui::Label::new(
-            egui::RichText::new("Settings")
+            egui::RichText::new(tr("Settings", "设置"))
                 .strong()
                 .line_height(Some(32.0))
                 .text_style(DesignTokens::welcome_screen_h2()),
@@ -54,7 +55,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
             egui::Layout::right_to_left(egui::Align::Center),
             |ui| {
                 if ui
-                    .small_icon_button(&re_ui::icons::CLOSE, "Close")
+                    .small_icon_button(&re_ui::icons::CLOSE, tr("Close", "关闭"))
                     .clicked()
                 {
                     *keep_open = false;
@@ -69,10 +70,10 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
 
     separator_with_some_space(ui);
 
-    ui.strong("General");
+    ui.strong(tr("General", "通用"));
 
     ui.horizontal(|ui| {
-        ui.label("Theme");
+        ui.label(tr("Theme", "主题"));
         egui::global_theme_preference_buttons(ui);
     });
 
@@ -82,6 +83,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
         show_metrics,
         show_notification_toasts,
         custom_window_decorations,
+        language: _, // switched via the top-panel 中/EN toggle
         include_rerun_examples_button_in_recordings_panel,
         show_picking_debug_overlay: _, // not yet exposed
         inspect_blueprint_timeline: _, // not yet exposed
@@ -100,21 +102,24 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
     ui.add_space(8.0);
 
     egui::Grid::new("prefetcher").num_columns(2).show(ui, |ui| {
-        ui.label("Memory budget");
+        ui.label(tr("Memory budget", "内存预算"));
         memory_budget_section_ui(ui, memory_limit);
         ui.help_button(|ui| {
-            ui.label("When this limit is reached we start purging data from RAM");
+            ui.label(tr(
+                "When this limit is reached we start purging data from RAM",
+                "达到这个上限后，会开始从内存中清理数据",
+            ));
         });
         ui.end_row();
 
-        ui.label("Prefetch");
+        ui.label(tr("Prefetch", "预取"));
         prefetch_stage_combo_box_ui(ui, max_fetch_stage);
         ui.help_button(|ui| {
             ui.label(
-                "Controls how aggressively we prefetch chunks ahead of what is strictly needed.\n\n\
-                • Required: only chunks required to render the current time cursor.\n\
-                • Similar: also prefetch chunks on the same component paths as required chunks up to a given real-time duration.\n\
-                • Everything: also prefetch every chunk in the recording.",
+                "控制在必需数据之外预取 chunk 的激进程度。\n\n\
+                • 仅必需：只加载渲染当前时间标记所必需的 chunk。\n\
+                • 相似：额外预取与必需 chunk 相同组件路径上、给定实际时长内的 chunk。\n\
+                • 全部：额外预取 episode 中的所有 chunk。",
             );
         });
         ui.end_row();
@@ -124,53 +129,49 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
 
     ui.re_checkbox(
         include_rerun_examples_button_in_recordings_panel,
-        "Show 'Rerun examples' button",
+        "显示“Rerun 示例”按钮",
     );
 
-    ui.re_checkbox(
-        visualizer_limits_enabled,
-        "Limit number of primitives in a view",
-    )
-    .on_hover_text(
-        "Caps the number of elements individual visualizers process \
-             (e.g. instance caps for 3D shapes, line limits for time series). \
-             Disabling this may cause the viewer to become unresponsive \
-             with very large data sets.",
-    );
+    ui.re_checkbox(visualizer_limits_enabled, "限制单个视图中的图元数量")
+        .on_hover_text(
+            "限制每个可视化器处理的元素数量\
+             （例如 3D 形状的实例上限、时间序列的线条上限）。\
+             关闭后，数据量特别大时 Viewer 可能会卡死无响应。",
+        );
 
-    ui.collapsing_header("Timestamp format", false, |ui| {
+    ui.collapsing_header("时间戳格式", false, |ui| {
         time_format_section_ui(ui, timestamp_format);
     });
 
     separator_with_some_space(ui);
-    ui.strong("Title bar");
+    ui.strong("标题栏");
 
     if re_ui::supports_custom_decorations(ui.os()) {
-        ui.re_checkbox(custom_window_decorations, "Use custom window decorations")
+        ui.re_checkbox(custom_window_decorations, "使用自定义窗口装饰")
             .on_hover_text(
-                "Hide the native title bar and draw Rerun's top bar as the window frame.\n\n\
-             Opt out of this if you experience any issues with the window's behavior.",
+                "隐藏系统原生标题栏，把 Rerun 的顶部栏画成窗口边框。\n\n\
+             如果窗口行为出现异常，请关闭这个选项。",
             );
     }
 
-    ui.re_checkbox(show_metrics, "Show performance metrics")
-        .on_hover_text("Show metrics for milliseconds/frame and RAM usage in the top bar");
+    ui.re_checkbox(show_metrics, "显示性能指标")
+        .on_hover_text("在顶部栏显示每帧耗时（毫秒）和内存占用");
 
-    ui.re_checkbox(show_notification_toasts, "Show notification toasts")
-        .on_hover_text("Show toasts for log messages and other notifications");
+    ui.re_checkbox(show_notification_toasts, "显示通知弹窗")
+        .on_hover_text("以弹窗形式显示日志消息和其他通知");
 
     separator_with_some_space(ui);
-    ui.strong("Map view");
+    ui.strong("地图视图");
     map_view_section_ui(ui, mapbox_access_token);
 
     separator_with_some_space(ui);
-    ui.strong("Video");
+    ui.strong("视频");
     video_section_ui(ui, video);
 
     #[cfg(target_arch = "wasm32")]
     if experimental.use_internal_catalog {
         separator_with_some_space(ui);
-        ui.strong("Origin private filesystem");
+        ui.strong("浏览器源私有文件系统（OPFS）");
         origin_private_filesystem_section_ui(ui);
     }
 
@@ -182,21 +183,21 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
             use_internal_catalog,
         } = experimental;
         separator_with_some_space(ui);
-        ui.strong("Experimental");
-        ui.re_checkbox(table_cards_and_blueprints, "Table cards and blueprints")
+        ui.strong("实验功能");
+        ui.re_checkbox(table_cards_and_blueprints, "表格卡片与 blueprint")
             .on_hover_text(
-                "Enable registered table blueprints and the card layout for server-supplied tables.\n\n\
-                 When enabled, tables can use registered view definitions for segment previews, and a list/grid toggle appears in the table title bar.",
+                "为服务器提供的表格启用已注册的表格 blueprint 和卡片布局。\n\n\
+                 启用后，表格可以用已注册的视图定义来预览 segment，表格标题栏中会出现列表/网格切换按钮。",
             );
-        ui.re_checkbox(point_cloud_transparency, "Point cloud transparency")
+        ui.re_checkbox(point_cloud_transparency, "点云透明度")
             .on_hover_text(
-                "Alpha-blend semi-transparent point clouds, sorting them back-to-front.\n\n\
-                 Sorting happens on the CPU every frame, so this is very slow for large point clouds.",
+                "对半透明点云做 alpha 混合，并按从后到前排序。\n\n\
+                 排序每帧都在 CPU 上进行，点云很大时会非常慢。",
             );
-        ui.re_checkbox(use_internal_catalog, "Load files via Viewer catalog")
+        ui.re_checkbox(use_internal_catalog, "通过 Viewer catalog 加载文件")
             .on_hover_text(
-                "Load .rrd files through the Viewer catalog instead of importing them as a live \
-                 recording. Takes effect for files opened after enabling.",
+                "通过 Viewer catalog 加载 .rrd 文件，而不是作为实时 episode 导入。\
+                 对启用之后打开的文件生效。",
             );
         cfg_select! {
             target_arch = "wasm32" => {
@@ -204,8 +205,8 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
             }
             _ => {
                 let gamepad_navigation_response = ui
-                    .re_checkbox(gamepad_navigation, "Gamepad navigation")
-                    .on_hover_text("Enable gamepad navigation in 3D spatial views.");
+                    .re_checkbox(gamepad_navigation, "手柄操控")
+                    .on_hover_text("在 3D 空间视图中启用手柄操控。");
                 if gamepad_navigation_response.changed() && !*gamepad_navigation {
                     re_gamepad::clear_event_waker();
                 }
@@ -217,11 +218,11 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
 #[cfg(target_arch = "wasm32")]
 fn origin_private_filesystem_section_ui(ui: &mut Ui) {
     if ui
-        .button("Request persistence")
+        .button("申请持久化存储")
         .on_hover_text(
-            "Ask the browser to protect Viewer catalog files from automatic storage eviction. \
-             The browser may deny this request. Some browsers, including Firefox, also increase \
-             the origin's storage quota when persistence is granted.",
+            "请求浏览器保护 Viewer catalog 文件不被自动清理。\
+             浏览器可能会拒绝这个请求。包括 Firefox 在内的一些浏览器\
+             在授予持久化后还会提高该源（origin）的存储配额。",
         )
         .clicked()
     {
@@ -248,10 +249,16 @@ fn origin_private_filesystem_section_ui(ui: &mut Ui) {
             };
 
             match result {
-                Ok(true) => re_log::info!("Persistent browser storage granted"),
-                Ok(false) => re_log::warn!("Persistent browser storage denied"),
+                Ok(true) => re_log::info!("浏览器已授予持久化存储"),
+                Ok(false) => re_log::warn!("浏览器拒绝了持久化存储请求"),
                 Err(err) => {
-                    re_log::error!("Failed to request persistent browser storage: {err}");
+                    re_log::error!(
+                        "{}",
+                        trf!(
+                            "Failed to request persistent browser storage: {err}",
+                            "申请浏览器持久化存储失败：{err}"
+                        )
+                    );
                 }
             }
         });
@@ -272,7 +279,7 @@ fn memory_budget_section_ui(ui: &mut Ui, memory_limit: &mut MemoryLimit) {
                 if bytes < UPPER_LIMIT_BYTES as f64 {
                     re_format::format_bytes(bytes)
                 } else {
-                    "unlimited".to_owned()
+                    "不限".to_owned()
                 }
             })
             .custom_parser(|s| {
@@ -299,9 +306,9 @@ fn memory_budget_section_ui(ui: &mut Ui, memory_limit: &mut MemoryLimit) {
 fn prefetch_stage_combo_box_ui(ui: &mut Ui, max_fetch_stage: &mut FetchStage) {
     fn label(stage: FetchStage) -> &'static str {
         match stage {
-            FetchStage::Required | FetchStage::Indicated => "Required",
-            FetchStage::Similar(_) => "Similar",
-            FetchStage::Everything => "Everything",
+            FetchStage::Required | FetchStage::Indicated => "仅必需",
+            FetchStage::Similar(_) => "相似",
+            FetchStage::Everything => "全部",
         }
     }
 
@@ -394,24 +401,24 @@ fn time_format_section_ui(ui: &mut Ui, timestamp_format: &mut TimestampFormat) {
     ui.re_radio_value(
         timestamp_format,
         TimestampFormat::local_timezone(),
-        "Local (show time zone)",
+        "本地时间（显示时区）",
     );
     timestamp_example_ui(ui, timestamp, TimestampFormat::local_timezone());
     ui.re_radio_value(
         timestamp_format,
         TimestampFormat::local_timezone_implicit(),
-        "Local (hide time zone)",
+        "本地时间（隐藏时区）",
     );
     timestamp_example_ui(ui, timestamp, TimestampFormat::local_timezone_implicit());
     ui.horizontal(|ui| {
         ui.add_space(ui.spacing().icon_width + ui.spacing().icon_spacing);
-        ui.label("Note: timestamps without time zone are ambiguous when copied elsewhere.");
+        ui.label("注意：不带时区的时间戳复制到别处后会产生歧义。");
     });
 
     ui.re_radio_value(
         timestamp_format,
         TimestampFormat::unix_epoch(),
-        "Seconds since Unix epoch",
+        "Unix 纪元以来的秒数",
     );
     timestamp_example_ui(ui, timestamp, TimestampFormat::unix_epoch());
 }
@@ -421,12 +428,11 @@ fn map_view_section_ui(ui: &mut Ui, mapbox_access_token: &mut String) {
         // TODO(ab): needed for alignment, we should use egui flex instead
         ui.set_height(19.0);
 
-        ui.label("Mapbox access token:").on_hover_ui(|ui| {
+        ui.label("Mapbox access token：").on_hover_ui(|ui| {
             ui.markdown_ui(
-                "This token is used to enable Mapbox-based map view backgrounds.\n\n\
-                Note that the token will be saved in clear text in the configuration file. \
-                The token can also be set using the `RERUN_MAPBOX_ACCESS_TOKEN` environment \
-                variable.",
+                "这个 token 用于启用基于 Mapbox 的地图视图背景。\n\n\
+                注意：token 会以明文保存在配置文件里。\
+                也可以通过环境变量 `RERUN_MAPBOX_ACCESS_TOKEN` 设置。",
             );
         });
 
@@ -442,7 +448,7 @@ fn video_section_ui(ui: &mut Ui, options: &mut VideoOptions) {
 
             let hardware_acceleration = &mut options.hw_acceleration;
             ui.horizontal(|ui| {
-                ui.label("Decoder:");
+                ui.label("解码器：");
                 egui::ComboBox::from_id_salt("video_decoder_hw_acceleration")
                     .selected_text(hardware_acceleration.to_string())
                     .show_ui(ui, |ui| {
@@ -469,13 +475,12 @@ fn video_section_ui(ui: &mut Ui, options: &mut VideoOptions) {
         _ => {
             ui.re_checkbox(
                 &mut options.override_ffmpeg_path,
-                "Override the FFmpeg binary path",
+                "自定义 FFmpeg 程序路径",
             )
             .on_hover_ui(|ui| {
                 ui.markdown_ui(
-                    "By default, the viewer tries to automatically find a suitable FFmpeg binary in \
-                    the system's `PATH`. Enabling this option allows you to specify a custom path to \
-                    the FFmpeg binary.",
+                    "默认情况下，Viewer 会在系统的 `PATH` 中自动寻找合适的 FFmpeg 程序。\
+                    启用这个选项后可以手动指定 FFmpeg 程序的路径。",
                 );
             });
 
@@ -484,7 +489,7 @@ fn video_section_ui(ui: &mut Ui, options: &mut VideoOptions) {
                     // TODO(ab): needed for alignment, we should use egui flex instead
                     ui.set_height(19.0);
 
-                    ui.label("Path:");
+                    ui.label("路径：");
 
                     ui.add(egui::TextEdit::singleline(&mut options.ffmpeg_path));
                 });
@@ -507,26 +512,33 @@ fn ffmpeg_path_status_ui(ui: &mut Ui, options: &VideoOptions) {
 
     match FFmpegVersion::for_executable_poll(path) {
         Poll::Pending => {
-            ui.loading_indicator("Checking FFmpeg version");
+            ui.loading_indicator("正在检查 FFmpeg 版本");
         }
 
         Poll::Ready(Ok(version)) => {
             if version.is_compatible() {
-                ui.success_label(format!("FFmpeg found (version {version})"));
+                ui.success_label(trf!(
+                    "FFmpeg found (version {version})",
+                    "已找到 FFmpeg（版本 {version}）"
+                ));
             } else {
-                ui.error_label(format!("Incompatible FFmpeg version: {version}"));
+                ui.error_label(trf!(
+                    "Incompatible FFmpeg version: {version}",
+                    "FFmpeg 版本不兼容：{version}"
+                ));
             }
         }
         Poll::Ready(Err(FFmpegVersionParseError::ParseVersion { raw_version })) => {
             // We make this one a warning instead of an error because version parsing is flaky, and
             // it might end up still working.
-            ui.warning_label(format!(
-                "FFmpeg binary found but unable to parse version: {raw_version}"
+            ui.warning_label(trf!(
+                "FFmpeg binary found but unable to parse version: {raw_version}",
+                "找到了 FFmpeg 程序，但无法解析其版本：{raw_version}"
             ));
         }
 
         Poll::Ready(Err(FFmpegVersionParseError::FFmpegNotFound(_path))) => {
-            ui.error_label("The specified FFmpeg binary path does not exist or is not a file.");
+            ui.error_label("指定的 FFmpeg 程序路径不存在，或者不是一个文件。");
         }
 
         Poll::Ready(Err(err)) => {

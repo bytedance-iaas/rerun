@@ -1,5 +1,6 @@
 use eframe::emath::{NumExt as _, Vec2};
 use egui::{Frame, ModalResponse};
+use re_i18n::tr;
 
 use crate::context_ext::ContextExt as _;
 use crate::{DesignTokens, UiExt as _};
@@ -345,7 +346,7 @@ impl ModalWrapper {
                     .layout(egui::Layout::right_to_left(egui::Align::Center)),
             );
             if ui
-                .small_icon_button(&crate::icons::CLOSE, "Close")
+                .small_icon_button(&crate::icons::CLOSE, tr("Close", "关闭"))
                 .clicked()
             {
                 ui.close();

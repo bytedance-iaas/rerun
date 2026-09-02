@@ -1,7 +1,7 @@
+use re_i18n::{tr, trf};
 use egui::NumExt as _;
 use re_chunk_store::UnitChunkShared;
 use re_entity_db::InstancePath;
-use re_format::format_plural_s;
 use re_log_types::{EntityPath, Instance, TimePoint};
 use re_sdk_types::ComponentIdentifier;
 use re_ui::{SyntaxHighlighting as _, UiExt as _};
@@ -47,7 +47,7 @@ impl DataUi for LatestAtInstanceResult<'_> {
             .schema()
             .entity_component_descriptor(&entity_path, component)
         else {
-            ui.label(format!("Entity {entity_path} has no component {component}"));
+            ui.label(trf!("Entity {entity_path} has no component {component}", "实体 {entity_path} 没有组件 {component}"));
             return;
         };
 
@@ -115,7 +115,11 @@ impl DataUi for LatestAtInstanceResult<'_> {
                 &instance,
             );
         } else if ui_layout.is_single_line() {
-            ui.label(format_plural_s(num_instances, "value"));
+            ui.label(if re_i18n::is_chinese() {
+                format!("{} 个值", re_format::format_uint(num_instances))
+            } else {
+                re_format::format_plural_s(num_instances, "value")
+            });
         } else {
             let table_style = re_ui::TableStyle::Dense;
             ui_layout
@@ -127,7 +131,7 @@ impl DataUi for LatestAtInstanceResult<'_> {
                 .header(tokens.deprecated_table_header_height(), |mut header| {
                     re_ui::DesignTokens::setup_table_header(&mut header);
                     header.col(|ui| {
-                        ui.label("Index");
+                        ui.label(tr("Index", "索引"));
                     });
                     header.col(|ui| {
                         ui.label(component_descriptor.display_name());
@@ -171,8 +175,9 @@ impl DataUi for LatestAtInstanceResult<'_> {
                 });
 
             if num_instances > num_displayed_rows {
-                ui.label(format!(
+                ui.label(trf!(
                     "…and {} more.",
+                    "…还有 {} 个。",
                     re_format::format_uint(num_instances - num_displayed_rows)
                 ));
             }

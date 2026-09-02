@@ -1,4 +1,6 @@
 use crate::CommandSender;
+#[cfg(target_arch = "wasm32")]
+use re_i18n::trf;
 
 fn is_safe_filename_char(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.')
@@ -30,9 +32,9 @@ impl CommandSender {
                 // Web
                 re_async::spawn_local(async move {
                     if let Err(err) = async_save_dialog(&file_name, &title, data).await {
-                        re_log::error!("File saving failed: {err}");
+                        re_log::error!("{}", trf!("File saving failed: {err}", "保存文件失败：{err}"));
                     } else {
-                        re_log::info!("{file_name} saved.");
+                        re_log::info!("{}", trf!("{file_name} saved.", "{file_name} 已保存。"));
                     }
                 });
             }
@@ -74,5 +76,5 @@ async fn async_save_dialog(file_name: &str, title: &str, data: Vec<u8>) -> anyho
     file_handle
         .write(data.as_slice())
         .await
-        .context("Failed to save")
+        .context(trf!("Failed to save", "保存失败"))
 }

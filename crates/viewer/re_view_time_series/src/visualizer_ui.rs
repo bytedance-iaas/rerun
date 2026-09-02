@@ -1,5 +1,6 @@
 //! UI code for `TimeSeriesView::visualizer_ui`, i.e. the visualizer list you get when selecting the an instance of the view.
 
+use re_i18n::tr;
 use arrayvec::ArrayVec;
 use re_component_ui::color_swatch::ColorSwatch;
 use re_log_types::external::arrow::array::AsArray as _;
@@ -200,7 +201,7 @@ fn context_menu_ui(
     all_series_invisible: bool,
 ) {
     // Hide/show toggle
-    let label = if all_series_invisible { "Show" } else { "Hide" };
+    let label = if all_series_invisible { tr("Show", "显示") } else { tr("Hide", "隐藏") };
     if ui.button(label).clicked() {
         instruction.save_override(
             ctx.viewer_ctx,
@@ -211,7 +212,7 @@ fn context_menu_ui(
     }
 
     // Remove visualizer
-    if ui.button("Remove").clicked() {
+    if ui.button(tr("Remove", "移除")).clicked() {
         let active_visualizers: Vec<_> = node
             .data_result
             .visualizer_instructions

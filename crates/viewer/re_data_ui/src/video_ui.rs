@@ -1,3 +1,4 @@
+use re_i18n::{tr, trf};
 use std::sync::Arc;
 
 use egui::NumExt as _;
@@ -35,7 +36,7 @@ pub fn video_asset_result_ui(
                 // Extra scope needed to ensure right spacing.
                 ui.list_item_scope("video_asset", |ui| {
                     ui.list_item_collapsible_noninteractive_label(
-                        "Video Asset",
+                        tr("Video Asset", "视频资产"),
                         default_open,
                         |ui| {
                             video_data_ui(ui, ui_layout, StreamKind::Video, video.data_descr());
@@ -45,7 +46,7 @@ pub fn video_asset_result_ui(
             }
         }
         Err(err) => {
-            let error_message = format!("Failed to play: {err}");
+            let error_message = trf!("Failed to play: {err}", "播放失败：{err}");
             if ui_layout.is_single_line() {
                 ui.error_with_details_on_hover(error_message);
             } else {
@@ -70,7 +71,7 @@ pub fn video_stream_result_ui(
                 // Extra scope needed to ensure right spacing.
                 ui.list_item_scope(format!("{stream_kind}_stream"), |ui| {
                     ui.list_item_collapsible_noninteractive_label(
-                        format!("{} Stream", stream_kind.capitalized()),
+                        trf!("{} Stream", "{}流", stream_kind.capitalized()),
                         default_open,
                         |ui| {
                             video_data_ui(ui, ui_layout, stream_kind, video.read().video_descr());
@@ -80,7 +81,11 @@ pub fn video_stream_result_ui(
             }
         }
         Err(err) => {
-            let error_message = format!("Failed to process {stream_kind} stream: {err}");
+            let error_message = if re_i18n::is_chinese() {
+                format!("处理{}流失败：{err}", stream_kind.capitalized())
+            } else {
+                format!("Failed to process {stream_kind} stream: {err}")
+            };
             if ui_layout.is_single_line() {
                 ui.error_with_details_on_hover(error_message);
             } else {
@@ -101,29 +106,36 @@ fn video_data_ui(
     if let Some(encoding_details) = &video_descr.encoding_details {
         let [w, h] = &encoding_details.coded_dimensions;
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("Dimensions").value_text(format!("{w}x{h}")),
+            PropertyContent::new("尺寸").value_text(format!("{w}x{h}")),
         );
 
         if let Some(bit_depth) = encoding_details.bit_depth {
             // Images can display higher bit depths.
             let is_image_sequence =
                 matches!(video_descr.codec, re_video::VideoCodec::ImageSequence(_));
-            ui.list_item_flat_noninteractive(PropertyContent::new("Bit depth").value_fn(
+            ui.list_item_flat_noninteractive(PropertyContent::new(tr("Bit depth", "位深")).value_fn(
                 |ui, _| {
                     ui.label(bit_depth.to_string());
                     if 8 < bit_depth && !is_image_sequence {
                         // TODO(#7594): HDR videos
                         ui.warning_label("HDR").on_hover_ui(|ui| {
-                            ui.label(format!(
-                                "High-dynamic-range {stream_kind}s not yet supported by Rerun"
-                            ));
+                            ui.label(if re_i18n::is_chinese() {
+                                format!(
+                                    "Rerun 尚不支持高动态范围（HDR）{}",
+                                    stream_kind.capitalized()
+                                )
+                            } else {
+                                format!(
+                                    "High-dynamic-range {stream_kind}s not yet supported by Rerun"
+                                )
+                            });
                             ui.hyperlink("https://github.com/rerun-io/rerun/issues/7594");
                         });
                     }
                     if encoding_details.chroma_subsampling
                         == Some(re_video::ChromaSubsamplingModes::Monochrome)
                     {
-                        ui.label("(monochrome)");
+                        ui.label(tr("(monochrome)", "（单色）"));
                     }
                 },
             ));
@@ -132,7 +144,7 @@ fn video_data_ui(
             // Don't show subsampling mode for monochrome. Usually we know the bit depth and already shown it there.
             if chroma_subsampling != re_video::ChromaSubsamplingModes::Monochrome {
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new("Subsampling").value_text(chroma_subsampling.to_string()),
+                    PropertyContent::new(tr("Subsampling", "色度子采样")).value_text(chroma_subsampling.to_string()),
                 );
             }
         }
@@ -140,25 +152,26 @@ fn video_data_ui(
 
     if let Some(duration) = video_descr.duration() {
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("Duration")
+            PropertyContent::new(tr("Duration", "时长"))
                 .value_text(format!("{}", re_log_types::Duration::from(duration))),
         );
     }
 
     ui.list_item_flat_noninteractive(
-        PropertyContent::new(format!("{} count", stream_kind.capitalized_frame_word()))
+        PropertyContent::new(trf!("{} count", "{}数", stream_kind.capitalized_frame_word()))
             .value_uint(video_descr.num_samples()),
     );
 
     if let Some(fps) = video_descr.average_fps() {
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("Average FPS").value_text(format!("{fps:.2}")),
+            PropertyContent::new(tr("Average FPS", "平均帧率")).value_text(format!("{fps:.2}")),
         )
-        .on_hover_text(format!(
+        .on_hover_text(trf!(
             "Average frames per second (FPS) of the {}",
+            "{}的平均每秒帧数（FPS）",
             match stream_kind {
-                StreamKind::Video => "video",
-                StreamKind::Image => "image stream",
+                StreamKind::Video => tr("video", "视频"),
+                StreamKind::Image => tr("image stream", "图像流"),
             }
         ));
     }
@@ -172,50 +185,51 @@ fn video_data_ui(
             .all(|s| matches!(s.source(), re_video::VideoSource::Span(_)));
 
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("Average bitrate")
+            PropertyContent::new(tr("Average bitrate", "平均码率"))
                 .value_text(re_format::format_bits_per_second(bitrate_bps)),
         )
         .on_hover_text(if fully_loaded {
-            format!(
+            trf!(
                 "Average bitrate of the {}",
+                "{}的平均码率",
                 match stream_kind {
-                    StreamKind::Video => "video",
-                    StreamKind::Image => "image stream",
+                    StreamKind::Video => tr("video", "视频"),
+                    StreamKind::Image => tr("image stream", "图像流"),
                 }
             )
         } else {
-            "Average bitrate over the downloaded portion (the full data is not yet available)"
+            tr("Average bitrate over the downloaded portion (the full data is not yet available)", "已下载部分的平均码率（完整数据尚未全部就绪）")
                 .to_owned()
         });
     }
 
     ui.list_item_flat_noninteractive(
-        PropertyContent::new("Codec").value_text(video_descr.human_readable_codec_string()),
+        PropertyContent::new(tr("Codec", "编码格式")).value_text(video_descr.human_readable_codec_string()),
     );
 
     if ui_layout != UiLayout::Tooltip && !video_descr.mp4_tracks.is_empty() {
-        ui.list_item_collapsible_noninteractive_label("MP4 tracks", false, |ui| {
+        ui.list_item_collapsible_noninteractive_label(tr("MP4 tracks", "MP4 轨道"), false, |ui| {
             for (track_id, track_kind) in &video_descr.mp4_tracks {
                 let track_kind_string = match track_kind {
-                    Some(re_video::TrackKind::Audio) => "audio",
-                    Some(re_video::TrackKind::Subtitle) => "subtitle",
-                    Some(re_video::TrackKind::Video) => "video",
-                    None => "unknown",
+                    Some(re_video::TrackKind::Audio) => tr("audio", "音频"),
+                    Some(re_video::TrackKind::Subtitle) => tr("subtitle", "字幕"),
+                    Some(re_video::TrackKind::Video) => tr("video", "视频"),
+                    None => tr("unknown", "未知"),
                 };
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new(format!("Track {track_id}")).value_text(track_kind_string),
+                    PropertyContent::new(trf!("Track {track_id}", "轨道 {track_id}")).value_text(track_kind_string),
                 );
             }
         });
     }
 
     if stream_kind == StreamKind::Video {
-        ui.list_item_collapsible_noninteractive_label("More video statistics", false, |ui| {
+        ui.list_item_collapsible_noninteractive_label(tr("More video statistics", "更多视频统计信息"), false, |ui| {
             ui.list_item_flat_noninteractive(
-                PropertyContent::new("Number of keyframes")
+                PropertyContent::new(tr("Number of keyframes", "关键帧数量"))
                     .value_uint(video_descr.keyframe_indices.len()),
             )
-            .on_hover_text("The total number of keyframes in the video.");
+            .on_hover_text(tr("The total number of keyframes in the video.", "视频中关键帧的总数。"));
 
             let re_video::SamplesStatistics {
                 dts_always_equal_pts,
@@ -227,8 +241,8 @@ fn video_data_ui(
             let _ = gop_sizes; // only used by the debug-only UI below
 
             ui.list_item_flat_noninteractive(
-                PropertyContent::new("All PTS equal DTS").value_bool(*dts_always_equal_pts)
-            ).on_hover_text("Whether all decode timestamps are equal to presentation timestamps. If true, the video typically has no B-frames.");
+                PropertyContent::new(tr("All PTS equal DTS", "所有 PTS 等于 DTS")).value_bool(*dts_always_equal_pts)
+            ).on_hover_text(tr("Whether all decode timestamps are equal to presentation timestamps. If true, the video typically has no B-frames.", "所有解码时间戳（DTS）是否都等于显示时间戳（PTS）。若为真，视频通常没有 B 帧。"));
 
             #[cfg(debug_assertions)]
             if gop_sizes.smallest > 0 {
@@ -237,20 +251,20 @@ fn video_data_ui(
                 if gop_sizes.smallest == gop_sizes.largest {
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("GOP size").value_uint(gop_sizes.smallest)
-                    ).on_hover_text("All known gops are this size.");
+                    ).on_hover_text(tr("All known gops are this size.", "所有已知 GOP 都是这个大小。"));
                 } else {
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("Smallest GOP size").value_uint(gop_sizes.smallest)
-                    ).on_hover_text("The smallest observed gop size.");
+                    ).on_hover_text(tr("The smallest observed gop size.", "观测到的最小 GOP 大小。"));
 
                     ui.list_item_flat_noninteractive(
                         PropertyContent::new("Largest GOP size").value_uint(gop_sizes.largest)
-                    ).on_hover_text("The largest observed gop size.");
+                    ).on_hover_text(tr("The largest observed gop size.", "观测到的最大 GOP 大小。"));
                 }
             }
         });
 
-        ui.list_item_collapsible_noninteractive_label("Video samples", false, |ui| {
+        ui.list_item_collapsible_noninteractive_label(tr("Video samples", "视频样本"), false, |ui| {
             egui::Resize::default()
                 .with_stroke(true)
                 .resizable([false, true])
@@ -276,28 +290,28 @@ fn samples_table_ui(ui: &mut egui::Ui, video_descr: &VideoDataDescription) {
         .header(tokens.deprecated_table_header_height(), |mut header| {
             re_ui::DesignTokens::setup_table_header(&mut header);
             header.col(|ui| {
-                ui.strong("Sample");
+                ui.strong(tr("Sample", "样本"));
             });
             header.col(|ui| {
-                ui.strong("Frame");
+                ui.strong(tr("Frame", "帧"));
             });
             header.col(|ui| {
                 ui.strong("GOP");
             });
             header.col(|ui| {
-                ui.strong("Sync");
+                ui.strong(tr("Sync", "同步"));
             });
             header.col(|ui| {
-                ui.strong("DTS").on_hover_text("Decode timestamp");
+                ui.strong("DTS").on_hover_text(tr("Decode timestamp", "解码时间戳"));
             });
             header.col(|ui| {
-                ui.strong("PTS").on_hover_text("Presentation timestamp");
+                ui.strong("PTS").on_hover_text(tr("Presentation timestamp", "显示时间戳"));
             });
             header.col(|ui| {
-                ui.strong("Duration");
+                ui.strong(tr("Duration", "时长"));
             });
             header.col(|ui| {
-                ui.strong("Size");
+                ui.strong(tr("Size", "大小"));
             });
         })
         .body(|mut body| {
@@ -338,7 +352,7 @@ fn samples_table_ui(ui: &mut egui::Ui, video_descr: &VideoDataDescription) {
                     });
                     row.col(|ui| {
                         if is_sync {
-                            ui.label("sync");
+                            ui.label(tr("sync", "同步"));
                         }
                     });
                     row.col(|ui| {
@@ -356,7 +370,7 @@ fn samples_table_ui(ui: &mut egui::Ui, video_descr: &VideoDataDescription) {
                                     .to_string(),
                             );
                         } else {
-                            ui.monospace("unknown");
+                            ui.monospace(tr("unknown", "未知"));
                         }
                     });
                     row.col(|ui| match source {
@@ -422,11 +436,21 @@ fn decoded_frame_ui(
                         .with(format!("decoded_{}_collapsible", stream_kind.frame_word()));
                     let default_open = false;
                     let label = if let Some(frame_nr) = frame_info.frame_nr {
-                        format!(
-                            "Decoded {} #{}",
-                            stream_kind.frame_word(),
-                            re_format::format_uint(frame_nr)
-                        )
+                        if re_i18n::is_chinese() {
+                            format!(
+                                "解码后的{} #{}",
+                                stream_kind.capitalized_frame_word(),
+                                re_format::format_uint(frame_nr)
+                            )
+                        } else {
+                            format!(
+                                "Decoded {} #{}",
+                                stream_kind.frame_word(),
+                                re_format::format_uint(frame_nr)
+                            )
+                        }
+                    } else if re_i18n::is_chinese() {
+                        format!("当前解码的{}", stream_kind.capitalized_frame_word())
                     } else {
                         format!("Current decoded {}", stream_kind.frame_word())
                     };
@@ -483,7 +507,14 @@ fn decoded_frame_ui(
                         },
                     ),
                     Err(err) => {
-                        re_log::error!("Failed to save {stream_kind} preview: {err}");
+                        re_log::error!(
+                            "{}",
+                            if re_i18n::is_chinese() {
+                                format!("保存{}预览失败：{err}", stream_kind.capitalized())
+                            } else {
+                                format!("Failed to save {stream_kind} preview: {err}")
+                            }
+                        );
                     }
                 },
             )
@@ -510,7 +541,11 @@ fn decoded_frame_ui(
                     response.rect,
                     loading_indicator_opacity,
                     None,
-                    &format!("Decoding {}", stream_kind.frame_word()),
+                    &if re_i18n::is_chinese() {
+                        format!("正在解码{}", stream_kind.capitalized_frame_word())
+                    } else {
+                        format!("Decoding {}", stream_kind.frame_word())
+                    },
                 );
             }
         }
@@ -528,7 +563,7 @@ fn decoded_frame_ui(
                 | re_video::FFmpegError::FailedToDetermineFFmpegVersion(_)
                 | re_video::FFmpegError::FFmpegNotInstalled => {
                     if let Some(download_url) = re_video::ffmpeg_download_url() {
-                        ui.markdown_ui(&format!("You can download a build of `FFmpeg` [here]({download_url}). For Rerun to be able to use it, its binaries need to be reachable from `PATH`."));
+                        ui.markdown_ui(&trf!("You can download a build of `FFmpeg` [here]({download_url}). For Rerun to be able to use it, its binaries need to be reachable from `PATH`.", "可以在[这里]({download_url})下载 `FFmpeg`。要让 Rerun 能用上它，其可执行文件需要能从 `PATH` 中找到。"));
                     }
                 }
 
@@ -556,30 +591,31 @@ fn frame_info_ui(
     if let Some(is_sync) = is_sync
         && stream_kind == StreamKind::Video
     {
-        ui.list_item_flat_noninteractive(PropertyContent::new("Sync").value_bool(is_sync))
+        ui.list_item_flat_noninteractive(PropertyContent::new(tr("Sync", "同步")).value_bool(is_sync))
             .on_hover_text(
-                "The start of a new GOP (Group of Frames)?\n\
-                If true, it likely means the frame is a keyframe.",
+                "是否为新一组画面（GOP）的起点？\n\
+                若为真，通常说明该帧是关键帧。",
             );
     }
 
     let presentation_time_range = frame_info.presentation_time_range();
     if let Some(timescale) = video_descr.timescale {
-        ui.list_item_flat_noninteractive(PropertyContent::new("Time range").value_text(format!(
+        ui.list_item_flat_noninteractive(PropertyContent::new("时间范围").value_text(format!(
             "{} - {}",
             format_relative_timestamp_secs(presentation_time_range.start.into_secs(timescale)),
             format_relative_timestamp_secs(presentation_time_range.end.into_secs(timescale)),
         )))
     } else {
-        ui.list_item_flat_noninteractive(PropertyContent::new("Time range").value_text(format!(
+        ui.list_item_flat_noninteractive(PropertyContent::new("时间范围").value_text(format!(
             "{} - {}",
             presentation_time_range.start.0, presentation_time_range.end.0,
         )))
     }
-    .on_hover_text(format!(
-        "Time range in which this {} is shown.",
-        stream_kind.frame_word()
-    ));
+    .on_hover_text(if re_i18n::is_chinese() {
+        format!("这一{}显示的时间范围。", stream_kind.capitalized_frame_word())
+    } else {
+        format!("Time range in which this {} is shown.", stream_kind.frame_word())
+    });
 
     fn value_fn_for_time(
         time: re_video::Time,
@@ -593,11 +629,11 @@ fn frame_info_ui(
     if let Some(sample_idx) = sample_idx
         && stream_kind == StreamKind::Video
     {
-        ui.list_item_flat_noninteractive(PropertyContent::new("Sample").value_fn(move |ui, _| {
+        ui.list_item_flat_noninteractive(PropertyContent::new("样本").value_fn(move |ui, _| {
             ui.monospace(re_format::format_uint(sample_idx));
         }))
         .on_hover_text(
-            "The sample number of this frame in the video. In MP4, one sample is one frame, but not necessareily in the same order!",
+            "该帧在视频中的样本编号。在 MP4 中一个样本对应一帧，但顺序不一定一致！",
         );
     }
 
@@ -607,10 +643,11 @@ fn frame_info_ui(
                 ui.monospace(re_format::format_uint(frame_nr));
             }),
         )
-        .on_hover_text(format!(
-            "The {} number, as ordered by presentation time",
-            stream_kind.frame_word()
-        ));
+        .on_hover_text(if re_i18n::is_chinese() {
+            format!("按显示时间排序的{}编号", stream_kind.capitalized_frame_word())
+        } else {
+            format!("The {} number, as ordered by presentation time", stream_kind.frame_word())
+        });
     }
 
     if let Some(dts) = latest_decode_timestamp
@@ -619,15 +656,15 @@ fn frame_info_ui(
         ui.list_item_flat_noninteractive(
             PropertyContent::new("DTS").value_fn(value_fn_for_time(dts, video_descr)),
         )
-        .on_hover_text("Raw decode timestamp prior to applying the timescale.\n\
-                        If a frame is made up of multiple chunks, this is the last decode timestamp that was needed to decode the frame.");
+        .on_hover_text("未按时间刻度（timescale）换算的原始解码时间戳。\n\
+                        若一帧由多个 chunk 组成，这里是解码该帧所需的最后一个解码时间戳。");
     }
 
     ui.list_item_flat_noninteractive(
         PropertyContent::new("PTS").value_fn(value_fn_for_time(presentation_timestamp, video_descr)),
     )
-    .on_hover_text(format!("Raw presentation timestamp prior to applying the timescale.\n\
-                    This specifies the time at which the {} should be shown relative to the start of a {stream_kind} stream.", stream_kind.frame_word()));
+    .on_hover_text(format!("未按时间刻度（timescale）换算的原始显示时间戳。\n\
+                    表示该{}相对于{}流起点应显示的时间。", stream_kind.capitalized_frame_word(), stream_kind.capitalized()));
 
     // Judging the following to be a bit too obscure to be of relevance outside of debugging Rerun itself.
     #[cfg(debug_assertions)]
@@ -652,9 +689,9 @@ fn frame_info_ui(
         && stream_kind == StreamKind::Video
     {
         ui.list_item_flat_noninteractive(
-            PropertyContent::new("keyframe index").value_text(keyframe_idx.to_string()),
+            PropertyContent::new("关键帧索引").value_text(keyframe_idx.to_string()),
         )
-        .on_hover_text("The index of the keyframe that this sample belongs to.");
+        .on_hover_text("该样本所属关键帧的索引。");
 
         if let Some(sample_range) = video_descr.gop_sample_range_for_keyframe(keyframe_idx) {
             let first_sample = video_descr.samples.get(sample_range.start);
@@ -664,31 +701,31 @@ fn frame_info_ui(
                 first_sample.and_then(|s| s.sample()),
                 last_sample.and_then(|s| s.sample()),
             ) {
-                ui.list_item_flat_noninteractive(PropertyContent::new("GOP DTS range").value_text(
+                ui.list_item_flat_noninteractive(PropertyContent::new("GOP DTS 范围").value_text(
                     format!("{} - {}", re_format::format_int(first_sample.decode_timestamp.0), re_format::format_int(last_sample.decode_timestamp.0))
                 ))
                 .on_hover_text(
-                    "The range of decode timestamps in the currently active group of picture (GOP).",
+                    "当前画面组（GOP）内解码时间戳的范围。",
                 );
             } else {
-                ui.error_label("GOP has invalid sample range"); // Should never happen.
+                ui.error_label("GOP 的样本范围无效"); // Should never happen.
             }
         } else {
-            ui.error_label("Invalid GOP index"); // Should never happen.
+            ui.error_label("GOP 索引无效"); // Should never happen.
         }
     }
 }
 
 fn source_image_data_format_ui(ui: &mut egui::Ui, format: &SourceImageDataFormat) {
-    let label = "Decoder output format";
+    let label = "解码器输出格式";
 
     match format {
         SourceImageDataFormat::WgpuCompatible(format) => {
             ui.list_item_flat_noninteractive(PropertyContent::new(label).value_text(format!("{format:?}")))
                 // This is true for YUV outputs as well, but for RGB/RGBA there was almost certainly some postprocessing involved,
                 // whereas it would very surprising for YUV.
-                .on_hover_text("Pixel format as returned from the decoder.\n\
-                                Decoders may do arbitrary post processing, so this is not necessarily the format that is actually encoded in the video data!"
+                .on_hover_text("解码器返回的像素格式。\n\
+                                解码器可能会做任意后处理，因此这不一定是视频数据里实际编码的格式！"
             );
         }
 
@@ -700,17 +737,17 @@ fn source_image_data_format_ui(ui: &mut egui::Ui, format: &SourceImageDataFormat
             let default_open = true;
             ui.list_item_collapsible_noninteractive_label(label, default_open, |ui| {
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new("Data layout").value_text(layout.to_string()),
+                    PropertyContent::new("数据布局").value_text(layout.to_string()),
                 )
-                .on_hover_text("Subsampling ratio & layout of the pixel data.");
+                .on_hover_text("像素数据的子采样比例与布局。");
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new("Color range").value_text(range.to_string()),
+                    PropertyContent::new("颜色范围").value_text(range.to_string()),
                 )
-                .on_hover_text("Valid range of the pixel data values.");
+                .on_hover_text("像素数据值的有效范围。");
                 ui.list_item_flat_noninteractive(
-                    PropertyContent::new("Yuv Coefficients").value_text(coefficients.to_string()),
+                    PropertyContent::new("YUV 系数").value_text(coefficients.to_string()),
                 )
-                .on_hover_text("Matrix coefficients used to convert the pixel data to RGB.");
+                .on_hover_text("把像素数据转换为 RGB 所用的矩阵系数。");
             });
         }
     }
@@ -742,15 +779,15 @@ impl StreamKind {
 
     fn capitalized_frame_word(&self) -> &'static str {
         match self {
-            Self::Video => "Frame",
-            Self::Image => "Image",
+            Self::Video => tr("Frame", "帧"),
+            Self::Image => tr("Image", "图像"),
         }
     }
 
     fn capitalized(&self) -> &'static str {
         match self {
-            Self::Video => "Video",
-            Self::Image => "Image",
+            Self::Video => tr("Video", "视频"),
+            Self::Image => tr("Image", "图像"),
         }
     }
 }

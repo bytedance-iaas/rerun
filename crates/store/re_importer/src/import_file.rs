@@ -1,3 +1,4 @@
+use re_i18n::trf;
 use std::borrow::Cow;
 
 use ahash::{HashMap, HashMapExt as _};
@@ -28,12 +29,12 @@ pub fn import_from_path(
     if !path.exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("path does not exist: {path:?}"),
+            trf!("path does not exist: {path:?}", "路径不存在：{path:?}"),
         )
         .into());
     }
 
-    re_log::info!("Loading {path:?}…");
+    re_log::info!("{}", trf!("Loading {path:?}…", "正在加载 {path:?}…"));
 
     // If no application ID was specified, we derive one from the filename.
     let application_id = settings
@@ -72,7 +73,7 @@ pub fn import_from_file_contents(
 ) -> Result<(), ImporterError> {
     re_tracing::profile_function!(filepath.to_string_lossy());
 
-    re_log::info!("Loading {filepath:?}…");
+    re_log::info!("{}", trf!("Loading {filepath:?}…", "正在加载 {filepath:?}…"));
 
     let application_id = settings
         .application_id
@@ -192,7 +193,7 @@ pub(crate) fn import(
                             if err.is_incompatible() {
                                 return;
                             }
-                            re_log::error!(?path, importer = importer.name(), %err, "Failed to import data");
+                            re_log::error!(?path, importer = importer.name(), %err, "{}", trf!("Failed to import data", "导入数据失败"));
                         }
                     } else if let Err(err) =
                         importer.import_from_path(&settings, path.clone(), tx_importer)
@@ -200,7 +201,7 @@ pub(crate) fn import(
                         if err.is_incompatible() {
                             return;
                         }
-                        re_log::error!(?path, importer = importer.name(), %err, "Failed to import data from file");
+                        re_log::error!(?path, importer = importer.name(), %err, "{}", trf!("Failed to import data from file", "从文件导入数据失败"));
                     }
 
                     re_log::debug!(
@@ -261,7 +262,7 @@ pub(crate) fn import(
                     if err.is_incompatible() {
                         return false;
                     }
-                    re_log::error!(?path, importer = importer.name(), %err, "Failed to import data from file");
+                    re_log::error!(?path, importer = importer.name(), %err, "{}", trf!("Failed to import data from file", "从文件导入数据失败"));
                 }
 
                 true
@@ -333,7 +334,7 @@ pub(crate) fn send(
                         msg
                     }
                     Err(err) => {
-                        re_log::error!(%err, "Couldn't serialize component data");
+                        re_log::error!(%err, "{}", trf!("Couldn't serialize component data", "序列化组件数据失败"));
                         continue;
                     }
                 };

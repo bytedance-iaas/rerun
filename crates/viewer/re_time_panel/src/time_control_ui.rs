@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::{NumExt as _, Popup, RectAlign};
 use re_entity_db::EntityDb;
 use re_log_types::TimeType;
@@ -57,7 +58,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
             let timelines = entity_db.timelines();
 
             if timelines.is_empty() {
-                ui.weak("The recording has no timelines");
+                ui.weak(tr("The recording has no timelines", "该 episode 没有时间轴"));
                 return;
             }
 
@@ -91,7 +92,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
             })
             .at_pointer_fixed()
             .show(|ui| {
-                if ui.button("Copy timeline name").clicked() {
+                if ui.button(tr("Copy timeline name", "复制时间轴名称")).clicked() {
                     let timeline = format!("{}", time_ctrl.timeline_name());
                     re_log::info!("Copied timeline: {}", timeline);
                     ui.copy_text(timeline);
@@ -117,7 +118,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
                         .speed(1)
                         .range(0.0..=f32::INFINITY),
                 )
-                .on_hover_text("Frames per second");
+                .on_hover_text(tr("Frames per second", "每秒帧数"));
             });
             if old_fps != fps {
                 time_commands.push(TimeControlCommand::SetFps(fps));
@@ -245,7 +246,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
             // Loop-button cycles between states:
             match time_ctrl.loop_mode() {
                 LoopMode::Off => {
-                    if ui.add(button).on_hover_text("Looping is off").clicked() {
+                    if ui.add(button).on_hover_text(tr("Looping is off", "循环播放已关闭")).clicked() {
                         time_commands.push(TimeControlCommand::SetLoopMode(LoopMode::All));
                     }
                 }
@@ -253,7 +254,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
                     ui.visuals_mut().selection.bg_fill = ui.tokens().loop_everything_color;
                     if ui
                         .add(button.selected(true))
-                        .on_hover_text("Looping is off")
+                        .on_hover_text(tr("Looping is off", "循环播放已关闭"))
                         .clicked()
                     {
                         // Only go to the selection time selection mode if there's already a selection.
@@ -272,7 +273,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
 
                     if ui
                         .add(button.selected(true))
-                        .on_hover_text("Looping is off")
+                        .on_hover_text(tr("Looping is off", "循环播放已关闭"))
                         .clicked()
                     {
                         time_commands.push(TimeControlCommand::SetLoopMode(LoopMode::Off));
@@ -298,7 +299,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
                     .speed(drag_speed)
                     .suffix("x"),
             )
-            .on_hover_text("Playback speed");
+            .on_hover_text(tr("Playback speed", "播放速度"));
         });
 
         if speed != time_ctrl.speed() {

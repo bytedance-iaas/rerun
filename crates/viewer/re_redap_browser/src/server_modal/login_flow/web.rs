@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -76,7 +77,7 @@ impl State {
     pub fn ui(&self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.loading_indicator("Waiting for web login");
-            ui.label("Waiting for login…");
+            ui.label(tr("Waiting for login…", "正在等待登录…"));
         });
     }
 

@@ -1,6 +1,8 @@
 //! Minimal S3-compatible client (AWS Signature V4) on top of `ehttp`, so it runs both natively
 //! and in the browser. Tested against Volcengine TOS's S3-compatible endpoint.
 
+use re_i18n::trf;
+
 use hmac::{Hmac, Mac as _};
 use sha2::{Digest as _, Sha256};
 
@@ -161,15 +163,17 @@ impl TosClient {
         match response.status {
             200 => Ok(Some(String::from_utf8_lossy(&response.bytes).into_owned())),
             404 => Ok(None), // NoSuchCORSConfiguration
-            403 => anyhow::bail!(
+            403 => anyhow::bail!(trf!(
                 "GetBucketCors denied (HTTP 403) — these credentials cannot manage this bucket's CORS\nBucket: {}",
+                "GetBucketCors 被拒绝（HTTP 403）— 这组凭证无权管理该桶的 CORS\n桶：{}",
                 self.bucket
-            ),
-            other => anyhow::bail!(
+            )),
+            other => anyhow::bail!(trf!(
                 "GetBucketCors failed with HTTP {other}: {}\nBucket: {}",
+                "GetBucketCors 失败，HTTP {other}：{}\n桶：{}",
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                 self.bucket
-            ),
+            )),
         }
     }
 
@@ -194,15 +198,17 @@ impl TosClient {
             .await?;
         match response.status {
             200 | 204 => Ok(()),
-            403 => anyhow::bail!(
+            403 => anyhow::bail!(trf!(
                 "PutBucketCors denied (HTTP 403) — these credentials cannot manage this bucket's CORS\nBucket: {}",
+                "PutBucketCors 被拒绝（HTTP 403）— 这组凭证无权管理该桶的 CORS\n桶：{}",
                 self.bucket
-            ),
-            other => anyhow::bail!(
+            )),
+            other => anyhow::bail!(trf!(
                 "PutBucketCors failed with HTTP {other}: {}\nBucket: {}",
+                "PutBucketCors 失败，HTTP {other}：{}\n桶：{}",
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                 self.bucket
-            ),
+            )),
         }
     }
 
@@ -250,10 +256,11 @@ impl TosClient {
             if bytes.is_empty() {
                 empty_responses += 1;
                 if empty_responses > 3 {
-                    anyhow::bail!(
+                    anyhow::bail!(trf!(
                         "Empty byte-range response at offset {pos} (wanted {pos}..{})\nObject: {key}",
+                        "偏移 {pos} 处的字节范围响应为空（期望 {pos}..{}）\n对象：{key}",
                         range.end
-                    );
+                    ));
                 }
                 continue;
             }
@@ -303,11 +310,12 @@ impl TosClient {
             .await?;
 
         if !(response.status == 200 || response.status == 206) {
-            anyhow::bail!(
+            anyhow::bail!(trf!(
                 "GET failed with HTTP {}: {}\nObject: {key}",
+                "GET 失败，HTTP {}：{}\n对象：{key}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
-            );
+            ));
         }
 
         Ok(response.bytes)
@@ -333,12 +341,13 @@ impl TosClient {
                 .signed_request("GET", "/", &query, Vec::new(), Vec::new(), LIST_TIMEOUT)
                 .await?;
             if response.status != 200 {
-                anyhow::bail!(
+                anyhow::bail!(trf!(
                     "ListObjectsV2 failed with HTTP {}: {}\nBucket: {}",
+                    "ListObjectsV2 失败，HTTP {}：{}\n桶：{}",
                     response.status,
                     String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                     self.bucket,
-                );
+                ));
             }
 
             let xml = String::from_utf8_lossy(&response.bytes);
@@ -374,12 +383,13 @@ impl TosClient {
             .signed_request("GET", "/", &query, Vec::new(), Vec::new(), LIST_TIMEOUT)
             .await?;
         if response.status != 200 {
-            anyhow::bail!(
+            anyhow::bail!(trf!(
                 "ListObjectsV2 failed with HTTP {}: {}\nBucket: {}",
+                "ListObjectsV2 失败，HTTP {}：{}\n桶：{}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
                 self.bucket,
-            );
+            ));
         }
 
         let xml = String::from_utf8_lossy(&response.bytes);
@@ -407,7 +417,11 @@ impl TosClient {
             return Ok(None);
         }
         if response.status != 200 {
-            anyhow::bail!("HEAD failed with HTTP {}\nObject: {key}", response.status);
+            anyhow::bail!(trf!(
+                "HEAD failed with HTTP {}\nObject: {key}",
+                "HEAD 失败，HTTP {}\n对象：{key}",
+                response.status
+            ));
         }
 
         let size = response
@@ -460,11 +474,12 @@ impl TosClient {
             .await?;
 
         if response.status != 200 {
-            anyhow::bail!(
+            anyhow::bail!(trf!(
                 "PUT failed with HTTP {}: {}\nObject: {key}",
+                "PUT 失败，HTTP {}：{}\n对象：{key}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
-            );
+            ));
         }
         Ok(())
     }
@@ -484,16 +499,18 @@ impl TosClient {
 
         // S3 answers 204 No Content for deletions, existing key or not.
         if response.status == 403 {
-            anyhow::bail!(
-                "Deletion denied (HTTP 403) — these credentials have no delete permission\nObject: {key}"
-            );
+            anyhow::bail!(trf!(
+                "Deletion denied (HTTP 403) — these credentials have no delete permission\nObject: {key}",
+                "删除被拒绝（HTTP 403）— 这组凭证没有删除权限\n对象：{key}"
+            ));
         }
         if response.status != 204 && response.status != 200 {
-            anyhow::bail!(
+            anyhow::bail!(trf!(
                 "DELETE failed with HTTP {}: {}\nObject: {key}",
+                "DELETE 失败，HTTP {}：{}\n对象：{key}",
                 response.status,
                 String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(300)]),
-            );
+            ));
         }
         Ok(())
     }
@@ -597,7 +614,10 @@ impl TosClient {
                 request.method = ehttp::Method::DELETE;
                 request
             }
-            other => anyhow::bail!("Unsupported method: {other}"),
+            other => anyhow::bail!(trf!(
+                "Unsupported method: {other}",
+                "不支持的请求方法：{other}"
+            )),
         };
         for (k, v) in &headers {
             if k != "host" {
@@ -618,7 +638,12 @@ impl TosClient {
 
         crate::http_client::fetch_async_with_timeout(request, hard_timeout)
             .await
-            .map_err(|err| anyhow::anyhow!("Request failed: {err}\nUrl: {url}"))
+            .map_err(|err| {
+                anyhow::anyhow!(trf!(
+                    "Request failed: {err}\nUrl: {url}",
+                    "请求失败：{err}\nURL：{url}"
+                ))
+            })
     }
 }
 

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::emath::RectTransform;
 use egui::{Modifiers, NumExt as _};
 use glam::Vec3;
@@ -85,38 +86,38 @@ impl View3DState {
 // ----------------------------------------------------------------------------
 
 pub fn help(os: egui::os::OperatingSystem) -> Help {
-    Help::new("3D view")
+    Help::new(tr("3D view", "3D 视图"))
         .docs_link("https://rerun.io/docs/reference/types/views/spatial3d_view")
-        .control("Pan", (MouseButtonText(DRAG_PAN3D_BUTTON), "+", "drag"))
-        .control("Zoom", icons::SCROLL)
-        .control("Rotate", (MouseButtonText(ROTATE3D_BUTTON), "+", "drag"))
+        .control(tr("Pan", "平移"), (MouseButtonText(DRAG_PAN3D_BUTTON), "+", tr("drag", "拖动")))
+        .control(tr("Zoom", "缩放"), icons::SCROLL)
+        .control(tr("Rotate", "旋转"), (MouseButtonText(ROTATE3D_BUTTON), "+", tr("drag", "拖动")))
         .control(
-            "Roll",
+            tr("Roll", "翻滚"),
             IconText::from_modifiers_and(os, ROLL_MOUSE_MODIFIER, MouseButtonText(ROLL_MOUSE_ALT)),
         )
-        .control("Navigate", ("WASD", "/", "QE"))
+        .control(tr("Navigate", "移动"), ("WASD", "/", "QE"))
         .control(
-            "Slow down / speed up",
+            tr("Slow down / speed up", "减速 / 加速"),
             (
                 IconText::from_modifiers(os, RuntimeModifiers::slow_down(&os)),
                 "/",
                 IconText::from_modifiers(os, SPEED_UP_3D_MODIFIER),
             ),
         )
-        .control("Focus", ("double", icons::LEFT_MOUSE_CLICK, "object"))
+        .control(tr("Focus", "聚焦"), (tr("double", "双击"), icons::LEFT_MOUSE_CLICK, tr("object", "对象")))
         .control(
-            "Track",
+            tr("Track", "跟踪"),
             (
                 IconText::from_modifiers(os, Modifiers::ALT),
                 "+",
-                "double",
+                tr("double", "双击"),
                 icons::LEFT_MOUSE_CLICK,
-                "object",
+                tr("object", "对象"),
             ),
         )
         .control(
-            "Reset view",
-            ("double", icons::LEFT_MOUSE_CLICK, "background"),
+            tr("Reset view", "重置视角"),
+            (tr("double", "双击"), icons::LEFT_MOUSE_CLICK, tr("background", "背景")),
         )
 }
 

@@ -1,3 +1,4 @@
+use re_i18n::tr;
 use egui::emath::Rangef;
 use egui::scroll_area::ScrollSource;
 use egui::{
@@ -385,7 +386,7 @@ impl TimePanel {
 
                         if ui
                             .button(
-                                egui::RichText::new("Go to default timeline")
+                                egui::RichText::new(tr("Go to default timeline", "回到默认时间轴"))
                                     .color(ui.style().visuals.weak_text_color()),
                             )
                             .clicked()
@@ -490,7 +491,7 @@ impl TimePanel {
                     match timeline_count {
                         0 => {}
                         1 => {
-                            ui.label("One other timeline has data");
+                            ui.label(tr("One other timeline has data", "另有一条时间轴上有数据"));
                         }
                         c => {
                             ui.label(format!("{c} other timelines have data"));
@@ -499,7 +500,7 @@ impl TimePanel {
 
                     if ui
                         .button(
-                            egui::RichText::new("Go to default timeline")
+                            egui::RichText::new(tr("Go to default timeline", "回到默认时间轴"))
                                 .color(ui.style().visuals.weak_text_color()),
                         )
                         .clicked()
@@ -517,7 +518,7 @@ impl TimePanel {
 
                         if ui
                             .button(
-                                egui::RichText::new("Go to default timeline")
+                                egui::RichText::new(tr("Go to default timeline", "回到默认时间轴"))
                                     .color(ui.style().visuals.weak_text_color()),
                             )
                             .clicked()
@@ -594,9 +595,9 @@ impl TimePanel {
                     self.filter_state.section_title_ui(
                         ui,
                         egui::RichText::new(if self.source == TimePanelSource::Blueprint {
-                            "Blueprint Streams"
+                            re_i18n::tr("Blueprint Streams", "蓝图数据流")
                         } else {
-                            "Streams"
+                            re_i18n::tr("Streams", "数据流")
                         })
                         .strong(),
                     );
@@ -1458,7 +1459,7 @@ impl TimePanel {
                         RichText::new(format!("{}/s", re_format::format_bytes(rate)))
                             .color(ui.style().visuals.text_color().gamma_multiply(gamma as f32)),
                     )
-                    .on_hover_text("Connection throughput");
+                    .on_hover_text("连接吞吐量");
                 }
             });
         }
@@ -1726,25 +1727,25 @@ fn help(os: egui::os::OperatingSystem) -> Help {
     // But how can we know?
     // Should we just assume that every mac user has a trackpad, and nobody else does?
     // But some mac users (like @Wumpf) use a mouse with their mac.
-    Help::new("Timeline")
-        .control("Select time segment", "Drag time scale")
-        .control("Snap to grid", icons::SHIFT)
-        .control("Pan", "Middle click drag")
-        .control("Pan vertically", "Scroll")
+    Help::new("时间轴")
+        .control("选择时间段", "拖动时间刻度")
+        .control("吸附到网格", icons::SHIFT)
+        .control("平移", "按住鼠标中键拖动")
+        .control("垂直平移", "滚动")
         .control(
-            "Pan horizontally",
-            (IconText::from_modifiers(os, Modifiers::SHIFT), " + Scroll"),
+            "水平平移",
+            (IconText::from_modifiers(os, Modifiers::SHIFT), " + 滚动"),
         )
         .control(
-            "Zoom",
+            "缩放",
             (
                 IconText::from_modifiers(os, Modifiers::COMMAND),
-                " + Scroll",
+                " + 滚动",
             ),
         )
-        .control("Zoom", "Right click drag")
-        .control("Reset view", "Double click")
-        .control("Play/Pause", "Space")
+        .control("缩放", "按住鼠标右键拖动")
+        .control("重置视角", "双击")
+        .control("播放/暂停", "空格")
 }
 
 fn help_button(ui: &mut egui::Ui) {
@@ -1919,7 +1920,7 @@ fn timeline_properties_context_menu(
         ctx.command_sender().send_system(copy_command);
     }
 
-    if ui.button("Copy timestamp").clicked() {
+    if ui.button("复制时间戳").clicked() {
         let time = format!("{}", hovered_time.floor().as_i64());
         re_log::info!("Copied hovered timestamp: {}", time);
         ui.copy_text(time);
@@ -1927,7 +1928,7 @@ fn timeline_properties_context_menu(
 }
 
 fn copy_time_properties_context_menu(ui: &mut egui::Ui, time: TimeReal) {
-    if ui.button("Copy timestamp").clicked() {
+    if ui.button("复制时间戳").clicked() {
         let time = format!("{}", time.floor().as_i64());
         re_log::info!("Copied hovered timestamp: {}", time);
         ui.copy_text(time);

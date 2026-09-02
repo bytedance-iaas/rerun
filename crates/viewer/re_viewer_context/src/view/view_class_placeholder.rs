@@ -1,5 +1,6 @@
 use re_chunk::EntityPath;
 use re_chunk_store::MissingChunkReporter;
+use re_i18n::tr;
 use re_sdk_types::ViewClassIdentifier;
 use re_ui::{Help, UiExt as _};
 
@@ -19,7 +20,7 @@ impl ViewClass for ViewClassPlaceholder {
     }
 
     fn display_name(&self) -> &'static str {
-        "Unknown view class"
+        tr("Unknown view class", "未知视图类型")
     }
 
     fn icon(&self) -> &'static re_ui::Icon {
@@ -27,7 +28,10 @@ impl ViewClass for ViewClassPlaceholder {
     }
 
     fn help(&self, _os: egui::os::OperatingSystem) -> Help {
-        Help::new("Placeholder view").markdown("Placeholder view for unknown view class")
+        Help::new(tr("Placeholder view", "占位视图")).markdown(tr(
+            "Placeholder view for unknown view class",
+            "未知视图类型的占位视图",
+        ))
     }
 
     fn on_register(
@@ -64,18 +68,18 @@ impl ViewClass for ViewClassPlaceholder {
     ) -> Result<ViewClassUiOutput, ViewSystemExecutionError> {
         let tokens = ui.tokens();
 
-        let error_details = "This happens if either the blueprint specifies an invalid view class or \
-                this version of the viewer does not know about this type.\n\n\
+        let error_details = "出现这种情况，可能是 blueprint 指定了无效的视图类型，\
+                或者当前版本的 viewer 不认识这个类型。\n\n\
                 \
-                **Note**: some views may require a specific Cargo feature to be enabled. In \
-                particular, the map view requires the `map_view` feature.";
+                **注意**：有些视图需要启用特定的 Cargo feature。\
+                比如地图视图需要 `map_view` feature。";
 
         egui::Frame {
             inner_margin: egui::Margin::same(tokens.view_padding()),
             ..Default::default()
         }
         .show(ui, |ui| {
-            ui.error_label("Unknown view class");
+            ui.error_label("未知的视图类型");
             ui.markdown_ui(error_details);
         });
 
