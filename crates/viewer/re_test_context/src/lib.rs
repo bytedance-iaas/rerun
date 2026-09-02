@@ -859,6 +859,10 @@ impl TestContext {
                 SystemCommand::CopyViewerUrl(_) => {
                     // Ignore this trying to copy to the clipboard.
                 }
+                SystemCommand::LoadTosDataset { .. } => {
+                    // Streaming a TOS dataset is not meaningful in tests.
+                    handled = false;
+                }
                 SystemCommand::LoadDataSource(data_source) => {
                     if let Some(re_uri::RedapUri::DatasetData(uri)) = data_source
                         .as_uri()
