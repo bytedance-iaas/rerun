@@ -23,7 +23,7 @@ Web viewer 的最大限制来自 WASM:它在浏览器里以 WebAssembly 运行,�
 注意实际能用到的内存往往比预算还少 —— 浏览器里大块内存分配容易提前失败,实测 1.4 GB 上下就可能出现打不开或加载中断;所以较大的数据集仍建议换 native viewer。
 两种 native viewer 是原生程序,没有这个限制,可用内存只取决于所在机器。
 
-反过来,web viewer 能更好地与火山引擎的其他云服务联动 —— 例如一键跳转质检台对数据集做质检(Diagnose,见第 6 节),这是 native viewer 不具备的。
+反过来,web viewer 能更好地与火山引擎的其他云服务联动 —— 例如一键跳转质检台对数据集做质检(见第 6 节),这是 native viewer 不具备的。
 
 拿不准选哪个,就用 web viewer —— 打开浏览器就能用,一般都够用。
 只有当数据集大到 web viewer 打不开时,才换 native viewer(打开方式见第 2 节)。
@@ -49,23 +49,31 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 
 ![viewer 欢迎页](images/viewer-welcome-annotated.png)
 
-欢迎页上需要关注三处:
+欢迎页上需要关注四处:
 
 - 左上角的 **`+`** 按钮:打开数据集的入口(见第 3 节)。
-- 右侧 **Recently opened**:最近打开过的数据集列表,点一下会弹出已预填好地址的打开对话框,直接点 Open 即可重新打开。
+- **火山引擎增强功能** 一排卡片:本服务的快捷入口,点卡片右上角的链接直达 ——
+  - **数据质检**:跳转质检台(见第 6 节;这里进去是空白表单,想带着当前数据集跳转用数据集行上的「质检」按钮);
+  - **下载 SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
+  - **用户指南**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/01-viewer.html` 和 `…/docs/02-catalog.html`(注意要带页面文件名,只开 `/docs/` 目录会报 403)。
+- **最近打开的数据集**:最近打开过的数据集列表,点一下会弹出已预填好地址的打开对话框,直接点「打开」即可重新打开。
   远程数据集不会常驻,重启服务后列表会清空,但随时可以按第 3 节的方式再打开。
-- **Volcengine enhancements** 一排卡片:本服务的快捷入口,点卡片右上角的链接直达 ——
-  - **Curate data**:跳转质检台(见第 6 节;这里进去是空白表单,想带着当前数据集跳转用数据集行上的 Diagnose 按钮);
-  - **Get the SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
-  - **User guide**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/01-viewer.html` 和 `…/docs/02-catalog.html`(注意要带页面文件名,只开 `/docs/` 目录会报 403)。
+- 右上角的**中英文切换按钮**:界面支持中英双语,点一下即时切换,详见下面的说明。
 
-  下方 **About the original Rerun** 一排卡片(含黑色的 **Rerun Hub** 卡片)和 **View example recordings** 的示例数据,是开源 rerun 的通用文档、官方服务和示例入口,与本服务无关,一般用不到。
+页面下方 **关于原版 Rerun** 一排卡片(含黑色的 **Rerun Hub** 卡片)和 **查看示例数据** 的示例数据,是开源 rerun 的通用文档、官方服务和示例入口,与本服务无关,一般用不到。
+
+**中英文切换**是本服务对 viewer 的增强之一,三种 viewer 都有:
+
+- 位置在窗口右上角:中文界面下按钮显示 **EN**(点击切到英文),英文界面下显示 **中**(点击切回中文)。
+- 切换即时生效,不用刷新页面;viewer 会记住你的选择,下次打开还是上次用的语言。
+- 专有名词(Rerun、TOS、rrd、episode、blueprint 等)在中文界面里保留英文原文,避免歧义。
+- 本文以中文界面为准描述菜单和按钮,个别关键入口在括号里标注了英文界面的名称。
 
 ### 2.2 本地 native viewer:下载安装到本机
 
 本地 native viewer 随 Python SDK 一起分发,装好 SDK 后 `rerun` 命令即可用,无需另外下载。
 
-下载入口就在欢迎页上:点 **Volcengine enhancements** 一排里的 **Get the SDK** 卡片(见 2.1 节),即可打开 SDK 下载页。
+下载入口就在欢迎页上:点 **火山引擎增强功能** 一排里的 **下载 SDK** 卡片(见 2.1 节),即可打开 SDK 下载页。
 (下载页的地址是 `https://<你的网关域名>/downloads/sdk/`,用登录账号访问 —— 下面 pip 安装命令里用的就是它。)
 页面上能看到可下载的 wheel 文件,目前提供四种:Linux x86_64、Linux arm64、macOS(Apple Silicon)、Windows x86_64。
 按你的机器选对应的那个 wheel,在 Python(3.10 及以上)环境里安装(URL 末尾换成你选的 wheel 文件名):
@@ -110,14 +118,14 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 `tos_endpoint` 和它是配合使用的:填 rrd 缓存桶所在区域的 endpoint,viewer 从这个域名自动识别区域并用它访问缓存桶,不需要也没有单独的 region 配置。
 数据集本身在哪个区域无所谓 —— 打开数据集的窗口里有独立的 Region 下拉,按数据集选即可。
 
-如果你还要打开 Hugging Face 数据集且直连 `huggingface.co` 不通,加一行 `"hf_endpoint": "https://hf-mirror.com"` 指向镜像站。
+如果你还要打开 Hugging Face 数据集且直连 `huggingface.co` 不通,加一行 `"hf_endpoint": "<镜像站地址>"`,指向一个你能访问的 HuggingFace 镜像站(比如公开镜像 `https://hf-mirror.com`,或你们自建的代理)。
 
 `.rerun` 文件夹不存在就自己建一个(Windows 在 cmd 里执行 `mkdir %USERPROFILE%\.rerun`)。
 这个文件里有密钥,别提交到代码仓库;Linux/macOS 上建议 `chmod 600` 只留自己可读。
 不配这个文件也能用 —— 打开数据集的窗口里可以手动填凭证,配置文件只是帮你预填默认值。
 数据经公网从 TOS 读取,适合本机资源充足的场景。
 
-本地 native viewer 的欢迎页与 web 版基本相同,差别只有一点:Volcengine enhancements 一排只有 **User guide** 一张卡(文档内置在 viewer 里,照常可读)。
+本地 native viewer 的欢迎页与 web 版基本相同,差别只有一点:火山引擎增强功能一排只有 **用户指南** 一张卡(文档内置在 viewer 里,照常可读)。
 另外两张(质检台、下载页)是部署域名下的网页,本地程序不知道你的部署地址所以不显示,需要时直接用浏览器访问对应页面即可。
 
 ### 2.3 云上 native viewer 会话:请管理员按需创建
@@ -146,56 +154,56 @@ TOS 凭证读你本机的 viewer 配置文件 `config.json`,配好后在窗口�
 
 ### 3.1 选择数据源
 
-点左上角 **`+`**,在弹出的菜单里选 **Open from Volcengine TOS…**。
+点左上角 **`+`**,在弹出的菜单里选 **从火山引擎 TOS 打开…**(英文界面为 Open from Volcengine TOS…)。
 
 ![打开数据源菜单](images/viewer-add-menu-annotated.png)
 
-菜单里 **Open from Volcengine TOS…**(火山 TOS)和 **Open from Hugging Face…**(HuggingFace)是本服务的直读入口。
-上半部分的 Open file / Open from URL / Connect to a server 是 rerun 自带的通用入口,本服务日常用不到。
+菜单里「扩展功能」小标题下的 **从火山引擎 TOS 打开…** 和 **从 Hugging Face 打开…** 是本服务的直读入口。
+上半部分的 打开文件… / 从 URL 打开… / 连接服务器… 是 rerun 自带的通用入口,本服务日常用不到。
 
 ### 3.2 填写数据集地址
 
-在弹出的对话框里填三样东西,然后点 **Open**。
+在弹出的「从火山引擎 TOS 打开」对话框里填三样东西,然后点 **打开**。
 
-![Open from Volcengine TOS 对话框](images/viewer-tos-dialog-annotated.png)
+![从火山引擎 TOS 打开对话框](images/viewer-tos-dialog-annotated.png)
 
 | 输入项 | 说明 |
 |---|---|
-| **Dataset URL** | 数据集在 TOS 上的地址,写法 `tos://桶名/路径/数据集名/`。示例:`tos://physical-ai-rerun-test/dataset-1/so101-pick-place/` |
-| **Region** | 桶所在地区,从下拉里选(示例数据在 `cn-beijing`)。选错地区会连不上桶。 |
-| **Upload converted rrd to the artifacts store** | 是否把转换结果写回缓存(默认勾选)。保持勾选,下次打开同一数据集会直接秒开,详见第 5 节。 |
+| **数据集 URL** | 数据集在 TOS 上的地址,写法 `tos://桶名/路径/数据集名/`。示例:`tos://physical-ai-rerun-test/dataset-1/so101-pick-place/` |
+| **地区** | 桶所在地区,从下拉里选(示例数据在「华北2(北京)」,即 `cn-beijing`)。选错地区会连不上桶。 |
+| **把转换出的 rrd 上传到缓存桶** | 是否把转换结果写回缓存(默认勾选)。保持勾选,下次打开同一数据集会直接秒开,详见第 5 节。 |
 
-对话框里还有一个 **Use non-default credentials** 复选框,平时不用管:访问密钥默认用部署(或本机 `config.json`)里配好的;要打开默认凭证读不了的桶(例如另一个账号下的数据)时,勾上它手动输入这次用的 AK/SK 即可。手填的密钥只在内存里使用,不会写进任何配置文件,关掉 viewer 就没了。
+对话框里还有一个 **使用自带 AK/SK** 复选框,平时不用管:访问密钥默认用部署(或本机 `config.json`)里配好的;要打开默认凭证读不了的桶(例如另一个账号下的数据)时,勾上它手动输入这次用的 AK/SK 即可。手填的密钥只在内存里使用,不会写进任何配置文件,关掉 viewer 就没了。
 
 ### 3.3 选择 episode,认识面板上的按钮
 
-点 Open 后,左侧 **Sources** 面板下会列出数据集里的各个 episode(片段)。
+点「打开」后,左侧 **数据来源** 面板下会列出数据集里的各个 episode(片段)。
 每条显示片段序号、数据量、任务描述和帧数,例如 `Episode 0 · ~28.8 MiB · Grab the red cube · 593 frames`。
 这些片段会自动逐个流式载入,无需手动下载;点其中一条即可查看它,也可让它优先加载。
 
-数据集和每个 episode 旁边有几个控制按钮,鼠标移上去会显示名称:
+数据集和每个 episode 旁边有几个控制按钮,鼠标移上去会显示说明:
 
 ![数据集面板上的控制按钮](images/viewer-panel-buttons-annotated.png)
 
 | 按钮 | 位置 | 作用 |
 |---|---|---|
-| **Diagnose** | 数据集行 | 跳转质检台并自动填好当前数据集(见第 6 节) |
-| **暂停 `‖`** | 数据集行 | 停止继续流式加载(episode 是逐个流式载入的,暂停后不再往下载) |
+| **质检** | 数据集行 | 跳转质检台并自动填好当前数据集(见第 6 节) |
+| **暂停 `‖`** | 数据集行 | 停止继续流式加载(episode 是逐个流式载入的,暂停后不再往下载;暂停后按钮变为继续下载) |
 | **去除 `×`** | 数据集行 | 把该数据集从 viewer 移除 |
-| **重载 `↻`** | episode 行 | 重新加载这一段(例如加载中断后重试) |
-| **隐藏(闭眼)** | episode 行 | 把这一段收进数据集下方的 **Hidden episodes** 列表(见下) |
+| **重载(循环箭头)** | episode 行 | 重新加载这一段(例如加载中断后重试) |
+| **隐藏(闭眼)** | episode 行 | 把这一段收进数据集下方的 **已隐藏的 episode** 列表(见下) |
 | **去除 `×`** | episode 行 | 关闭这一段 |
 
-episode 多的时候,**闭眼**图标很好用:暂时不关注的片段点一下闭眼,它就收进数据集最下方一个折叠的 **Hidden episodes** 列表,不再占正文列表的位置;要是它还在下载,下载也会自动停下,把队列让给你关注的片段。
-收起来的片段数据仍留在内存,随时反悔 —— 展开 Hidden episodes 列表,点片段行上的**睁眼**图标,它就回到原来的列表里(之前没下载完的,再点一下该片段会继续下载)。
+episode 多的时候,**闭眼**图标很好用:暂时不关注的片段点一下闭眼,它就收进数据集最下方一个折叠的 **已隐藏的 episode** 列表,不再占正文列表的位置;要是它还在下载,下载也会自动停下,把队列让给你关注的片段。
+收起来的片段数据仍留在内存,随时反悔 —— 展开「已隐藏的 episode」列表,点片段行上的**睁眼**图标,它就回到原来的列表里(之前没下载完的,再点一下该片段会继续下载)。
 真想释放内存,用 `×` 关闭才行。
 
-![Hidden episodes 列表](images/viewer-hidden-episodes-annotated.png)
+![已隐藏的 episode 列表](images/viewer-hidden-episodes-annotated.png)
 
 ### 3.4 打开 HuggingFace 数据集
 
 除了 TOS,viewer 也能直接打开 HuggingFace 上的公开 LeRobot 数据集。
-点 **`+`** → **Open from Hugging Face…**,填入数据集名(例如 `lerobot/pusht`)即可。
+点 **`+`** → **从 Hugging Face 打开…**,填入数据集名(例如 `lerobot/pusht`)即可。
 国内访问已自动走镜像站,无需额外配置;转换和缓存行为与 TOS 数据集一致。
 
 ## 4. 看数据:界面导览
@@ -205,9 +213,9 @@ episode 多的时候,**闭眼**图标很好用:暂时不关注的片段点一下
 ![打开后的主界面](images/viewer-open-view-annotated.png)
 
 - **中间:视图区**。本例自动排了四个视图 —— 两路摄像头画面(`observation.images.front` 顶部俯视、`observation.images.wrist` 手腕视角)和两张曲线图(`action` 动作指令、`observation.state` 关节状态)。
-- **底部:时间轴**。拖动时间轴上的游标,所有视图同步回放到那一帧。左侧有播放/暂停、播放速度、帧率和当前帧号。
-- **左侧:Sources 和 Blueprint**。Sources 是数据源和 episode 列表;Blueprint 是视图布局树,控制显示哪些视图、怎么排列。
-- **右侧:Selection**。点中任意视图或数据条目,这里显示它的详细信息(记录 ID、大小、实体数、数据来源等)。
+- **底部:时间轴和数据流面板**。拖动时间轴上的游标,所有视图同步回放到那一帧。左上有播放/暂停、播放速度、帧率和当前帧号;左侧的「数据流」树列出各路数据在时间轴上的分布。
+- **左侧:「数据来源」和「蓝图」面板**。数据来源是数据集和 episode 列表;蓝图是视图布局树,控制显示哪些视图、怎么排列。
+- **右侧:「选择」面板**。点中任意视图或数据条目,这里显示它的详细信息(记录 ID、大小、实体数、数据来源等)。
 
 基本操作:
 
@@ -220,7 +228,7 @@ episode 多的时候,**闭眼**图标很好用:暂时不关注的片段点一下
 ## 5. 二次打开为什么更快:rrd 缓存
 
 如第 3 节所说,第一次打开一个数据集要在线把它转换成 rrd,所以慢。
-只要第 3.2 步保持勾选 **Upload converted rrd to the artifacts store**,转换结果会写回缓存桶;
+只要第 3.2 步保持勾选 **把转换出的 rrd 上传到缓存桶**,转换结果会写回缓存桶;
 下次再打开同一个数据集,直接加载现成的 rrd,跳过转换,明显更快。
 
 要点:
@@ -251,19 +259,19 @@ rerun rrd-convert tos://<桶>/<路径>/<数据集名>/
 
 ![右键 episode 行的 rrd 缓存菜单](images/viewer-rrd-menu-annotated.png)
 
-- 在 episode 行右键 →「Delete rrd artifact…」删这一段的缓存;在数据集行右键 →「Delete all rrd artifacts…」删整个数据集的缓存。
+- 在 episode 行右键 →「删除 rrd artifact…」删这一段的缓存;在数据集行右键 →「删除全部 rrd 转换产物(N)…」删整个数据集的缓存(N 是缓存的片段数)。
 - 删除前会弹确认框显示具体删哪个对象/目录,确认后才在后台执行。
 - 只删缓存,不动 TOS 上的原始数据;删完下次打开会重新转换一次。
-- 右键菜单里还有「Copy rrd artifact address」,可复制该缓存产物的地址。
+- 右键菜单里还有「复制 rrd artifact 地址」,可复制该缓存产物的地址。
 
 > 这些菜单项只在「缓存确实存在」时才出现;没打开过、还没生成缓存的数据集看不到它们。
 
-## 6. 一键质检:Diagnose
+## 6. 一键质检
 
-数据集打开后,左侧数据集名字旁边可能有一个 **Diagnose** 按钮。
+数据集打开后,鼠标移到左侧数据集行上会出现一个 **质检** 按钮(英文界面为 Diagnose)。
 它把 viewer 和本服务内置的质检台联动起来:点一下跳转到质检台,并自动把当前数据集的 TOS 路径和地区填好,你直接开跑质检即可。
 
-![Diagnose 按钮](images/viewer-panel-buttons-annotated.png)
+![质检按钮](images/viewer-panel-buttons-annotated.png)
 
 - 跳转到质检台不需要再次登录(与 viewer 共用一套账号)。
 - 质检台只帮你预填数据集,不会自动开跑;质检怎么配、怎么看报告属于质检台的范围,这里不展开。
@@ -276,7 +284,7 @@ rerun rrd-convert tos://<桶>/<路径>/<数据集名>/
 ## 7. 小结:一次典型流程
 
 1. 浏览器打开服务地址,登录进 web viewer。
-2. `+` → **Open from Volcengine TOS…**,填 `tos://桶/路径/数据集名/` 和地区,点 Open。
+2. `+` → **从火山引擎 TOS 打开…**,填 `tos://桶/路径/数据集名/` 和地区,点「打开」。
 3. 在左侧点一个 episode,逐帧检查视频和关节曲线。
-4. 发现可疑数据,点 **Diagnose** 跳质检台跑质检。
+4. 发现可疑数据,点 **质检** 跳质检台跑质检。
 5. 数据太大 web viewer 打不开时,改用 native viewer(见第 2.2 / 2.3 节);想免去首次转换等待,提前用 `rerun rrd-convert` 灌好缓存。

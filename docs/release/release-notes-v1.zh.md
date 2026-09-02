@@ -14,7 +14,8 @@ v1 是首个正式版本,面向在火山引擎上浏览、管理、训练机器�
 - **TOS / HuggingFace 数据集直读**:viewer 直接打开火山引擎 TOS 或 HuggingFace 上的 LeRobot 数据集(v2 / v3),在线转换为 rrd,无需先下载到本地。
 - **rrd 自动缓存**:转换产物写回 TOS 缓存桶,同一数据集二次打开直接秒开;可从 viewer 里删除缓存产物。
 - **离线预转换工具**:命令行 `rerun rrd-convert` 可提前把数据集转好、灌进缓存,免去用户首次打开的等待;幂等,适合放进上线流程。
-- **一键质检 Diagnose**:web viewer 中一键跳转质检台,数据集的 TOS 路径与地区自动填好;仅对 TOS 上的 LeRobot v2 / v3 数据集提供。
+- **一键质检**:web viewer 中点数据集行上的「质检」(Diagnose)按钮跳转质检台,数据集的 TOS 路径与地区自动填好;仅对 TOS 上的 LeRobot v2 / v3 数据集提供。
+- **中英双语界面**:viewer 界面支持中英文,右上角按钮一键切换,即时生效并记住选择。
 - **三种 viewer**:浏览器 web viewer(随开随用)、本地 native viewer、云上 native viewer 会话(经内网读 TOS、看超大数据集),三者共用同一套实现。
 
 ### Catalog server:数据集管理与训练取数据
@@ -35,7 +36,7 @@ v1 是首个正式版本,面向在火山引擎上浏览、管理、训练机器�
 - 目前主要支持机器人 **LeRobot 数据集(v2 / v3)**。
 - Web viewer 运行在浏览器 WASM 环境中,实际可用内存约 1.4 GB,较大的数据集需改用 native viewer。
 - 预编译 wheel 覆盖 **Linux x86_64 / arm64、macOS(Apple Silicon)、Windows x64** 四个平台;Intel 芯片的 Mac 暂无预编译 wheel(苹果已停产该硬件),需源码构建。
-- Diagnose 仅在 web viewer 中提供;native viewer 无此按钮。
+- 一键质检(「质检」按钮)仅在 web viewer 中提供;native viewer 无此按钮。
 
 ## 文档
 
