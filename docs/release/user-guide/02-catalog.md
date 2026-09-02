@@ -17,7 +17,7 @@ Catalog server 的三件事:
 SDK 由部署本身提供下载,不走公共 PyPI。
 这样装到的 SDK 版本永远和正在运行的 catalog server 一致,不会因为版本不匹配出问题。
 
-下载入口在 web viewer 的欢迎页上:点 **Volcengine enhancements** 一排里的 **Get the SDK** 卡片即可打开下载页(也可以直接访问 `https://<你的网关域名>/downloads/sdk/`,用登录账号),能看到可下载的 wheel 文件:
+下载入口在 web viewer 的欢迎页上:点 **火山引擎增强功能** 一排里的 **下载 SDK** 卡片即可打开下载页(也可以直接访问 `https://<你的网关域名>/downloads/sdk/`,用登录账号),能看到可下载的 wheel 文件:
 
 ![SDK 下载目录](images/downloads-sdk-annotated.png)
 

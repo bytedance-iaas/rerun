@@ -21,7 +21,8 @@
 | 训练直读 | 训练侧凭 catalog server 签发的预签名 URL 从 TOS 直读数据,不经服务器中转,也无需持有 TOS 密钥 |
 | 云上部署形态 | 面向火山引擎 VKE 的完整部署,含 HTTPS 网关入口和按需启动的云上 native viewer 会话 |
 | 国内网络适配 | HuggingFace 访问走镜像站,云内组件访问 TOS 走内网 endpoint |
-| 质检联动 | web viewer 中一键 Diagnose 跳转质检台,数据集 tos:// 路径与地区自动填好 |
+| 质检联动 | web viewer 中一键「质检」(Diagnose)跳转质检台,数据集 tos:// 路径与地区自动填好 |
+| 中英双语界面 | viewer 界面支持中英文,右上角按钮一键切换、即时生效并记住选择 |
 
 这些增强不改变 rerun 的使用方式,已熟悉开源 rerun 的用户没有额外学习成本。
 
@@ -36,7 +37,7 @@
 - 访问方式:浏览器打开网关分配的 `https://xxx.volceapi.com` 域名,Basic auth 认证。
 - 输入 `tos://桶/路径/数据集名/` 直接打开 TOS 上的 LeRobot 数据集(v2 / v3 均支持),也可打开 HuggingFace 上的公开数据集。
 - LeRobot → rrd 的转换在用户浏览器内完成,数据直接从 TOS 读取;转换产物写回 rrd 缓存桶,二次打开直接加载。
-- 数据集打开后提供 **Diagnose 按钮**,跳转质检台并自动带上数据集名(见 5.2)。
+- 数据集打开后提供 **「质检」(Diagnose)按钮**,跳转质检台并自动带上数据集名(见 5.2)。
 - 数据集超出浏览器内存限制时,viewer 会提示改用 native viewer(见 3.4)。
 
 ### 3.2 Catalog server(常驻,与 web viewer 同一个 pod)
@@ -128,7 +129,7 @@ flowchart LR
 
 rerun 和质检台是两个独立部署,但挂在同一个网关域名下(`/` 和 `/curation`),因此:
 
-- Diagnose 按钮的跳转地址是相对路径 `/curation?dataset=tos://…&region=…`
+- 「质检」(Diagnose)按钮的跳转地址是相对路径 `/curation?dataset=tos://…&region=…`
   (数据集完整路径 + 桶所在地区,质检台两个连接输入直接填好),viewer 无需配置质检台的域名;
 - 两边共用同一份账号表,浏览器缓存的凭证自动通行 — 任意账号登录一次,两边有效。
 
@@ -152,7 +153,7 @@ catalog server 只处理元数据查询和签名,带宽和负载不随数据量�
 
 1. 数据集上传到 TOS 的 `datasets/` 目录。
 2. 浏览器打开 web viewer,输入 `tos://桶/datasets/数据集名/`,逐帧检查视频和关节曲线。
-3. 发现可疑数据,点 **Diagnose** 跳转质检台(免再登录,数据集已自动选中),运行质检管线,产出质检报告。
+3. 发现可疑数据,点 **质检** 跳转质检台(免再登录,数据集已自动选中),运行质检管线,产出质检报告。
 4. 数据确认可用后,用 Python 脚本连接 catalog server(带 token),`register` 注册数据集。
 5. 训练代码用 `RerunIterableDataset` 按名字取该数据集,数据经预签名 URL 从 TOS 直达训练机。
 6. 需要细看超出浏览器内存的大数据集时,自助拉起 native viewer 会话,浏览器远程操作云上原生 viewer,用完删除。
