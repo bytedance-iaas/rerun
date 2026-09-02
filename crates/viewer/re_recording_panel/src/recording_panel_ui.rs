@@ -543,7 +543,7 @@ fn dataset_entry_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, dataset_entry_data:
         list_item_content = list_item_content.with_buttons(|ui| {
             // Close-button:
             let resp = ui
-                .small_icon_button(&icons::CLOSE_SMALL, tr("Close all recordings in this dataset", "关闭该数据集中的所有录制文件"));
+                .small_icon_button(&icons::CLOSE_SMALL, tr("Close dataset", "关闭数据集"));
 
             if resp.clicked() {
                 for db in displayed_segments.iter().filter_map(SegmentData::entity_db) {
@@ -779,10 +779,7 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
                         .secondary()
                         .small(),
                 )
-                .on_hover_text(tr(
-                    "Close all recordings in this dataset",
-                    "关闭该数据集中的所有录制文件",
-                ));
+                .on_hover_text(tr("Close dataset", "关闭数据集"));
 
             if resp.clicked() {
                 ctx.command_sender()

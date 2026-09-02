@@ -793,7 +793,7 @@ pub fn entity_db_button_ui(
             let resp = ui
                 .add(ui.small_icon_button_widget(&icons::CLOSE_SMALL, tr("Close recording", "关闭录制文件")))
                 .on_hover_text(match store_id.kind() {
-                    re_log_types::StoreKind::Recording => tr("Close this recording", "关闭这个录制文件"),
+                    re_log_types::StoreKind::Recording => tr("Remove this episode from the viewer", "从 Viewer 中移除该 episode"),
                     re_log_types::StoreKind::Blueprint => {
                         tr("Close this blueprint (unsaved data will be lost)", "关闭这个 blueprint（未保存的数据会丢失）")
                     }
