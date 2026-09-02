@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use re_i18n::trf;
 
 /// Recursively imports entire directories, using the appropriate [`crate::Importer`]s for each

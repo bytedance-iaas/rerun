@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use ahash::HashMap;
 use poll_promise::Promise;
+#[cfg(not(target_arch = "wasm32"))]
 use re_i18n::{tr, trf};
 
 const FILE_SAVER_PROMISE: &str = "file_saver";

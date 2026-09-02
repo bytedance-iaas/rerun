@@ -13,6 +13,7 @@
 //! On the web there is no such stack — the browser makes the request and already uses the
 //! OS/browser trust store — so we fall through to `ehttp`.
 
+#[cfg(not(target_arch = "wasm32"))]
 use re_i18n::trf;
 /// The hard cap for requests without an explicit deadline — must accommodate the largest
 /// legitimate transfer (a 64 MiB range on a slow link).
