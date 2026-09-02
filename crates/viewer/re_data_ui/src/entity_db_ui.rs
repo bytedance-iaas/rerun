@@ -105,7 +105,10 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
     re_tracing::profile_function!();
 
     {
-        ui.grid_left_hand_label(&format!("{} ID", db.store_id().kind()));
+        ui.grid_left_hand_label(match db.store_id().kind() {
+            re_log_types::StoreKind::Recording => tr("Recording ID", "录制文件 ID"),
+            re_log_types::StoreKind::Blueprint => tr("Blueprint ID", "Blueprint ID"),
+        });
         ui.label(db.store_id().recording_id().to_string());
         ui.end_row();
     }
@@ -153,7 +156,10 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
         }
 
         ui.grid_left_hand_label(tr("Kind", "类型"));
-        ui.label(store_id.kind().to_string());
+        ui.label(match store_id.kind() {
+            re_log_types::StoreKind::Recording => tr("Recording", "录制文件"),
+            re_log_types::StoreKind::Blueprint => "Blueprint",
+        });
         ui.end_row();
     }
 
