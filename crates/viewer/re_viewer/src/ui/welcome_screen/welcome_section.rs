@@ -35,7 +35,7 @@ pub(super) fn welcome_section_ui(ui: &mut egui::Ui) {
 
         ui.add(
             egui::Label::new(
-                egui::RichText::new(WELCOME_SCREEN_TITLE)
+                egui::RichText::new(welcome_screen_title())
                     .strong()
                     .line_height(Some(line_height))
                     .text_style(style),
