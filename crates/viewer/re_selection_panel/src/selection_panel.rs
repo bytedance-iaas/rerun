@@ -921,7 +921,7 @@ fn show_recording_properties(
     if property_entities.is_empty() {
         ui.label(tr(
             "No properties found for this recording.",
-            "这个录制文件没有任何属性。",
+            "这个 episode 没有任何属性。",
         ));
     } else {
         list_item::list_item_scope(ui, "recording_properties", |ui| {

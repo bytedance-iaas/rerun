@@ -1156,7 +1156,7 @@ impl StoreHub {
 
             if closed_count > 0 {
                 if re_i18n::is_chinese() {
-                    re_log::warn!("为控制在内存上限以内，已关闭 {closed_count} 个后台录制文件");
+                    re_log::warn!("为控制在内存上限以内，已关闭 {closed_count} 个后台 episode");
                 } else {
                     re_log::warn!(
                         "Closed {} to stay within memory limit",

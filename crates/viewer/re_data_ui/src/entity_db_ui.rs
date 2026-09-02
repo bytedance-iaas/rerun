@@ -106,7 +106,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 
     {
         ui.grid_left_hand_label(match db.store_id().kind() {
-            re_log_types::StoreKind::Recording => tr("Recording ID", "录制文件 ID"),
+            re_log_types::StoreKind::Recording => tr("Recording ID", "episode ID"),
             re_log_types::StoreKind::Blueprint => tr("Blueprint ID", "Blueprint ID"),
         });
         ui.label(db.store_id().recording_id().to_string());
@@ -157,7 +157,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
 
         ui.grid_left_hand_label(tr("Kind", "类型"));
         ui.label(match store_id.kind() {
-            re_log_types::StoreKind::Recording => tr("Recording", "录制文件"),
+            re_log_types::StoreKind::Recording => tr("Recording", "episode"),
             re_log_types::StoreKind::Blueprint => "Blueprint",
         });
         ui.end_row();
@@ -327,7 +327,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
             .on_hover_text(
                 if re_i18n::is_chinese() {
                 unindent::unindent(&format!("\
-                    当前录制文件的 chunk 合并配置为：不断合并 chunk，\
+                    当前 episode 的 chunk 合并配置为：不断合并 chunk，\
                     直到达到 {chunk_max_rows} 行（未排序时 {chunk_max_rows_if_unsorted} 行）或 {chunk_max_bytes} 上限，以先到者为准。
 
                     Viewer 会在数据到达时把 chunk 合并到一起，\
@@ -346,7 +346,7 @@ fn grid_content_ui(ctx: &AppContext<'_>, db: &EntityDb, ui: &mut egui::Ui, ui_la
                     * {ENV_CHUNK_MAX_BYTES}
 
                     这个合并过程只是 Rerun Viewer 在内存中的临时优化，\
-                    不会改动录制文件本身：如果想持久化合并结果（让后续打开更快），\
+                    不会改动 episode 本身：如果想持久化合并结果（让后续打开更快），\
                     请使用 Viewer 的“保存”命令或 `rerun rrd optimize` 命令行工具。
                     ",
                         chunk_max_rows = re_format::format_uint(chunk_max_rows),

@@ -791,7 +791,7 @@ pub fn entity_db_button_ui(
         item_content = item_content.with_buttons(move |ui| {
             // Close-button:
             let resp = ui
-                .add(ui.small_icon_button_widget(&icons::CLOSE_SMALL, tr("Close recording", "关闭录制文件")))
+                .add(ui.small_icon_button_widget(&icons::CLOSE_SMALL, tr("Close recording", "关闭 episode")))
                 .on_hover_text(match store_id.kind() {
                     re_log_types::StoreKind::Recording => tr("Remove this episode from the viewer", "从 Viewer 中移除该 episode"),
                     re_log_types::StoreKind::Blueprint => {

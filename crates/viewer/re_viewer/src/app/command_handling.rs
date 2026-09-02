@@ -121,7 +121,7 @@ impl App {
                                 "{}",
                                 trf!(
                                     "Can't change time for recording {store_id:?} because it is not active.",
-                                    "无法改变录制文件 {store_id:?} 的时间：它不是活动状态。"
+                                    "无法改变 episode {store_id:?} 的时间：它不是活动状态。"
                                 )
                             );
                             return;
@@ -144,7 +144,7 @@ impl App {
                                 "{}",
                                 trf!(
                                     "Can't change time for recording {store_id:?} because it is not loaded.",
-                                    "无法改变录制文件 {store_id:?} 的时间：它尚未加载。"
+                                    "无法改变 episode {store_id:?} 的时间：它尚未加载。"
                                 )
                             );
                             return;
@@ -218,7 +218,7 @@ impl App {
                         "{}",
                         tr(
                             "Can't switch app-id - we have no recording for it",
-                            "无法切换应用 ID — 没有对应的录制文件"
+                            "无法切换应用 ID — 没有对应的 episode"
                         )
                     );
                     // If we can't go where we want to go, then go nowhere.
@@ -1175,7 +1175,7 @@ impl App {
                                 "{}",
                                 tr(
                                     "The current recording doesn't support sharing a time range",
-                                    "当前录制文件不支持分享时间范围"
+                                    "当前 episode 不支持分享时间范围"
                                 )
                             );
                         }
@@ -1265,7 +1265,7 @@ impl App {
                     if let Err(err) = save_active_recording(self, store_context) {
                         re_log::error!(
                             "{}",
-                            trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                            trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
                         );
                     }
                 }
@@ -1300,7 +1300,7 @@ impl App {
                         if let Err(err) = save_active_recording(self, store_context) {
                             re_log::error!(
                                 "{}",
-                                trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                                trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
                             );
                         }
                     } else if selected_stores.len() == 1 {
@@ -1309,13 +1309,13 @@ impl App {
                         if let Err(err) = save_recording(self, selected_stores[0], None) {
                             re_log::error!(
                                 "{}",
-                                trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                                trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
                             );
                         }
                     } else {
                         // Save all selected recordings to a folder:
                         if let Some(folder) = rfd::FileDialog::new()
-                            .set_title(tr("Save recordings to folder", "保存录制文件到文件夹"))
+                            .set_title(tr("Save recordings to folder", "保存 episode 到文件夹"))
                             .pick_folder()
                         {
                             self.save_many_recordings(&selected_stores, &folder);
@@ -1324,7 +1324,7 @@ impl App {
                                 "{}",
                                 tr(
                                     "No folder selected - recordings not saved.",
-                                    "未选择文件夹 — 录制文件未保存。"
+                                    "未选择文件夹 — episode 未保存。"
                                 )
                             );
                         }
@@ -1335,7 +1335,7 @@ impl App {
                 if let Err(err) = save_active_recording(self, store_context) {
                     re_log::error!(
                         "{}",
-                        trf!("Failed to save recording: {err}", "保存录制文件失败：{err}")
+                        trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
                     );
                 }
             }
@@ -1495,7 +1495,7 @@ impl App {
             "{}",
             trf!(
                 "Saving {num_stores} recordings to {}…",
-                "正在保存 {num_stores} 个录制文件到 {}…",
+                "正在保存 {num_stores} 个 episode 到 {}…",
                 folder.display()
             )
         );
@@ -1537,14 +1537,14 @@ impl App {
                         if any_error.load(Ordering::Relaxed) {
                             re_log::error!(
                                 "{}",
-                                tr("Some recordings failed to save.", "部分录制文件保存失败。")
+                                tr("Some recordings failed to save.", "部分 episode 保存失败。")
                             );
                         } else {
                             re_log::info!(
                                 "{}",
                                 trf!(
                                     "{num_stores} recordings successfully saved to {folder}",
-                                    "已成功保存 {num_stores} 个录制文件到 {folder}"
+                                    "已成功保存 {num_stores} 个 episode 到 {folder}"
                                 )
                             );
                         }
@@ -1588,7 +1588,7 @@ impl App {
                 "{}",
                 tr(
                     "Could not copy entity hierarchy: No active recording",
-                    "无法复制实体层级：没有活动的录制文件"
+                    "无法复制实体层级：没有活动的 episode"
                 )
             );
             return;
@@ -1950,7 +1950,7 @@ fn save_recording(
     let title = if loop_selection.is_some() {
         tr("Save loop selection", "保存循环选区")
     } else {
-        tr("Save recording", "保存录制文件")
+        tr("Save recording", "保存 episode")
     };
 
     save_entity_db(

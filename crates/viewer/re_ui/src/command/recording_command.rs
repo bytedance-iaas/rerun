@@ -168,7 +168,7 @@ impl RecordingCommandKind {
     pub fn text_and_tooltip(self) -> (&'static str, &'static str) {
         match self {
             Self::Save => (
-                tr("Save recording…", "保存录制文件…"),
+                tr("Save recording…", "保存 episode…"),
                 tr(
                     "Save all data to a Rerun data file (.rrd)",
                     "把全部数据保存为 Rerun 数据文件（.rrd）",
@@ -192,10 +192,10 @@ impl RecordingCommandKind {
             ),
 
             Self::Close => (
-                tr("Close current recording", "关闭当前录制文件"),
+                tr("Close current recording", "关闭当前 episode"),
                 tr(
                     "Close the current recording (unsaved data will be lost)",
-                    "关闭当前录制文件（未保存的数据会丢失）",
+                    "关闭当前 episode（未保存的数据会丢失）",
                 ),
             ),
 
@@ -203,7 +203,7 @@ impl RecordingCommandKind {
                 tr("Undo", "撤销"),
                 tr(
                     "Undo the last blueprint edit for the open recording",
-                    "撤销当前录制文件上最近一次 blueprint 修改",
+                    "撤销当前 episode 上最近一次 blueprint 修改",
                 ),
             ),
             Self::Redo => (

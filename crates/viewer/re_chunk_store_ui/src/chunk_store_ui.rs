@@ -326,7 +326,7 @@ impl DatastoreUi {
         }
         .show(ui, |ui| {
             let Some(chunk_store) = chunk_store else {
-                ui.label("未选中录制文件");
+                ui.label("未选中 episode");
                 return;
             };
 
@@ -646,9 +646,9 @@ impl DatastoreUi {
             .horizontal(|ui| {
                 ui.selectable_toggle(|ui| {
                     ui.selectable_value(&mut self.store_kind, StoreKind::Recording, "Recording")
-                        .on_hover_text("显示当前录制文件的数据存储");
+                        .on_hover_text("显示当前 episode 的数据存储");
                     ui.selectable_value(&mut self.store_kind, StoreKind::Blueprint, "Blueprint")
-                        .on_hover_text("显示当前录制文件的 blueprint 存储");
+                        .on_hover_text("显示当前 episode 的 blueprint 存储");
                 });
 
                 ui.separator();
@@ -814,7 +814,7 @@ impl DatastoreUi {
     fn switch_recording_ui(&mut self, ui: &mut egui::Ui, storage_context: &StorageContext<'_>) {
         let recordings: Vec<&EntityDb> = storage_context.bundle.recordings().collect();
         if recordings.is_empty() {
-            ui.label("没有可用的录制文件");
+            ui.label("没有可用的 episode");
             return;
         }
 
@@ -824,7 +824,7 @@ impl DatastoreUi {
             ui.id().with("selected_recording_icon"),
             egui::Sense::hover(),
         )
-        .on_hover_text("选中的录制文件");
+        .on_hover_text("选中的 episode");
 
         store_selector_combo_ui(
             ui,

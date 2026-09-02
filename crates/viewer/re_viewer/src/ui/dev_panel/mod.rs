@@ -51,7 +51,7 @@ impl DevPanelTab {
         match self {
             Self::Flamegraph => tr("Flamegraph", "内存火焰图"),
             Self::TimeGraph => tr("Over time", "随时间变化"),
-            Self::Stores => tr("Recordings", "录制文件"),
+            Self::Stores => tr("Recordings", "episode"),
             Self::Streaming => tr("Server streaming", "服务器流式读取"),
             Self::AllocationTracking => tr("Allocation tracking", "内存分配追踪"),
             Self::Gpu => "GPU",
@@ -213,7 +213,7 @@ impl DevPanel {
         let Some(store_context) = store_context else {
             ui.warning_label(tr(
                 "No active recording selected for the transform cache.",
-                "没有选中活跃的录制文件，无法查看变换缓存。",
+                "没有选中活跃的 episode，无法查看变换缓存。",
             ));
             return;
         };
@@ -634,7 +634,7 @@ impl DevPanel {
                 );
                 plot_ui.line(history_to_plot(tr("VRAM", "显存（VRAM）"), counted_vram).width(1.5));
                 plot_ui.line(
-                    history_to_plot(tr("Recordings", "录制文件"), counted_recordings).width(1.5),
+                    history_to_plot(tr("Recordings", "episode"), counted_recordings).width(1.5),
                 );
 
                 if false {

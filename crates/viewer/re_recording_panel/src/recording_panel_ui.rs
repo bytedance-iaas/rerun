@@ -62,7 +62,7 @@ impl RecordingPanel {
         ui.panel_content(|ui| {
             ui.panel_title_bar_with_buttons(
                 tr("Sources", "数据来源"),
-                Some(tr("Your connected servers, opened recordings and tables.", "已连接的服务器、已打开的录制文件和表格。")),
+                Some(tr("Your connected servers, opened recordings and tables.", "已连接的服务器、已打开的 episode 和表格。")),
                 |ui| {
                     add_button_ui(ctx, ui, &recording_panel_data);
                 },
@@ -202,7 +202,7 @@ fn all_sections_ui(
 
     if recording_panel_data.is_empty() {
         ui.add_space(ui.tokens().panel_margin().left as f32);
-        ui.weak(tr("Click + to add a recording, connect to a server or drag and drop a file directly to the viewer", "点击 + 添加录制文件、连接服务器，或直接把文件拖进 Viewer"));
+        ui.weak(tr("Click + to add a recording, connect to a server or drag and drop a file directly to the viewer", "点击 + 添加 episode、连接服务器，或直接把文件拖进 Viewer"));
     }
 
     //

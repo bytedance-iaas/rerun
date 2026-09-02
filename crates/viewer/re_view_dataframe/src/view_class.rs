@@ -241,7 +241,7 @@ fn timeline_not_found_ui(ctx: &ViewerContext<'_>, ui: &mut egui::Ui, view_id: Vi
             ui.warning_label(tr("Unknown timeline", "未知的时间轴"));
 
             ui.label(
-                "该视图当前配置的时间轴在当前录制文件中不存在。请在 Selection 面板的视图属性中\
+                "该视图当前配置的时间轴在当前 episode 中不存在。请在 Selection 面板的视图属性中\
                 选择另一个时间轴。",
             )
         });

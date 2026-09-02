@@ -177,7 +177,7 @@ fn progress_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         )
         .on_hover_text(tr(
             "Fully-loaded root chunks vs. the whole recording advertised by the manifest.",
-            "已完整加载的根 chunk 相对于 manifest 声明的整个录制文件的占比。",
+            "已完整加载的根 chunk 相对于 manifest 声明的整个 episode 的占比。",
         ));
 
         let protected_roots = &manifest_index.chunk_prioritizer().protected_chunks().roots;
@@ -317,7 +317,7 @@ fn manifest_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb) {
         let compressed: u64 = manifest.col_chunk_byte_size().iter().sum();
         let uncompressed: u64 = manifest.col_chunk_byte_size_uncompressed().iter().sum();
         ui.list_item_flat_noninteractive(
-            list_item::PropertyContent::new(tr("Recording uncompressed/compressed size", "录制文件未压缩/压缩大小")).value_text(
+            list_item::PropertyContent::new(tr("Recording uncompressed/compressed size", "episode 未压缩/压缩大小")).value_text(
                 format!(
                     "{} / {}",
                     format_bytes(uncompressed as _),
@@ -339,20 +339,20 @@ fn prioritization_ui(ui: &mut egui::Ui, recording: &re_entity_db::EntityDb, is_p
         ui.list_item_flat_noninteractive(
             list_item::PropertyContent::new("预览").value_bool(is_preview),
         )
-        .on_hover_text("上一帧中这个录制文件是否以预览形式渲染 — 预览使用更严格的垃圾回收预算");
+        .on_hover_text("上一帧中这个 episode 是否以预览形式渲染 — 预览使用更严格的垃圾回收预算");
 
         if let Some(prio) = manifest_index.chunk_prioritizer().latest_result() {
             ui.list_item_flat_noninteractive(
                 list_item::PropertyContent::new("传输预算已满")
                     .value_text(prio.transit_budget_filled.to_string()),
             )
-            .on_hover_text("这个录制文件的在途传输预算已耗尽 — 无法再增加并发下载");
+            .on_hover_text("这个 episode 的在途传输预算已耗尽 — 无法再增加并发下载");
 
             ui.list_item_flat_noninteractive(
                 list_item::PropertyContent::new("内存预算已满")
                     .value_text(prio.memory_budget_filled.to_string()),
             )
-            .on_hover_text("这个录制文件的内存预算已耗尽 — 不清理就无法加载更多 chunk");
+            .on_hover_text("这个 episode 的内存预算已耗尽 — 不清理就无法加载更多 chunk");
 
             let all_required = match prio.all_required_are_loaded {
                 Some(v) => v.to_string(),

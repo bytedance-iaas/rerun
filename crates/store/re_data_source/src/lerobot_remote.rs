@@ -1714,7 +1714,7 @@ async fn stream_items<S: DatasetStore>(
                             "{}",
                             trf!(
                                 "Failed to build recording properties: {err}",
-                                "生成录制文件属性失败：{err}"
+                                "生成 episode 属性失败：{err}"
                             )
                         );
                     }

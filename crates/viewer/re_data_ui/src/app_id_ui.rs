@@ -44,11 +44,11 @@ impl crate::AppUi for ApplicationId {
             }
             UiLayout::Tooltip => {
                 if recordings.len() == 1 {
-                    ui.label(tr("There is 1 loaded recording for this app.", "该应用已加载 1 个录制文件。"));
+                    ui.label(tr("There is 1 loaded recording for this app.", "该应用已加载 1 个 episode。"));
                 } else {
                     ui.label(trf!(
                         "There are {} loaded recordings for this app.",
-                        "该应用已加载 {} 个录制文件。",
+                        "该应用已加载 {} 个 episode。",
                         re_format::format_uint(recordings.len()),
                     ));
                 }
@@ -59,7 +59,7 @@ impl crate::AppUi for ApplicationId {
                         ui.spacing_mut().item_spacing.y = 0.0;
 
                         ui.add_space(8.0);
-                        ui.strong(tr("Loaded recordings for this app", "该应用已加载的录制文件"));
+                        ui.strong(tr("Loaded recordings for this app", "该应用已加载的 episode"));
                         for entity_db in recordings {
                             entity_db_button_ui(ctx, entity_db, ui, ui_layout, true);
                         }

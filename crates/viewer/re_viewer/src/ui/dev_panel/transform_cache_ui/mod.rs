@@ -69,7 +69,7 @@ pub(super) fn ui(
     let Some(caches) = storage_context.hub.store_caches(recording.store_id()) else {
         ui.label(tr(
             "No transform cache is available for this recording yet.",
-            "这个录制文件还没有可用的变换缓存。",
+            "这个 episode 还没有可用的变换缓存。",
         ));
         return;
     };

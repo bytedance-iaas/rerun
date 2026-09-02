@@ -213,7 +213,7 @@ impl App {
             ui.add_enabled_ui(false, |ui| {
                 ui.horizontal(|ui| {
                     ui.add(save_recording_button);
-                    ui.loading_indicator(tr("Saving recording", "正在保存录制文件"));
+                    ui.loading_indicator(tr("Saving recording", "正在保存 episode"));
                 });
                 ui.horizontal(|ui| {
                     ui.add(save_selection_button);

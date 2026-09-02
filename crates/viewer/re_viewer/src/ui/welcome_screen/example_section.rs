@@ -317,7 +317,7 @@ impl ExampleSection {
                 }
 
                 ui.add(egui::Label::new(
-                    egui::RichText::new(tr("View example recordings", "查看示例录制文件"))
+                    egui::RichText::new(tr("View example recordings", "查看示例 episode"))
                         .strong()
                         .line_height(Some(32.0))
                         .text_style(DesignTokens::welcome_screen_h2()),

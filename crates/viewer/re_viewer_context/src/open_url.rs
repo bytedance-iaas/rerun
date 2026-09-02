@@ -447,7 +447,7 @@ impl ViewerOpenUrl {
                     .ok_or_else(|| {
                         anyhow::anyhow!(trf!(
                             "No data for active recording",
-                            "当前录制文件没有数据"
+                            "当前 episode 没有数据"
                         ))
                     })?;
                 let data_source = recording

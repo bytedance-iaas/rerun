@@ -58,7 +58,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
             let timelines = entity_db.timelines();
 
             if timelines.is_empty() {
-                ui.weak(tr("The recording has no timelines", "该录制文件没有时间轴"));
+                ui.weak(tr("The recording has no timelines", "该 episode 没有时间轴"));
                 return;
             }
 

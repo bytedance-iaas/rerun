@@ -109,7 +109,7 @@ impl UICommand {
                 tr("Open file…", "打开文件…"),
                 tr(
                     "Open any supported files (.rrd, images, meshes, …) in a new recording",
-                    "在新的录制文件中打开任意支持的文件（.rrd、图片、网格模型等）",
+                    "在新的 episode 中打开任意支持的文件（.rrd、图片、网格模型等）",
                 ),
             ),
             Self::OpenUrl => (
@@ -134,33 +134,33 @@ impl UICommand {
                 ),
             ),
             Self::Import => (
-                tr("Import into current recording…", "导入到当前录制文件…"),
+                tr("Import into current recording…", "导入到当前 episode…"),
                 tr(
                     "Import any supported files (.rrd, images, meshes, …) in the current recording",
-                    "把任意支持的文件（.rrd、图片、网格模型等）导入到当前录制文件",
+                    "把任意支持的文件（.rrd、图片、网格模型等）导入到当前 episode",
                 ),
             ),
 
             Self::CloseAllEntries => (
-                tr("Close all recordings", "关闭所有录制文件"),
+                tr("Close all recordings", "关闭所有 episode"),
                 tr(
                     "Close all open current recording (unsaved data will be lost)",
-                    "关闭所有打开的录制文件（未保存的数据会丢失）",
+                    "关闭所有打开的 episode（未保存的数据会丢失）",
                 ),
             ),
 
             Self::NextRecording => (
-                tr("Next recording", "下一个录制文件"),
+                tr("Next recording", "下一个 episode"),
                 tr(
                     "Switch to the next open recording",
-                    "切换到下一个打开的录制文件",
+                    "切换到下一个打开的 episode",
                 ),
             ),
             Self::PreviousRecording => (
-                tr("Previous recording", "上一个录制文件"),
+                tr("Previous recording", "上一个 episode"),
                 tr(
                     "Switch to the previous open recording",
-                    "切换到上一个打开的录制文件",
+                    "切换到上一个打开的 episode",
                 ),
             ),
 
@@ -351,7 +351,7 @@ impl UICommand {
                 tr("Copy link to selected time range", "复制选中时间段的链接"),
                 tr(
                     "Copy a link to the part of the active recording within the loop selection bounds.",
-                    "复制当前录制文件中循环选区对应时间段的链接。",
+                    "复制当前 episode 中循环选区对应时间段的链接。",
                 ),
             ),
 
@@ -359,7 +359,7 @@ impl UICommand {
                 tr("Copy entity hierarchy", "复制实体层级"),
                 tr(
                     "Copy the complete entity hierarchy tree of the currently active recording to the clipboard.",
-                    "把当前录制文件的完整实体层级树复制到剪贴板。",
+                    "把当前 episode 的完整实体层级树复制到剪贴板。",
                 ),
             ),
 

@@ -55,7 +55,7 @@ impl crate::AppUi for re_log_channel::LogSource {
             ui.spacing_mut().item_spacing.y = 0.0;
             if !recordings.is_empty() {
                 ui.add_space(8.0);
-                ui.strong(tr("Recordings from this data source", "来自该数据源的录制文件"));
+                ui.strong(tr("Recordings from this data source", "来自该数据源的 episode"));
                 for db in recordings {
                     entity_db_button_ui(ctx, db, ui, ui_layout, true);
                 }

@@ -346,7 +346,7 @@ fn show_visual_time_range(
     if resolved_range == &TimeRange::EVERYTHING {
         ui.label(tr("Entire timeline", "整条时间轴")).on_hover_text(tr(
             "The full timeline of the recording, which may be bigger than the data range of this plot",
-            "录制文件的完整时间轴，它可能比这张图的数据范围更大",
+            "episode 的完整时间轴，它可能比这张图的数据范围更大",
         ));
     } else if resolved_range == &TimeRange::AT_CURSOR {
         let current_time = time_type.format(current_time, ctx.app_options().timestamp_format);

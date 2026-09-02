@@ -119,7 +119,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
                 "控制在必需数据之外预取 chunk 的激进程度。\n\n\
                 • 仅必需：只加载渲染当前时间标记所必需的 chunk。\n\
                 • 相似：额外预取与必需 chunk 相同组件路径上、给定实际时长内的 chunk。\n\
-                • 全部：额外预取录制文件中的所有 chunk。",
+                • 全部：额外预取 episode 中的所有 chunk。",
             );
         });
         ui.end_row();
@@ -196,7 +196,7 @@ fn settings_screen_ui_impl(ui: &mut egui::Ui, app_options: &mut AppOptions, keep
             );
         ui.re_checkbox(use_internal_catalog, "通过 Viewer catalog 加载文件")
             .on_hover_text(
-                "通过 Viewer catalog 加载 .rrd 文件，而不是作为实时录制文件导入。\
+                "通过 Viewer catalog 加载 .rrd 文件，而不是作为实时 episode 导入。\
                  对启用之后打开的文件生效。",
             );
         cfg_select! {
