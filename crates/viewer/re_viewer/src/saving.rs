@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use re_i18n::{tr, trf};
 use re_log_types::ApplicationId;
 

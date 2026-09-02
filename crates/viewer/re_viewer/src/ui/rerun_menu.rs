@@ -1,6 +1,8 @@
 //! The main Rerun drop-down menu found in the top panel.
 
-use re_i18n::{tr, trf};
+use re_i18n::tr;
+#[cfg(not(target_arch = "wasm32"))]
+use re_i18n::trf;
 use std::fmt::Write as _;
 
 use egui::ScrollArea;

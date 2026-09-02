@@ -25,6 +25,7 @@
 //!
 //! See [`re_viewer_context::VisualizerInstructionReport`] for how these break down further.
 
+#[cfg(not(target_arch = "wasm32"))]
 use re_i18n::{tr, trf};
 mod app;
 mod app_blueprint;

@@ -1,6 +1,7 @@
 //! Screenshotting not implemented on web yet because we
 //! haven't implemented "copy image to clipboard" there.
 
+#[cfg(not(target_arch = "wasm32"))]
 use re_i18n::{tr, trf};
 /// Marker attached as [`egui::UserData`] to the full-app screenshot request, so we can identify
 /// the resulting [`egui::Event::Screenshot`] as ours.
