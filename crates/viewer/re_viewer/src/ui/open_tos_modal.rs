@@ -54,20 +54,20 @@ impl ServerTosConfig {
 /// code sent to TOS with its English and Chinese display names; the UI shows the
 /// localized name, the code stays internal.
 const TOS_REGIONS: &[(&str, &str, &str)] = &[
-    ("cn-beijing", "North China 2 (Beijing)", "华北2（北京）"),
+    ("cn-beijing", "cn-beijing (Beijing)", "华北2（北京）"),
     (
         "ap-southeast-1",
-        "Asia Pacific Southeast (Johor)",
+        "ap-southeast-1 (Johor)",
         "亚太东南（柔佛）",
     ),
     (
         "ap-southeast-3",
-        "Asia Pacific Southeast (Jakarta)",
+        "ap-southeast-3 (Jakarta)",
         "亚太东南（雅加达）",
     ),
-    ("cn-guangzhou", "South China 1 (Guangzhou)", "华南1（广州）"),
-    ("cn-hongkong", "Hong Kong (China)", "中国香港"),
-    ("cn-shanghai", "East China 2 (Shanghai)", "华东2（上海）"),
+    ("cn-guangzhou", "cn-guangzhou (Guangzhou)", "华南1（广州）"),
+    ("cn-hongkong", "cn-hongkong (Hong Kong)", "中国香港"),
+    ("cn-shanghai", "cn-shanghai (Shanghai)", "华东2（上海）"),
 ];
 
 /// The localized display name for a region code, falling back to the code itself
