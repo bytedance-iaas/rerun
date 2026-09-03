@@ -35,7 +35,9 @@ mod importer_external;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod importer_parquet;
 
-pub use self::import_file::{import_from_file_contents, prepare_store_info};
+pub use self::import_file::{
+    import_from_file_contents, import_from_file_contents_with_tee, prepare_store_info,
+};
 pub use self::importer_archetype::ArchetypeImporter;
 pub use self::importer_directory::DirectoryImporter;
 pub use self::importer_mcap::McapImporter;

@@ -313,9 +313,12 @@ impl UrdfTree {
                 }
 
                 let joint_name = joint_names.value(name_index);
-                let joint = self
-                    .get_joint_by_name(joint_name)
-                    .with_context(|| trf!("URDF does not contain joint {joint_name:?}", "URDF 中不包含关节 {joint_name:?}"))?;
+                let joint = self.get_joint_by_name(joint_name).with_context(|| {
+                    trf!(
+                        "URDF does not contain joint {joint_name:?}",
+                        "URDF 中不包含关节 {joint_name:?}"
+                    )
+                })?;
 
                 let result = joint_transform::internal::compute_joint_transform(
                     joint,
@@ -342,13 +345,10 @@ impl UrdfTree {
                 child_frames.push(self.apply_frame_prefix(&result.child_frame));
             }
 
-            offsets.push(
-                i32::try_from(parent_frames.len())
-                    .context(trf!(
-                        "too many joint transforms for Arrow list offsets",
-                        "关节变换过多，超出 Arrow 列表偏移的范围"
-                    ))?,
-            );
+            offsets.push(i32::try_from(parent_frames.len()).context(trf!(
+                "too many joint transforms for Arrow list offsets",
+                "关节变换过多，超出 Arrow 列表偏移的范围"
+            ))?);
         }
 
         let translation_array = Vec3D::to_arrow_opt(translations.iter().map(Some))?;

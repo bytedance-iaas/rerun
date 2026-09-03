@@ -50,7 +50,7 @@ pub fn import_from_path(
 
     let rx = import(&settings, path, None)?;
 
-    send(settings, file_source, rx, tx);
+    send(settings, file_source, rx, tx, None);
 
     Ok(())
 }
@@ -71,9 +71,30 @@ pub fn import_from_file_contents(
     // NOTE: This channel must be unbounded since we serialize all operations when running on wasm.
     tx: &LogSender,
 ) -> Result<(), ImporterError> {
+    import_from_file_contents_with_tee(settings, file_source, filepath, contents, tx, None)
+}
+
+/// [`import_from_file_contents`], additionally copying every produced [`LogMsg`] into `tee`.
+///
+/// The copies are exactly what `tx` receives (including the store-info fixups), so encoding
+/// them yields an rrd equivalent to the import — that is how converted remote files get
+/// cached. The tee sender is dropped once the import completed: the receiving end can
+/// consume until disconnect without further coordination.
+pub fn import_from_file_contents_with_tee(
+    settings: &crate::ImporterSettings,
+    file_source: FileSource,
+    filepath: &std::path::Path,
+    contents: std::borrow::Cow<'_, [u8]>,
+    // NOTE: This channel must be unbounded since we serialize all operations when running on wasm.
+    tx: &LogSender,
+    tee: Option<std::sync::mpsc::Sender<LogMsg>>,
+) -> Result<(), ImporterError> {
     re_tracing::profile_function!(filepath.to_string_lossy());
 
-    re_log::info!("{}", trf!("Loading {filepath:?}…", "正在加载 {filepath:?}…"));
+    re_log::info!(
+        "{}",
+        trf!("Loading {filepath:?}…", "正在加载 {filepath:?}…")
+    );
 
     let application_id = settings
         .application_id
@@ -87,7 +108,7 @@ pub fn import_from_file_contents(
 
     let data = import(&settings, filepath, Some(contents))?;
 
-    send(settings, file_source, data, tx);
+    send(settings, file_source, data, tx, tee);
 
     Ok(())
 }
@@ -291,6 +312,7 @@ pub(crate) fn send(
     file_source: FileSource,
     rx_importer: crossbeam::channel::Receiver<ImportedData>,
     tx: &LogSender,
+    tee: Option<std::sync::mpsc::Sender<LogMsg>>,
 ) {
     spawn({
         re_tracing::profile_function!();
@@ -338,6 +360,9 @@ pub(crate) fn send(
                         continue;
                     }
                 };
+                if let Some(tee) = &tee {
+                    tee.send(msg.clone()).ok();
+                }
                 tx.send(msg.into()).ok();
             }
 
@@ -354,6 +379,9 @@ pub(crate) fn send(
 
                 if should_send_new_store_info {
                     let store_info = prepare_store_info(&store_id, file_source.clone());
+                    if let Some(tee) = &tee {
+                        tee.send(store_info.clone()).ok();
+                    }
                     tx.send(store_info.into()).ok();
                 }
             }
@@ -406,5 +434,58 @@ mod tests {
             application_id_from_path(std::path::Path::new("foo/bar/baz.thing.jpg")),
             Some(ApplicationId::try_new("baz_thing").unwrap())
         );
+    }
+
+    /// The tee must receive exactly what `tx` receives, and its copies must encode into a
+    /// decodable rrd — that stream is what the rrd artifacts store caches.
+    #[test]
+    fn tee_captures_the_full_import() {
+        use super::*;
+
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/importer_mcap/tests/assets/foxglove_compressed_image.mcap");
+        let bytes = std::fs::read(&path).unwrap();
+
+        let settings = crate::ImporterSettings {
+            force_store_info: true,
+            ..crate::ImporterSettings::recommended(re_log_types::RecordingId::random())
+        };
+        let (tx, rx) =
+            re_log_channel::log_channel(re_log_channel::LogSource::File { path: path.clone() });
+        #[expect(clippy::disallowed_methods)] // test: unbounded is fine
+        let (tee_tx, tee_rx) = std::sync::mpsc::channel();
+
+        super::import_from_file_contents_with_tee(
+            &settings,
+            FileSource::Uri,
+            &path,
+            std::borrow::Cow::Owned(bytes),
+            &tx,
+            Some(tee_tx),
+        )
+        .unwrap();
+
+        let mut tx_msgs = 0usize;
+        loop {
+            match rx.recv() {
+                Ok(smart) => match smart.payload {
+                    re_log_channel::SmartMessagePayload::Msg(_) => tx_msgs += 1,
+                    re_log_channel::SmartMessagePayload::Flush { .. } => {}
+                    re_log_channel::SmartMessagePayload::Quit(_) => break,
+                },
+                Err(_) => break,
+            }
+        }
+
+        let teed: Vec<LogMsg> = tee_rx.into_iter().collect();
+        assert!(tx_msgs > 0, "the test asset must import something");
+        assert_eq!(teed.len(), tx_msgs);
+
+        let encoded = re_log_encoding::Encoder::encode(teed.iter().map(Ok)).unwrap();
+        let decoded: Vec<LogMsg> =
+            re_log_encoding::Decoder::decode_lazy(std::io::Cursor::new(encoded))
+                .collect::<Result<_, _>>()
+                .unwrap();
+        assert_eq!(decoded.len(), teed.len());
     }
 }

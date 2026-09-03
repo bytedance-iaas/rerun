@@ -1,11 +1,12 @@
 //! The rrd artifacts store: converted `.rrd` files kept in a TOS/S3 bucket.
 //!
-//! Converting a remote `LeRobot` episode is expensive (several source fetches + parsing +
-//! transcoding) but deterministic: same sources + same converter = same rrd. So the viewer
-//! uploads each converted episode to the artifacts bucket, and later opens fetch the ready-made
-//! rrd instead of re-converting — across all three viewer packagings, connecting to the bucket
-//! directly (no relay server). The bucket is the ground truth for converted output: artifacts
-//! are never evicted, and their addresses can be shared and fetched directly.
+//! Converting a remote `LeRobot` episode — or a loose conversion-heavy file like an MCAP —
+//! is expensive (source fetches + parsing + transcoding) but deterministic: same sources +
+//! same converter = same rrd. So the viewer uploads each converted item to the artifacts
+//! bucket, and later opens fetch the ready-made rrd instead of re-converting — across all
+//! three viewer packagings, connecting to the bucket directly (no relay server). The bucket
+//! is the ground truth for converted output: artifacts are never evicted, and their
+//! addresses can be shared and fetched directly.
 //!
 //! Correctness rests on the *fingerprint*: a hash over the source files' listing metadata
 //! (paths, sizes, ETags/oids — never their content, which would require downloading the very
@@ -367,6 +368,15 @@ pub fn object_key(artifacts_prefix: &str, source_url: &str, item_name: &str) -> 
     )
 }
 
+/// The object key of a single converted file's artifact (e.g. an MCAP opened straight from
+/// a bucket), mirroring its URL: `tos://bucket/path/log.mcap` → `<prefix>tos/bucket/path/log.mcap.rrd`.
+pub fn file_object_key(artifacts_prefix: &str, file_url: &str) -> String {
+    format!(
+        "{artifacts_prefix}{}.rrd",
+        file_url.replacen("://", "/", 1).trim_matches('/')
+    )
+}
+
 /// One source file that an artifact was converted from.
 pub struct FingerprintPart<'a> {
     pub rel_path: &'a str,
@@ -419,6 +429,18 @@ mod tests {
         assert_eq!(
             object_key("rrd-data/", "hf://org/name", "episode_0"),
             "rrd-data/hf/org/name/episode_0.rrd"
+        );
+    }
+
+    #[test]
+    fn file_object_key_mirrors_the_file_url() {
+        assert_eq!(
+            file_object_key("rrd-data/", "tos://src-bucket/logs/run_1.mcap"),
+            "rrd-data/tos/src-bucket/logs/run_1.mcap.rrd"
+        );
+        assert_eq!(
+            file_object_key("rrd-data/", "hf://org/name/episode.mcap"),
+            "rrd-data/hf/org/name/episode.mcap.rrd"
         );
     }
 

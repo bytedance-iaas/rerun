@@ -195,9 +195,12 @@ fn walk_tree(
     timepoint: &TimePoint,
     link_name: &str,
 ) -> anyhow::Result<Vec<Transform3D>> {
-    let link = urdf_tree
-        .get_link(link_name)
-        .with_context(|| trf!("Link {link_name:?} missing from map", "映射中缺少 link {link_name:?}"))?;
+    let link = urdf_tree.get_link(link_name).with_context(|| {
+        trf!(
+            "Link {link_name:?} missing from map",
+            "映射中缺少 link {link_name:?}"
+        )
+    })?;
     re_log::debug_assert_eq!(link_name, link.name);
 
     emit_link(urdf_tree, timepoint, link, emit)?;
@@ -433,7 +436,10 @@ fn emit_link(
 /// from e.g. a ROS-bag importer.
 #[cfg(target_arch = "wasm32")]
 fn load_ros_resource(_root_dir: Option<&PathBuf>, resource_path: &str) -> anyhow::Result<Vec<u8>> {
-    bail!(trf!("Loading ROS resources is not supported in WebAssembly: {resource_path}", "WebAssembly 环境不支持加载 ROS 资源：{resource_path}"));
+    bail!(trf!(
+        "Loading ROS resources is not supported in WebAssembly: {resource_path}",
+        "WebAssembly 环境不支持加载 ROS 资源：{resource_path}"
+    ));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -444,21 +450,33 @@ fn load_ros_resource(
 ) -> anyhow::Result<Vec<u8>> {
     if let Some((scheme, path)) = resource_path.split_once("://") {
         match scheme {
-            "file" => std::fs::read(path).with_context(|| trf!("Failed to read file: {path}", "读取文件失败：{path}")),
+            "file" => std::fs::read(path)
+                .with_context(|| trf!("Failed to read file: {path}", "读取文件失败：{path}")),
             "package" => read_ros_package_resource(root_dir, path),
             "http" | "https" => fetch_http_resource(resource_path),
             _ => {
-                bail!(trf!("Unknown resource scheme: {scheme:?} in {resource_path}", "未知的资源 scheme {scheme:?}：{resource_path}"));
+                bail!(trf!(
+                    "Unknown resource scheme: {scheme:?} in {resource_path}",
+                    "未知的资源 scheme {scheme:?}：{resource_path}"
+                ));
             }
         }
     } else {
         // Relative path
         if let Some(root_dir) = &root_dir {
             let full_path = root_dir.join(resource_path);
-            std::fs::read(&full_path)
-                .with_context(|| trf!("Failed to read file: {}", "读取文件失败：{}", full_path.display()))
+            std::fs::read(&full_path).with_context(|| {
+                trf!(
+                    "Failed to read file: {}",
+                    "读取文件失败：{}",
+                    full_path.display()
+                )
+            })
         } else {
-            bail!(trf!("No root directory set for URDF, cannot load resource: {resource_path}", "未设置 URDF 根目录，无法加载资源：{resource_path}"));
+            bail!(trf!(
+                "No root directory set for URDF, cannot load resource: {resource_path}",
+                "未设置 URDF 根目录，无法加载资源：{resource_path}"
+            ));
         }
     }
 }
@@ -479,10 +497,12 @@ fn fetch_http_resource(url: &str) -> anyhow::Result<Vec<u8>> {
             .build(),
     );
 
-    let mut response = agent
-        .get(url)
-        .call()
-        .with_context(|| trf!("Failed to fetch mesh resource from {url}", "获取网格资源失败：{url}"))?;
+    let mut response = agent.get(url).call().with_context(|| {
+        trf!(
+            "Failed to fetch mesh resource from {url}",
+            "获取网格资源失败：{url}"
+        )
+    })?;
 
     let bytes = response
         .body_mut()
@@ -536,7 +556,10 @@ fn emit_geometry(
                 } = material;
 
                 if texture.is_some() {
-                    re_log::warn_once!("{}", tr("Material texture not supported", "暂不支持材质纹理")); // TODO(emilk): support textures
+                    re_log::warn_once!(
+                        "{}",
+                        tr("Material texture not supported", "暂不支持材质纹理")
+                    ); // TODO(emilk): support textures
                 }
             }
 
@@ -645,11 +668,19 @@ fn read_ros_package_resource(
     } else if let Some(root_dir) = root_dir {
         // If the path is relative, resolve it relative to the `root_dir`.
         let full_path = root_dir.join(resolved_path);
-        std::fs::read(&full_path)
-            .with_context(|| trf!("Failed to read file: {}", "读取文件失败：{}", full_path.display()))
+        std::fs::read(&full_path).with_context(|| {
+            trf!(
+                "Failed to read file: {}",
+                "读取文件失败：{}",
+                full_path.display()
+            )
+        })
     } else {
         // If no `root_dir` is provided, we cannot resolve the relative path.
-        bail!(trf!("No root directory set for URDF, cannot load resource: {resource_path}", "未设置 URDF 根目录，无法加载资源：{resource_path}"));
+        bail!(trf!(
+            "No root directory set for URDF, cannot load resource: {resource_path}",
+            "未设置 URDF 根目录，无法加载资源：{resource_path}"
+        ));
     }
 }
 
@@ -660,8 +691,12 @@ fn resolve_package_uri(uri: &str) -> anyhow::Result<PathBuf> {
     use std::env;
 
     let mut parts = uri.splitn(2, '/');
-    let (pkg, rel) = Option::zip(parts.next(), parts.next())
-        .ok_or_else(|| anyhow::anyhow!(trf!("Invalid package URI: {uri}", "无效的 package URI：{uri}")))?;
+    let (pkg, rel) = Option::zip(parts.next(), parts.next()).ok_or_else(|| {
+        anyhow::anyhow!(trf!(
+            "Invalid package URI: {uri}",
+            "无效的 package URI：{uri}"
+        ))
+    })?;
 
     let rel = PathBuf::from(rel);
 

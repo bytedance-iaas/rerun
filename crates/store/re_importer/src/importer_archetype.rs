@@ -1,5 +1,5 @@
-use re_i18n::trf;
 use re_chunk::{Chunk, RowId};
+use re_i18n::trf;
 use re_log_types::{ApplicationId, EntityPath, TimePoint};
 
 use crate::{ImportedData, Importer, ImporterError};
@@ -46,7 +46,12 @@ impl Importer for ArchetypeImporter {
 
         let contents = {
             re_tracing::profile_scope!("fs::read");
-            std::fs::read(&filepath).with_context(|| trf!("Failed to read file {filepath:?}", "读取文件失败：{filepath:?}"))?
+            std::fs::read(&filepath).with_context(|| {
+                trf!(
+                    "Failed to read file {filepath:?}",
+                    "读取文件失败：{filepath:?}"
+                )
+            })?
         };
         let contents = std::borrow::Cow::Owned(contents);
 
@@ -281,7 +286,14 @@ fn load_video(
     Ok(chunks.map_while(move |chunk| match chunk {
         Ok(chunk) => Some(chunk),
         Err(err) => {
-            re_log::warn!(?filepath, "{}", trf!("Failed to load chunk from video: {err}", "从视频加载 chunk 失败：{err}"));
+            re_log::warn!(
+                ?filepath,
+                "{}",
+                trf!(
+                    "Failed to load chunk from video: {err}",
+                    "从视频加载 chunk 失败：{err}"
+                )
+            );
             None
         }
     }))

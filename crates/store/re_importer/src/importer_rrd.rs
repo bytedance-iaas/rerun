@@ -54,8 +54,12 @@ impl crate::Importer for RrdImporter {
                 // Otherwise we'd risk retrying to read .rbl file that has no end-of-stream header and
                 // blocking the UI update thread indefinitely and making the viewer unresponsive (as .rbl
                 // files are sometimes read on UI update).
-                let file = std::fs::File::open(&filepath)
-                    .with_context(|| trf!("Failed to open file {filepath:?}", "打开文件失败：{filepath:?}"))?;
+                let file = std::fs::File::open(&filepath).with_context(|| {
+                    trf!(
+                        "Failed to open file {filepath:?}",
+                        "打开文件失败：{filepath:?}"
+                    )
+                })?;
                 let file = std::io::BufReader::new(file);
 
                 let messages = Decoder::decode_eager(file)?;
@@ -80,12 +84,21 @@ impl crate::Importer for RrdImporter {
                             );
                         }
                     })
-                    .with_context(|| trf!("Failed to spawn IO thread for {filepath:?}", "启动 IO 线程失败：{filepath:?}"))?;
+                    .with_context(|| {
+                        trf!(
+                            "Failed to spawn IO thread for {filepath:?}",
+                            "启动 IO 线程失败：{filepath:?}"
+                        )
+                    })?;
             }
 
             "rrd" => {
-                let file = std::fs::File::open(&filepath)
-                    .with_context(|| trf!("Failed to open file {filepath:?}", "打开文件失败：{filepath:?}"))?;
+                let file = std::fs::File::open(&filepath).with_context(|| {
+                    trf!(
+                        "Failed to open file {filepath:?}",
+                        "打开文件失败：{filepath:?}"
+                    )
+                })?;
                 let file = std::io::BufReader::new(file);
 
                 let messages = Decoder::decode_eager(file)?;
@@ -103,7 +116,12 @@ impl crate::Importer for RrdImporter {
                             );
                         }
                     })
-                    .with_context(|| trf!("Failed to spawn IO thread for {filepath:?}", "启动 IO 线程失败：{filepath:?}"))?;
+                    .with_context(|| {
+                        trf!(
+                            "Failed to spawn IO thread for {filepath:?}",
+                            "启动 IO 线程失败：{filepath:?}"
+                        )
+                    })?;
             }
             _ => unreachable!(),
         }
@@ -176,7 +194,11 @@ fn decode_and_stream(
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
-                re_log::warn!(?filepath, "{}", trf!("Failed to decode message: {err}", "解码消息失败：{err}"));
+                re_log::warn!(
+                    ?filepath,
+                    "{}",
+                    trf!("Failed to decode message: {err}", "解码消息失败：{err}")
+                );
                 continue;
             }
         };

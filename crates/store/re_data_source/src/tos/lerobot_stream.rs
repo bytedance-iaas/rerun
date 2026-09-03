@@ -78,12 +78,20 @@ impl DatasetStore for TosStore {
     }
 
     async fn file_size(&self, rel_path: &str) -> anyhow::Result<u64> {
+        Ok(self.file_stat(rel_path).await?.size)
+    }
+
+    async fn file_stat(&self, rel_path: &str) -> anyhow::Result<ListedFile> {
         let key = format!("{}{rel_path}", self.location.prefix);
         let objects = self.client.list_objects(&key).await?;
         objects
             .iter()
             .find(|obj| obj.key == key)
-            .map(|obj| obj.size)
+            .map(|obj| ListedFile {
+                rel_path: rel_path.to_owned(),
+                size: obj.size,
+                content_id: obj.etag.clone(),
+            })
             .ok_or_else(|| {
                 // The listing itself succeeded, so the object definitively does not exist —
                 // callers use the typed 404 to tell this apart from transient fetch trouble.
@@ -112,8 +120,8 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
     let client = TosClient::new(credentials, location.bucket.clone());
 
     // A path to a single file (e.g. tos://bucket/path/recording.mcap) is downloaded and run
-    // through the regular importers instead of the LeRobot dataset pipeline.
-    // The rrd artifacts store only covers LeRobot episodes, not loose files.
+    // through the regular importers instead of the LeRobot dataset pipeline. Conversion-heavy
+    // formats (MCAP) still go through the rrd artifacts store.
     if let Some(file_name) = location.split_off_file_name() {
         let url = format!("{location}{file_name}");
         crate::lerobot_remote::remember_dataset_region(&url, &region);
@@ -121,6 +129,7 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
             TosStore { client, location },
             file_name,
             url,
+            rrd_artifacts,
         );
     }
 
