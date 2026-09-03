@@ -79,7 +79,8 @@ impl ServerHfConfig {
     }
 }
 
-/// Dialog for opening a `LeRobot` dataset stored on Hugging Face.
+/// Dialog for opening a `LeRobot` dataset — or a data file such as an MCAP — stored on
+/// Hugging Face.
 #[derive(Default)]
 pub struct OpenHfModal {
     modal: ModalHandler,
@@ -202,7 +203,10 @@ impl OpenHfModal {
             ui.ctx(),
             || ModalWrapper::new(tr("Open from Hugging Face", "从 Hugging Face 打开")),
             |ui| {
-                ui.strong(tr("Stream a LeRobot dataset from Hugging Face.", "从 Hugging Face 流式读取 LeRobot 数据集。"));
+                ui.strong(tr(
+                    "Stream a LeRobot dataset — or data files like MCAP and rrd — from Hugging Face.",
+                    "从 Hugging Face 流式读取 LeRobot 数据集，或 MCAP、rrd 等数据文件。",
+                ));
                 ui.add_space(4.0);
 
                 egui::Grid::new("hf_fields")

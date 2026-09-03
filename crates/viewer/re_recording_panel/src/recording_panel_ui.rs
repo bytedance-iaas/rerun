@@ -738,8 +738,8 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
     let id = ui.make_persistent_id(local_app_id.id());
 
     // Diagnose in Daft: TOS datasets only (`diagnose_url` is `None` for anything
-    // else) — an open TOS dataset is LeRobot v2/v3 by construction, the loader
-    // rejects other formats before anything shows up here.
+    // else). A TOS open may also be a loose-file repo (MCAP etc.) these days — the
+    // console then simply reports it is not a LeRobot dataset.
     // The app id is a normalized form of the dataset URL; resolve the real URL for the
     // link, and carry the bucket's region along — the console's connection inputs are
     // exactly URL + region, prefill both and the hand-off is one click.

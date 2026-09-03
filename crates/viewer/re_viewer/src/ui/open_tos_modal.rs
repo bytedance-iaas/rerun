@@ -82,7 +82,8 @@ fn tos_region_label(code: &str) -> &str {
 /// How long after the last keystroke the malformed-URL error may turn red.
 const URL_ERROR_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 
-/// Dialog for opening a `LeRobot` dataset stored in Volcengine TOS.
+/// Dialog for opening a `LeRobot` dataset — or a data file such as an MCAP — stored in
+/// Volcengine TOS.
 #[derive(Default)]
 pub struct OpenTosModal {
     modal: ModalHandler,
@@ -222,7 +223,10 @@ impl OpenTosModal {
             ui.ctx(),
             || ModalWrapper::new(tr("Open from Volcengine TOS", "从火山引擎 TOS 打开")),
             |ui| {
-                ui.strong(tr("Stream a LeRobot dataset from a TOS bucket.", "从 TOS 桶流式读取 LeRobot 数据集。"));
+                ui.strong(tr(
+                    "Stream a LeRobot dataset — or data files like MCAP and rrd — from a TOS bucket.",
+                    "从 TOS 桶流式读取 LeRobot 数据集，或 MCAP、rrd 等数据文件。",
+                ));
                 ui.add_space(4.0);
 
                 let url_response = egui::Grid::new("tos_fields")
@@ -231,7 +235,10 @@ impl OpenTosModal {
                     .show(ui, |ui| {
                         ui.label(tr("Dataset URL:", "数据集 URL："));
                         let url_edit = egui::TextEdit::singleline(&mut self.url)
-                            .hint_text("tos://bucket/path/to/dataset/")
+                            .hint_text(tr(
+                                "tos://bucket/dataset/ or tos://bucket/path/log.mcap",
+                                "tos://bucket/数据集目录/ 或 tos://bucket/path/log.mcap",
+                            ))
                             .desired_width(f32::INFINITY)
                             .show(ui);
                         if self.just_opened {
@@ -351,16 +358,16 @@ impl OpenTosModal {
                             .is_some_and(|t| now - t < URL_ERROR_DELAY.as_secs_f64());
                     if still_typing {
                         ui.label(tr(
-                            "The dataset URL should look like tos://bucket/prefix/",
-                            "数据集 URL 应形如 tos://bucket/prefix/",
+                            "The URL should look like tos://bucket/prefix/ (or point at a file, e.g. tos://bucket/path/log.mcap)",
+                            "URL 应形如 tos://bucket/prefix/（也可以指向单个文件，如 tos://bucket/path/log.mcap）",
                         ));
                         // Wake up when the pause elapses, so the error can appear
                         // without waiting for the next keystroke or mouse move.
                         ui.ctx().request_repaint_after(URL_ERROR_DELAY);
                     } else {
                         ui.error_label(tr(
-                            "The dataset URL should look like tos://bucket/prefix/",
-                            "数据集 URL 应形如 tos://bucket/prefix/",
+                            "The URL should look like tos://bucket/prefix/ (or point at a file, e.g. tos://bucket/path/log.mcap)",
+                            "URL 应形如 tos://bucket/prefix/（也可以指向单个文件，如 tos://bucket/path/log.mcap）",
                         ));
                     }
                 } else if !connection_ok {
