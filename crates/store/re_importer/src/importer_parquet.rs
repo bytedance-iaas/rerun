@@ -1,7 +1,7 @@
 //! Thin adapter that wraps [`re_parquet`] as an [`Importer`].
 
-use re_i18n::trf;
 use crossbeam::channel::Sender;
+use re_i18n::trf;
 use re_log_types::StoreId;
 use re_quota_channel::send_crossbeam;
 
@@ -46,7 +46,10 @@ impl Importer for ParquetImporter {
             .spawn(
                 move || match re_parquet::load_parquet(&path, &config, &prefix) {
                     Ok(chunks) => forward_chunks(chunks, &tx, &store_id),
-                    Err(err) => re_log::error!("{}", trf!("Failed to load Parquet: {err}", "加载 Parquet 失败：{err}")),
+                    Err(err) => re_log::error!(
+                        "{}",
+                        trf!("Failed to load Parquet: {err}", "加载 Parquet 失败：{err}")
+                    ),
                 },
             )
             .map_err(|err| ImporterError::Other(err.into()))?;
@@ -80,7 +83,10 @@ impl Importer for ParquetImporter {
             .spawn(
                 move || match re_parquet::load_parquet_from_bytes(&contents, &config, &prefix) {
                     Ok(chunks) => forward_chunks(chunks, &tx, &store_id),
-                    Err(err) => re_log::error!("{}", trf!("Failed to load Parquet: {err}", "加载 Parquet 失败：{err}")),
+                    Err(err) => re_log::error!(
+                        "{}",
+                        trf!("Failed to load Parquet: {err}", "加载 Parquet 失败：{err}")
+                    ),
                 },
             )
             .map_err(|err| ImporterError::Other(err.into()))?;
