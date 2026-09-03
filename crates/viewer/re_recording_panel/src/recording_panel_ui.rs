@@ -737,16 +737,20 @@ fn app_id_section_ui(ctx: &AppContext<'_>, ui: &mut egui::Ui, local_app_id: &App
 
     let id = ui.make_persistent_id(local_app_id.id());
 
-    // Diagnose in Daft: TOS datasets only (`diagnose_url` is `None` for anything
-    // else). A TOS open may also be a loose-file repo (MCAP etc.) these days — the
-    // console then simply reports it is not a LeRobot dataset.
+    // Diagnose in Daft: TOS LeRobot datasets only — `diagnose_url` is `None` for anything
+    // else, and a loose-files repo (MCAP etc.) gets no button either: the curation console
+    // works on LeRobot data, pointing it at anything else can only report failure.
     // The app id is a normalized form of the dataset URL; resolve the real URL for the
     // link, and carry the bucket's region along — the console's connection inputs are
     // exactly URL + region, prefill both and the hand-off is one click.
     let dataset_url = re_data_source::lerobot_remote::dataset_url_of(app_id.as_str());
     let link_url = dataset_url.as_deref().unwrap_or_else(|| app_id.as_str());
     let region = re_data_source::lerobot_remote::dataset_region_of(link_url);
-    let diagnose_url = re_viewer_context::daft_link::diagnose_url(link_url, region.as_deref());
+    let diagnose_url = if re_data_source::lerobot_remote::is_loose_files_repo(app_id.as_str()) {
+        None
+    } else {
+        re_viewer_context::daft_link::diagnose_url(link_url, region.as_deref())
+    };
 
     if !local_app_id.loaded_recordings.is_empty() || streaming {
         if paused {

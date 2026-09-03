@@ -566,6 +566,11 @@ struct StreamState {
     /// e.g. deleting artifacts of the open dataset).
     artifacts_config: Mutex<Option<crate::rrd_artifacts::RrdArtifactsConfig>>,
 
+    /// This stream is a loose-files repo (MCAP etc.), not a `LeRobot` dataset — UI
+    /// affordances that only make sense for `LeRobot` data (e.g. the Daft "Diagnose"
+    /// link) check this via [`is_loose_files_repo`].
+    loose_files: AtomicBool,
+
     pause: PauseState,
 }
 
@@ -953,6 +958,15 @@ pub fn dataset_url_of(application_id: &str) -> Option<String> {
         .get(application_id)
         .map(|state| state.dataset_url.lock().clone())
         .filter(|url| !url.is_empty())
+}
+
+/// Whether the given application id belongs to an open loose-files repo (MCAP etc.)
+/// rather than a `LeRobot` dataset. `false` when no stream is active.
+pub fn is_loose_files_repo(application_id: &str) -> bool {
+    ACTIVE_STREAMS
+        .lock()
+        .get(application_id)
+        .is_some_and(|state| state.loose_files.load(Ordering::SeqCst))
 }
 
 /// Whether this recording is a dataset stream's trailing "⋯ N more" placeholder entry
@@ -1824,6 +1838,10 @@ async fn stream_items<S: DatasetStore>(
 
     let guard = StreamGuard::new(&application_id, dataset_url);
     guard.state.n_items.store(total, Ordering::SeqCst);
+    guard.state.loose_files.store(
+        matches!(remote, RemoteDataset::Files { .. }),
+        Ordering::SeqCst,
+    );
     *guard.state.artifacts_config.lock() = rrd_artifacts.clone();
     if let Some(artifacts) = &rrd_artifacts {
         // Settle "may these credentials delete?" up front, so the artifact-management
