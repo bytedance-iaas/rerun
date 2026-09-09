@@ -3,7 +3,7 @@
 本文把整套 Rerun 云服务部署到一个火山引擎 VKE 集群,使用 Helm chart(`deploy/helm/`)。
 常驻服务是 `dataverse` chart —— 一个 chart 打包 **ReRun**(web viewer + catalog server)与
 **质检台**两个组件,以及它们共用的 APIG 网关入口;
-按需的 native viewer 会话是另一个 chart `rerun-native-session`(第 5 节)。
+按需的 native viewer 会话是另一个 chart `rerun-native-session`(第 6 节)。
 全程约 30 分钟,其中等云资源(CLB、网关)就绪约 10 分钟。
 
 ## 1. 前提条件
@@ -57,7 +57,7 @@ git checkout <分支名> # like: release_v1
 
 | 凭证 | 用途 | 来源 |
 |---|---|---|
-| token 签名密钥 | catalog server 验证用户 token 用的"印章":server 拿它验签,给用户签发 token 也用它(见第 5 节) | 本节生成并直接写入集群 Secret |
+| token 签名密钥 | catalog server 验证用户 token 用的"印章":server 拿它验签,你拿它给用户签发 token(见第 5 节) | 本节用 openssl 生成:**自己留一份**,同时写入集群 Secret |
 | web 登录账号表 | 浏览器打开 web viewer / 质检台时的用户名密码(存的是密码哈希) | 本节生成并直接写入集群 Secret |
 | 火山引擎 AK/SK | 各组件读写 TOS 对象存储的云账户凭证 | 火山引擎控制台(第 1 节资源侧) |
 
@@ -65,13 +65,8 @@ git checkout <分支名> # like: release_v1
 前者只在本产品内部用(签发/验证 catalog token),后者是云厂商的账户凭证,两者互填部署都起不来且报错不直观。
 
 所有密钥都用 kubectl 直接建成集群里的 Secret,helm 只引用名字,密钥不出现在 values 文件和 helm 发布记录里。
-凭证只进当前终端的环境变量和集群 Secret,不落盘;token 签名密钥同样全程不落盘,只存在于集群中,签发 token 也在集群内完成(第 5 节)。
-
-先构建 rerun 二进制,生成签名密钥要用它(已有 `./target/release/rerun` 就跳过这步):
-
-```sh
-cargo build --release --package rerun-cli --no-default-features --features release_no_web_viewer
-```
+AK/SK 和登录密码只进当前终端的环境变量和集群 Secret,不落盘;
+**token 签名密钥是例外 —— 它要你自己长期保存一份**,因为签发 token 用的就是它(第 5 节),集群里那份只供 server 验签。
 
 定下部署用的 namespace 并创建(后文所有命令都引用这个变量,新开终端要重新 export):
 
@@ -91,9 +86,12 @@ export ARK_API_KEY="##############"
 export WEB_USER="##############"
 export WEB_PASS="##############"
 
-# catalog 的 token 签名密钥:generate-secret 打印一串明文,和其他密钥同等保存。
-# 只生成这一次并妥善保管;谁拿到它谁就能签任意权限的 token。
-export SERVER_TOKEN_SECRET="$(./target/release/rerun server generate-secret)"
+# catalog 的 token 签名密钥:32 字节随机数的 base64,openssl 就能生成,不需要 rerun 二进制
+# (`rerun server generate-secret` 打印的是同样的东西,装了 SDK 之后用哪个都行)。
+# 只生成这一次:除了写进下面的 Secret,**自己也要留一份**(密码管理器/公司密钥库),
+# 第 5 节签发 token 用的就是它;谁拿到它谁就能签任意权限的 token。
+export SERVER_TOKEN_SECRET="$(openssl rand -base64 32)"
+echo "$SERVER_TOKEN_SECRET"   # 抄走存好,后面不会再打印
 ```
 
 创建一个 Secret(整套部署的全部密钥都在这一个里,名字与下一节 values 里的引用对应):
@@ -103,7 +101,8 @@ export SERVER_TOKEN_SECRET="$(./target/release/rerun server generate-secret)"
 # - tos_access_key / tos_secret_key:各组件访问 TOS 的凭证。web viewer 靠它让浏览器
 #   直读数据集并回写 rrd 缓存,catalog server 靠它读桶和给训练侧签预签名 URL,
 #   native 会话同样复用。
-# - server_token_secret:catalog 的 token 签名密钥(上面 generate-secret 生成的明文)。
+# - server_token_secret:catalog 的 token 签名密钥(上面 openssl 生成的那串)。server 只用它
+#   验签,不会替你保管;签发在你手里那份上做(第 5 节)。
 # - web_htpasswd:登录账号表。key 名指的是它的【格式】(Apache 密码表:
 #   「用户名:密码哈希」,nginx 和质检台都认这个格式验证),不需要 htpasswd 工具,
 #   哈希由 openssl 现场生成,账号表只存在于这个 Secret 里。
@@ -317,22 +316,35 @@ token 的签发见第 5 节。
 ## 5. 签发 catalog token
 
 用户访问 catalog server 需要 token。
-签发在 **catalog 容器内**执行 — 签名密钥只存在于集群里(0400 文件),不出集群;因此**能签发 token 的人 = 有该 namespace `kubectl exec` 权限的人**,由集群 RBAC 管控:
+签发**在你自己的机器上完成**,用 2.2 生成、你自己保管的那串签名密钥 —— 不用连集群,也不用 exec 进 pod。
+集群 Secret 里那份是给 server 验签用的,不是你的取用点。
+
+先装 SDK(`rerun` 命令随 wheel 一起分发,与在跑的 server 出自同一次构建,版本天然一致):
+浏览器开 `https://$GW_DOMAIN/downloads/sdk/`(用 2.2 建的账号)看 wheel 文件名,然后
 
 ```sh
-kubectl -n $DATAVERSE_NS exec rerun-cloud-0 -c catalog -- sh -c \
-    "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
-        --user zhang --permission read --expiration 90d \
-        --server-host $GW_DOMAIN \
-        --server-host rerun-cloud-headless.$DATAVERSE_NS.svc.cluster.local"
+pip install "https://<用户名>:<密码>@$GW_DOMAIN/downloads/sdk/<wheel 文件名>"
+```
+
+之后每来一个用户签一枚:
+
+```sh
+export SERVER_TOKEN_SECRET="<2.2 生成、你自己存好的那串>"
+
+rerun server generate-token --secret "$SERVER_TOKEN_SECRET" \
+    --user zhang --permission read --expiration 90d \
+    --server-host $GW_DOMAIN \
+    --server-host rerun-cloud-headless.$DATAVERSE_NS.svc.cluster.local
 ```
 
 - `--permission` 取 `read` 或 `read-write`(注册数据集需要后者);
 - `--server-host` 是允许用这个 token 连的地址,可多个:网关域名给云外客户端,集群内域名给云内训练任务;自测要走 port-forward 的再加 `--server-host 127.0.0.1`;
-- 用户侧先装 SDK:部署自带分发点,浏览器开 `https://$GW_DOMAIN/downloads/sdk/` 看 wheel 文件名,`pip install "https://<用户名>:<密码>@$GW_DOMAIN/downloads/sdk/<wheel 文件名>"` — 与在跑的 server 出自同一次构建,版本天然一致;
 - 用法:云外 `CatalogClient("rerun+https://$GW_DOMAIN:443", token=<token>)`,云内 `CatalogClient("rerun+http://rerun-cloud-headless.<ns>.svc.cluster.local:51234", token=<token>)`。
 
-安全边界说明:能读该 namespace Secret 或能 exec 进 pod 的人依然拿得到签名密钥 — 这一层靠收紧 namespace 的 RBAC(最小授权)兜底;0400 文件挡的是密钥被 pod 内非属主进程误读和被顺手带出。
+密钥丢了怎么办:换一串新的(`openssl rand -base64 32`),按第 7 节 `kubectl patch` 进 Secret 并重启 —— 已签发的 token 全部作废,需要重签。
+集群里那份也可以当成一份持久化副本捞回来(`kubectl get secret dataverse-secrets -o jsonpath='{.data.server_token_secret}' | base64 -d`),但那是你自己的管理选择,产品不依赖它。
+
+安全边界说明:能读该 namespace Secret 或能 exec 进 pod 的人同样拿得到签名密钥 — 这一层靠收紧 namespace 的 RBAC(最小授权)兜底;0400 文件挡的是密钥被 pod 内非属主进程误读和被顺手带出。
 
 ## 6. 云上 native viewer 会话(按需)
 
