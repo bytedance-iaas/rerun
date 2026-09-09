@@ -131,7 +131,7 @@ read them back.
 */}}
 {{- define "dataverse.viewerSecretName" -}}
 {{- if not .Values.secrets.existingSecret }}
-{{- fail "secrets.existingSecret is required: the name of a Secret in this namespace carrying tos_access_key, tos_secret_key, server_token_secret (when catalog.tokenAuth.enabled) and web_htpasswd (when web.basicAuth.enabled).\n  kubectl -n <namespace> create secret generic dataverse-secrets --from-literal=tos_access_key=<ak> --from-literal=tos_secret_key=<sk> --from-literal=server_token_secret=\"$(rerun server generate-secret)\" --from-literal=web_htpasswd='<user>:<hash>'\nThe chart deliberately cannot build it from values: Helm stores values verbatim in the release history, where anyone who can run `helm get values` could read the credentials back." }}
+{{- fail "secrets.existingSecret is required: the name of a Secret in this namespace carrying tos_access_key, tos_secret_key, server_token_secret (when catalog.tokenAuth.enabled) and web_htpasswd (when web.basicAuth.enabled).\n  kubectl -n <namespace> create secret generic dataverse-secrets --from-literal=tos_access_key=<ak> --from-literal=tos_secret_key=<sk> --from-literal=server_token_secret=\"$(openssl rand -base64 32)\" --from-literal=web_htpasswd='<user>:<hash>'\nThe chart deliberately cannot build it from values: Helm stores values verbatim in the release history, where anyone who can run `helm get values` could read the credentials back." }}
 {{- end }}
 {{- .Values.secrets.existingSecret -}}
 {{- end -}}
