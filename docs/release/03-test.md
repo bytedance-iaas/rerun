@@ -35,23 +35,24 @@ Intel 芯片的 Mac 暂无预编译 wheel(苹果已停产该硬件),本地开发
 ### 1.3 签测试 token
 
 签两枚,一枚读写、一枚只读(对照认证用例要用)。
-签发在 catalog 容器内执行,签名密钥不出集群(见 02-deploy 第 5 节):
+用 1.2 装好的 SDK 在本机签,密钥是 02-deploy 2.2 生成、你自己保管的那串(见 02-deploy 第 5 节):
 
 ```sh
-kubectl -n $RERUN_NS exec rerun-cloud-0 -c catalog -- sh -c \
-    "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
-        --user tester --permission read-write --expiration 7d \
-        --server-host $GW_DOMAIN --server-host 127.0.0.1 \
-        --server-host rerun-cloud-headless.$RERUN_NS.svc.cluster.local"
+export SERVER_TOKEN_SECRET="<02-deploy 2.2 生成、你自己存好的那串>"
+
+rerun server generate-token --secret "$SERVER_TOKEN_SECRET" \
+    --user tester --permission read-write --expiration 7d \
+    --server-host $GW_DOMAIN --server-host 127.0.0.1 \
+    --server-host rerun-cloud-headless.$RERUN_NS.svc.cluster.local
 # 再跑一遍,--permission read,存成只读 token
 ```
 
 `127.0.0.1` 是为 port-forward 兜底场景签的(见 1.4);发给真实用户的 token 不要带它。
 
-### 1.4 办公网须知
+### 1.4 受限网络下的兜底
 
-catalog 现在走网关域名(TLS + HTTP/2),与 web viewer 同一条通道 —— 办公网(飞连)对"域名 + TLS"是放行的,所以**优先直连** `rerun+https://$GW_DOMAIN:443` 试。
-若确实连不上(飞连策略因网点而异),退回 port-forward 兜底,另开一个终端常驻:
+catalog 走网关域名(TLS + HTTP/2),与 web viewer 同一条通道 —— 企业网络对"域名 + TLS"通常是放行的,所以**优先直连** `rerun+https://$GW_DOMAIN:443` 试。
+若确实连不上(网络策略因环境而异),退回 port-forward 兜底,另开一个终端常驻:
 
 ```sh
 env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy -u ALL_PROXY -u all_proxy \
@@ -196,6 +197,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 | APIGInstance 一直 Pending | `describe apiginstance` 看 Events;`cannot be found from VPC` / `InvalidVPC.NotFound` = `apig.subnetIds` 里某个子网抄了别的集群的,改对重装,不会自愈 |
 | `no matches for kind "APIGInstance"` | 集群没装 APIG 组件,VKE 控制台 → 组件管理 → 安装 |
 | `kubectl get apiginstance` 返回空列表 | 集群 API 偶发抖动,重试确认,别据此断言实例不存在 |
+| catalog 容器起不来,日志是 `failed to read --token-secret-file` | Secret 里缺 `server_token_secret`(`catalog.tokenAuth.enabled=true` 时必须有)。补上这个 key 再 `kubectl rollout restart statefulset rerun-cloud`;这是有意的 fail-closed,不会退化成不校验 token |
 | 质检跑批开头就报「缺少 TOS 凭证」 | curation 容器没拿到 `TOS_ACCESS_KEY/TOS_SECRET_KEY`:确认 `secrets.existingSecret` 指的 Secret 里有 `tos_access_key/tos_secret_key` 两个 key |
 | 质检下载阶段报桶/前缀不存在或无权限 | 界面填的 tos:// 路径写错,或部署那对 AK/SK 对该桶没有权限(质检台能访问哪些桶完全由这对密钥决定) |
 
@@ -206,7 +208,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 | 页面能开,`tos://` 数据集打不开;或缓存明明有却逐集重新转换 | 先看是不是 CORS:F12 → Network 筛 `tos-s3`,看到 "blocked by CORS policy" 说明自动配置没生效 — 查 catalog 日志里的 `auto-CORS failed`(常见:AK/SK 无桶管理权限、`catalog.autoCors.enabled=false`、网关缺 `/api` 路由),按 02-deploy 4.3 的手动后备处理;看到 403 才是 AK/SK 数据权限问题 |
 | 网关重建换域名后一律 "Failed to fetch",curl 却全通 | Chrome 把旧域名时代的 CORS 头连文件一起缓存了;DevTools → 右键刷新按钮 → 清空缓存并硬性重新加载(或换无痕窗口) |
 | 视频区域黑屏、曲线正常 | 浏览器 VideoDecoder 需要 HTTPS 安全上下文;必须走网关域名访问,http + 裸 IP 不行 |
-| 办公网 curl 网关得到奇怪的 401/404/504 | 看响应头 `Server:`,`feilian-agw` = 飞连代答,请求没到服务;正常经 APIG 的响应是 `istio-envoy` |
+| curl 网关得到奇怪的 401/404/504 | 看响应头 `Server:`,不是 `istio-envoy` 就说明请求被中间的网络代理接管了,压根没到服务 |
 | 大数据集加载中页面崩溃 | wasm 内存上限(不足 4 GB);换 native viewer 会话 |
 | `/curation` 下静态资源/WS 全 404 | curator 镜像太旧,不支持子路径;换新镜像 |
 | `/curation` 全部 401,正确密码也进不去 | htpasswd 挂载坏了(鉴权 fail-closed 锁死);`kubectl -n $RERUN_NS logs dataverse-curation-0` 找 "没有可用账号" |
@@ -219,13 +221,14 @@ print(ds.schema())        # 能打印 schema = 注册成功
 - `bad token` / `invalid signature` — token 与 server 密钥不匹配,或已过期;
 - `not allowed for host` — 签发时 `--server-host` 没列当前连接的地址(port-forward 场景最常见,见 1.3)。
 
-server 侧对应日志:`kubectl -n $RERUN_NS logs rerun-cloud-0 -c catalog` 里的 `Token verification failed`。
+server 侧对应日志:`kubectl -n $RERUN_NS logs rerun-cloud-0 -c catalog` 里的 `Token verification failed`;
+启动那几行还会写明认证是否生效(`token authentication enabled` / `token authentication DISABLED`)。
 
-### 4.4 办公网连 catalog 失败
+### 4.4 受限网络连 catalog 失败
 
-catalog 常规路径是网关域名(TLS),办公网一般放行;若报 `transport error`:
+catalog 常规路径是网关域名(TLS),企业网络一般放行;若报 `transport error`:
 
-- 连的是 `rerun+https://<域名>:443` 吗?`rerun+http` 或裸 IP 都会被办公网(飞连)掐 —— 它拦"裸 IP + 明文 HTTP/2",且 `nc` 探端口是通的,极具迷惑性;
+- 连的是 `rerun+https://<域名>:443` 吗?`rerun+http` 或裸 IP 常被企业网络策略拦掉 —— 典型是拦"裸 IP + 明文 HTTP/2",且 `nc` 探端口是通的,极具迷惑性;
 - token 的 `--server-host` 是否包含所连的地址(错配是 `PermissionError`,不是 transport error);
 - 仍不通就按 1.4 的 port-forward 兜底(目标 `svc/rerun-cloud-headless`),token 须含 `127.0.0.1`。
 

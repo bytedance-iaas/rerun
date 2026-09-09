@@ -30,7 +30,7 @@ kubectl create namespace rerun
 kubectl -n rerun create secret generic dataverse-secrets \
     --from-literal=tos_access_key=<ak> \
     --from-literal=tos_secret_key=<sk> \
-    --from-literal=server_token_secret="$(rerun server generate-secret)" \
+    --from-literal=server_token_secret="$(openssl rand -base64 32)" \
     --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"   # prompts for the password
 ```
 
@@ -54,8 +54,9 @@ the deployment guide and the `rerun-native-session` chart's defaults assume. The
 the ReRun workload itself, which is always `rerun-cloud` — its pod is `rerun-cloud-0` and its disk
 `server-data-rerun-cloud-0` regardless of the release name.
 
-The keys the application Secret must carry are `tos_access_key`, `tos_secret_key`, and
-`web_htpasswd` whenever `web.basicAuth.enabled` (the viewer and the console share that one account
+The keys the application Secret must carry are `tos_access_key`, `tos_secret_key`,
+`server_token_secret` whenever `catalog.tokenAuth.enabled`, and `web_htpasswd` whenever
+`web.basicAuth.enabled` (the viewer and the console share that one account
 table). `hf_token` and `ark_api_key` are optional and read with `optional: true`, so leaving either
 out simply leaves the matching feature off. Both Secrets have to live in the release's namespace —
 Kubernetes does not let a pod reference a Secret from another one.
@@ -86,7 +87,7 @@ for one network does not work on the other; the signature covers the host.
 | `secrets.existingSecret` | **required** | One Secret for every credential; the chart renders no Secret of its own |
 | `tos.region` | `cn-beijing` | Both TOS endpoints are derived from it |
 | `web.basicAuth.enabled` | `true` | htpasswd table shared with the console |
-| `catalog.tokenAuth.enabled` | `true` | Signed catalog tokens |
+| `catalog.tokenAuth.enabled` | `true` | Signed catalog tokens; needs `server_token_secret` in the Secret |
 | `catalog.presignNetwork` | `public` | Where the reading clients are |
 | `catalog.storage` | `100Gi`, `ebs-essd` | Catalog database + file cache, kept on uninstall |
 | `curator.enabled` | `true` | `false` also drops the `/curation` route |

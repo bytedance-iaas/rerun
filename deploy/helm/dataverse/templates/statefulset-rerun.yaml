@@ -106,9 +106,16 @@ spec:
             - name: RERUN_AUTO_CORS_ORIGINS
               value: {{ join "," . | quote }}
             {{- end }}
-            # The token-signing secret deliberately skips the environment (env shows up in the
-            # process environment, visible to `kubectl exec env`): it is projected into /run/secrets
-            # as a 0400 file and the entrypoint discovers it there.
+            {{- if .Values.catalog.tokenAuth.enabled }}
+            # Only the PATH of the token-signing secret goes through the environment. The value
+            # deliberately does not: env is visible to `kubectl exec <pod> -- env`, and whoever
+            # reads it can sign a token with any permission. The Secret projects it into
+            # /run/secrets as a 0400 file instead.
+            # A Secret without the server_token_secret key fails the server at startup — loudly,
+            # rather than quietly serving an unauthenticated catalog.
+            - name: RERUN_SERVER_TOKEN_SECRET_FILE
+              value: /run/secrets/server_token_secret
+            {{- end }}
           ports:
             - containerPort: 51234
           readinessProbe:
