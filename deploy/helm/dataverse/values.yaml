@@ -66,21 +66,25 @@ tos:
 #    Secret from another one, so sharing credentials across namespaces means creating the same
 #    Secret name in each — the name is what is common, not the object.
 secrets:
-  # Every credential of the deployment, in one Secret. `rerun server generate-secret` prints the
-  # token signing key as plain text — store it like any other credential (paste into a console
-  # form, or an env var for the CLI flow):
+  # Every credential of the deployment, in one Secret. Nothing here needs a rerun binary to
+  # produce — the signing key is plain randomness, so the whole Secret can be created before the
+  # first install:
   #
   #   kubectl -n <namespace> create secret generic dataverse-secrets \
   #       --from-literal=tos_access_key=<ak> \
   #       --from-literal=tos_secret_key=<sk> \
-  #       --from-literal=server_token_secret="$(rerun server generate-secret)" \
+  #       --from-literal=server_token_secret="$(openssl rand -base64 32)" \
   #       --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"
   #
   # Keys, and what reads them:
   #   tos_access_key / tos_secret_key   REQUIRED — the viewer, the catalog and the console
   #   server_token_secret               REQUIRED when catalog.tokenAuth.enabled — the catalog's
-  #                                     token signing key (`rerun server generate-secret`).
-  #                                     Whoever holds it can sign a token with any permission
+  #                                     token signing key: 32 random bytes in base64, which is
+  #                                     exactly what `openssl rand -base64 32` prints and exactly
+  #                                     what `rerun server generate-secret` prints. The server only
+  #                                     ever verifies with it, so keep your own copy wherever you
+  #                                     sign tokens — whoever holds it can sign a token with any
+  #                                     permission
   #   web_htpasswd                      REQUIRED when web.basicAuth.enabled — one
   #                                     `username:password-hash` per line, in Apache htpasswd
   #                                     format (`openssl passwd -apr1` or `htpasswd -B`). The
@@ -120,6 +124,9 @@ catalog:
   # Signed tokens, verified against the secret above. Off means the catalog is wide open to anyone
   # who can reach it — private-network debugging only, and refused together with a public entry
   # point.
+  # On, the server_token_secret key of the Secret is what the server verifies with: it is passed in
+  # by path (RERUN_SERVER_TOKEN_SECRET_FILE), and a Secret missing that key fails the catalog
+  # container at startup instead of leaving it unauthenticated.
   tokenAuth:
     enabled: true
 

@@ -50,13 +50,12 @@ vLLM:     {{ include "dataverse.fullname" . }}-vllm (1 GPU x {{ .Values.vllm.gpu
 {{- end }}
 {{- if .Values.catalog.tokenAuth.enabled }}
 
-Issuing a catalog token. It is signed inside the catalog container, so the secret never leaves the
-cluster — which also means whoever can exec into that pod can sign one:
+Issuing a catalog token. Signed with the same server_token_secret the Secret carries, wherever you
+keep your own copy of it — the `rerun` binary ships inside the SDK wheel this deployment serves:
 
-  kubectl -n {{ .Release.Namespace }} exec {{ include "dataverse.rerunName" . }}-0 -c catalog -- sh -c \
-      "rerun server generate-token --secret \"\$(cat /run/secrets/server_token_secret)\" \
-          --user <name> --permission read --expiration 90d \
-          --server-host <gateway domain> --server-host {{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local"
+  rerun server generate-token --secret <your server_token_secret> \
+      --user <name> --permission read --expiration 90d \
+      --server-host <gateway domain> --server-host {{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local
 {{- end }}
 
 In-cluster access, which never leaves the private network:
