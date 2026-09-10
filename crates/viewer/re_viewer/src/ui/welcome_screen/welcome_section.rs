@@ -4,7 +4,10 @@ use re_ui::DesignTokens;
 pub(super) const DOCS_URL: &str = "https://www.rerun.io/docs";
 
 pub(super) fn welcome_screen_title() -> &'static str {
-    tr("Rerun: The data layer for VePAI", "Rerun: VePAI的数据底座")
+    tr(
+        "Rerun: The data layer for Physical AI Kit",
+        "Rerun: Physical AI Kit 的数据底座",
+    )
 }
 
 pub(super) fn welcome_screen_bullet_text() -> [&'static str; 3] {
