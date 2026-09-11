@@ -87,6 +87,16 @@ spec:
                 secretKeyRef:
                   name: {{ include "dataverse.viewerSecretName" . }}
                   key: tos_secret_key
+            # The session token of STS temporary credentials, which only authenticate as a triple:
+            # an STS AK/SK sent without it is rejected as InvalidAccessKeyId — which reads like a
+            # permission problem but is not one. `optional`, because a long-term AK/SK pair has no
+            # token and the pod must not fail for lacking one.
+            - name: TOS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dataverse.viewerSecretName" . }}
+                  key: tos_session_token
+                  optional: true
             - name: TOS_ENDPOINT
               value: {{ include "dataverse.tos.endpointInternal" . | quote }}
             # Volcengine Ark VLM backend. The key comes from the Secret — `optional` keeps the pod
