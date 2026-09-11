@@ -109,6 +109,11 @@ echo "$SERVER_TOKEN_SECRET"   # 抄走存好,后面不会再打印
 # - ark_api_key:质检台走火山方舟 VLM 后端用的 key(配套 base url 是普通配置,
 #   在 2.3 的 curator.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行。
 # - 访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>。
+# - AK/SK 若是 STS 临时凭证(不是长期 AK/SK),必须再加
+#   --from-literal=tos_session_token=<SessionToken>:三者须同一次签发、未过期,缺了 token
+#   TOS 会报 InvalidAccessKeyId(看着像权限问题,其实不是)。⚠️ 目前只有质检台读它;
+#   web viewer、catalog 和 native 会话只用 AK/SK 签名,用 STS 凭证时这三者访问不了 TOS,
+#   仍需长期 AK/SK。临时凭证过期后三个 key 要一起换,再重启。
 kubectl -n $DATAVERSE_NS create secret generic dataverse-secrets \
     --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
     --from-literal=tos_secret_key="$TOS_SECRET_KEY" \

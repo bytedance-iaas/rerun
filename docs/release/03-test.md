@@ -200,6 +200,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 | catalog 容器起不来,日志是 `failed to read --token-secret-file` | Secret 里缺 `server_token_secret`(`catalog.tokenAuth.enabled=true` 时必须有)。补上这个 key 再 `kubectl rollout restart statefulset rerun-cloud`;这是有意的 fail-closed,不会退化成不校验 token |
 | 质检跑批开头就报「缺少 TOS 凭证」 | curation 容器没拿到 `TOS_ACCESS_KEY/TOS_SECRET_KEY`:确认 `secrets.existingSecret` 指的 Secret 里有 `tos_access_key/tos_secret_key` 两个 key |
 | 质检下载阶段报桶/前缀不存在或无权限 | 界面填的 tos:// 路径写错,或部署那对 AK/SK 对该桶没有权限(质检台能访问哪些桶完全由这对密钥决定) |
+| 质检报 `InvalidAccessKeyId`,界面同时提示密钥没有桶权限 | 先确认用的是不是 STS 临时凭证:是的话 Secret 里必须同时有 `tos_session_token`,且三者同一次签发、未过期;补上后 `kubectl rollout restart statefulset dataverse-curation`。这个报错不代表真的缺桶权限 |
 
 ### 4.2 浏览器侧
 
