@@ -57,9 +57,15 @@ the ReRun workload itself, which is always `rerun-cloud` — its pod is `rerun-c
 The keys the application Secret must carry are `tos_access_key`, `tos_secret_key`,
 `server_token_secret` whenever `catalog.tokenAuth.enabled`, and `web_htpasswd` whenever
 `web.basicAuth.enabled` (the viewer and the console share that one account
-table). `hf_token` and `ark_api_key` are optional and read with `optional: true`, so leaving either
-out simply leaves the matching feature off. Both Secrets have to live in the release's namespace —
-Kubernetes does not let a pod reference a Secret from another one.
+table). `hf_token`, `ark_api_key` and `tos_session_token` are optional and read with
+`optional: true`, so leaving any of them out simply leaves the matching feature off. Both Secrets
+have to live in the release's namespace — Kubernetes does not let a pod reference a Secret from
+another one.
+
+`tos_session_token` is for STS temporary credentials, which only authenticate as an AK/SK/token
+triple — without the token TOS rejects the pair as `InvalidAccessKeyId`. Only the curation console
+reads it: the viewer, the catalog and native sessions sign with the AK/SK alone, so they still need
+a long-term pair.
 
 ## One region, not four endpoints
 
