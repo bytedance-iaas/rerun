@@ -90,6 +90,15 @@ secrets:
   #                                     format (`openssl passwd -apr1` or `htpasswd -B`). The
   #                                     viewer and the console share this one table: same domain,
   #                                     so one login opens both
+  #   tos_session_token                 optional — the session token, when tos_access_key /
+  #                                     tos_secret_key are STS temporary credentials rather than a
+  #                                     long-term pair. STS only authenticates as a triple from the
+  #                                     same issue, unexpired; without the token TOS answers
+  #                                     InvalidAccessKeyId. ⚠️ Only the console reads it: the
+  #                                     viewer, the catalog and native sessions sign with the AK/SK
+  #                                     alone, so on STS credentials those cannot reach TOS — they
+  #                                     still need a long-term pair. STS credentials also expire:
+  #                                     replace all three keys together, then restart
   #   hf_token                          optional — only for private HuggingFace datasets
   #   ark_api_key                       optional — the console's Volcengine Ark VLM backend. The
   #                                     matching base url is not a secret, see curator.arkBaseUrl
