@@ -26,6 +26,10 @@ spec:
     metadata:
       labels:
         {{- include "dataverse.selectorLabels" (dict "root" . "component" "rerun") | nindent 8 }}
+      {{- with (include "dataverse.vciAnnotations" .) }}
+      annotations:
+        {{- . | nindent 8 }}
+      {{- end }}
     spec:
       # Secrets are mounted at /run/secrets; SA-token automounting is off so it cannot collide with
       # the read-only secret volume.

@@ -21,6 +21,28 @@ name, while the curation console and the gateway stay `dataverse-*`.
 rerun-cloud
 {{- end -}}
 
+{{/*
+Pod annotations that move a workload onto VCI, or nothing at all when vci.enabled is false.
+
+Two annotations, and both are required. `burst-to-vci` is what the platform's admission webhook
+looks for — note it is an ANNOTATION: written as a label it is accepted, ignored, and the pod
+quietly lands on an ordinary node. `preferred-instance-family` has no default for the shapes this
+chart asks for: the platform's own default family, vci.u1, has no large size and the pod stays
+Pending with InvalidParameter.InstanceTypeMismatch.
+
+No nodeSelector or toleration here on purpose. The webhook adds both, and adding our own
+nodeSelector would override the one it injects — which then also means supplying the virtual
+nodes' taint toleration by hand. Leaving scheduling to the webhook is also what lets the catalog's
+existing EBS volume pick its own availability zone: the virtual nodes carry topology labels, so the
+scheduler matches the volume to the virtual node in its zone without being told.
+*/}}
+{{- define "dataverse.vciAnnotations" -}}
+{{- if .Values.vci.enabled -}}
+vke.volcengine.com/burst-to-vci: enforce
+vci.vke.volcengine.com/preferred-instance-family: {{ required "vci.instanceFamily is required when vci.enabled — see values.yaml" .Values.vci.instanceFamily | quote }}
+{{- end -}}
+{{- end -}}
+
 {{/* Labels shared by every object */}}
 {{- define "dataverse.labels" -}}
 app.kubernetes.io/name: {{ .Chart.Name }}

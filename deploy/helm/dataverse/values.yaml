@@ -248,6 +248,36 @@ curator:
     requests: { cpu: "16", memory: 128Gi, ephemeral-storage: 50Gi }
     limits:   { cpu: "32", memory: 256Gi, ephemeral-storage: 200Gi }
 
+# Run this deployment's workloads on VCI (Volcengine Container Instance) instead of the cluster's
+# own nodes: `enabled: true` puts BOTH the ReRun pod and the curation console on serverless
+# instances, billed per second, without touching the node pool.
+#
+# It needs the `vci-virtual-kubelet` addon on the cluster. Without it the annotation is inert —
+# the pods schedule onto ordinary nodes and nothing reports a problem — so check
+# `kubectl get nodes -l type=virtual-kubelet` before assuming a release landed on VCI. Afterwards,
+# the pod's own `vci.vke.volcengine.com/used-instance-types` annotation is what says where it ran.
+#
+# ⚠️ VCI sizes the instance from `limits`, not `requests`, and bills that. curator.resources asks
+#    for 16 CPU but limits 32, so on VCI the console costs a 32-core instance the whole time it is
+#    up. Size the limits before turning this on.
+# ⚠️ A VCI instance's root filesystem is a fixed 40 GiB and `ephemeral-storage` limits are silently
+#    ignored there. Both /data (the console's cache and staging) and /rrd-cache are emptyDirs, so
+#    they live on those 40 GiB — and the console's size precheck, which reads its 200Gi limit
+#    through the downward API, will believe it has far more room than it does. Raising the root
+#    disk needs Volcengine to enable CustomizedSystemStorage for the account.
+# The catalog's /server-data is a real EBS volume and is unaffected: cloud disks attach to VCI
+# instances normally. The existing volume is pinned to one availability zone, and the scheduler
+# matches it against the virtual node of that zone on its own.
+vci:
+  enabled: false
+
+  # The VCI spec family. `vci.n3a` (AMD EPYC Genoa) is the default because it is the one that
+  # covers large shapes — the platform default, `vci.u1`, has no 32-core/256Gi size at all and
+  # fails the pod with InvalidParameter.InstanceTypeMismatch rather than picking something else.
+  # Families are per-account and per-availability-zone: a family with no quota fails with
+  # ExceededQuota.Instance, which is a quota ticket, not a retry.
+  instanceFamily: vci.n3a
+
 # An optional self-hosted vLLM for the console's model-based checks, as a separate Deployment in
 # the same namespace. OFF by default: it needs a GPU, and the console works without it.
 # Turning it on also registers the endpoint in the console's backend list automatically (under the
