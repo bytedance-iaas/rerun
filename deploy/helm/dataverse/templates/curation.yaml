@@ -33,6 +33,9 @@ spec:
         # Rolls the pod when the site configuration changes. Secret contents are invisible to the
         # chart, so rotated credentials need `kubectl rollout restart` instead.
         checksum/site-config: {{ include (print $.Template.BasePath "/configmap-curation.yaml") . | sha256sum }}
+        {{- with (include "dataverse.vciAnnotations" .) }}
+        {{- . | nindent 8 }}
+        {{- end }}
     spec:
       automountServiceAccountToken: false
       containers:
@@ -116,10 +119,16 @@ spec:
             # task state.
             - name: CURATION_TOS_CACHE
               value: /data/tos-cache
-            {{- if hasKey ((.Values.curator.resources).limits | default dict) "ephemeral-storage" }}
+            {{- if and (not .Values.vci.enabled) (hasKey ((.Values.curator.resources).limits | default dict) "ephemeral-storage") }}
             # The container's storage limit, through the downward API: the size precheck uses it to
             # work out how much can still be written safely, so a large dataset cannot write the pod
             # into a kubelet eviction.
+            # Left out on VCI, and it has to be: a VCI instance rejects a resourceFieldRef on
+            # limits.ephemeral-storage outright — the pod never starts, with
+            # `ProviderCreateFailed: Can't support resource field: limits.ephemeral-storage`.
+            # Dropping it is also the honest answer there. A VCI instance ignores the limit itself
+            # and gives every pod the same fixed 40 GiB root disk, so injecting 200Gi would have the
+            # precheck clear datasets five times larger than the disk can hold.
             - name: CURATION_EPHEMERAL_LIMIT_BYTES
               valueFrom:
                 resourceFieldRef:
