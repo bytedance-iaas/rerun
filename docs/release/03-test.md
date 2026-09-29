@@ -94,8 +94,9 @@ curl -s https://$GW_DOMAIN/version                                     # 预期�
 
 ```python
 import rerun as rr
+
 client = rr.catalog.CatalogClient("rerun+https://<网关域名>:443", token="<读写 token>")
-print([d.name for d in client.datasets()])   # 预期:正常返回(首次为空列表)
+print([d.name for d in client.datasets()])  # 预期:正常返回(首次为空列表)
 ```
 
 **2.8 native 会话**:按 02-deploy 第 6 节开一个会话,`https://<会话域名>/vnc.html?autoconnect=true&resize=remote` 输会话密码后进入远程桌面,测完删除。
@@ -139,11 +140,12 @@ print([d.name for d in client.datasets()])   # 预期:正常返回(首次为空�
 
 ```python
 import rerun as rr
+
 client = rr.catalog.CatalogClient("rerun+http://<地址>:51234", token="<读写 token>")
 ds = client.create_dataset("smoke-test", exist_ok=True)
-task = ds.register(["tos://<桶>/<路径>/<某个>.rrd"])   # 参数必须是列表;整目录用 register_prefix
+task = ds.register(["tos://<桶>/<路径>/<某个>.rrd"])  # 参数必须是列表;整目录用 register_prefix
 task.wait(timeout_secs=60)
-print(ds.schema())        # 能打印 schema = 注册成功
+print(ds.schema())  # 能打印 schema = 注册成功
 ```
 
 - 上述脚本 → **注册成功,`client.datasets()` 里能看到 `smoke-test`**。
@@ -155,7 +157,7 @@ print(ds.schema())        # 能打印 schema = 注册成功
 
   ```python
   seg = ds.segment_ids()[0]
-  lazy = ds.segment_store(seg, direct="presigned")   # server 签限时 URL,客户端免 key
+  lazy = ds.segment_store(seg, direct="presigned")  # server 签限时 URL,客户端免 key
   store = lazy.stream().collect()
   print(f"读取 {lazy._chunks_loaded}/{len(lazy)} 个 chunk")
   ```

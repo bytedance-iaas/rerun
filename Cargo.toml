@@ -351,9 +351,7 @@ opentelemetry-otlp = { version = "0.32.0", default-features = false, features = 
 ] }
 opentelemetry-proto = { version = "0.32.0", default-features = false }
 opentelemetry_sdk = { version = "0.32.1", features = ["rt-tokio"] }
-object_store = { version = "0.13", default-features = false, features = [
-  "aws",
-] }
+object_store = { version = "0.13", default-features = false, features = ["aws"] }
 ordered-float = "5.3"
 parking_lot = { version = "0.12.5", features = ["serde"] }
 parquet = { version = "58.3", default-features = false }

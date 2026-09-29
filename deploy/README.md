@@ -41,7 +41,7 @@ open http://127.0.0.1:9091     # web viewer
 open "http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=remote"   # native session
 ```
 
-## SDK wheels (from GitHub Actions, via TOS)
+## SDK wheels (from GitHub Actions, via TOS) <!-- NOLINT: proper names -->
 
 The image serves the Python SDK wheels at nginx `/downloads/sdk/`, viewer bundled inside each wheel — `pip install` it and `rerun` is on PATH.
 The image does **not** build any wheel itself. All platforms (Linux x64/arm64, macOS arm64, Windows x64) are built by the GitHub Actions workflow `.github/workflows/build_binary_and_wheels.yml`, uploaded to a **public-read TOS bucket**, and the Dockerfile only downloads them at build time. Two reasons over building in-image: the Actions Linux wheel is zig-linked against glibc 2.28 (`manylinux_2_28`), so it installs on much older distros than a wheel built in the bookworm container (glibc 2.36) — and the image build gets simpler and faster.
@@ -154,4 +154,12 @@ Two more optional secrets gate access to the browser-facing modes (see the auth 
 - `web_htpasswd` (htpasswd format) — enables nginx Basic auth for the whole web mode, including `/config.json`. Without it the site (and the default credentials) is readable by anyone who can reach it — fine locally, not on a public address. `/healthz` stays open for probes.
 - `session_password` / `SESSION_PASSWORD` env — enables the VNC password prompt on native sessions.
 
-With Basic auth on, `/config.json` is only readable by authenticated users; the endgame (server-side URL pre-signing, so browsers never hold AK/SK at all) is a later phase.
+With Basic auth on, `/config.json` is only readable by authenticated users; the endgame (server-side URL pre-signing, so browsers never hold AK/SK at all) is under way, see below.
+
+Datasets opened from the curation console's "Visualize" link (`tos://bucket/prefix/name/?region=…&curator_dataset=ds-…`) do not use the deployment keys at all.
+Before every object read or listing page, the web viewer asks the console for a short-lived presigned URL (`POST /curation/api/v1/datasets/<id>/sign`, same origin, on the browser's Basic-auth login) and fetches that URL from TOS directly.
+The console signs with the access key bound to its dataset registration, only reads, and only under the dataset's prefix, so the browser never holds that AK/SK (Curator design doc 15, decision D55).
+Share links, the welcome screen's recents and session restore keep the `curator_dataset` id, so re-opening asks the console again.
+The native viewer ignores the id and keeps using its own keys.
+`CURATOR_SIGN_TTL` (seconds, optional, `config.json` key `curator_sign_ttl`) shortens the URLs' lifetime from the default 30 minutes; set it to 60 to watch re-signing in the Network tab.
+The deployment keys still serve the open dialog, the rrd cache and the catalog; dropping them from `/config.json` is a later phase.

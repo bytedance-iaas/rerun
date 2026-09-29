@@ -528,11 +528,20 @@ impl App {
                 self.load_data_source(store_hub, egui_ctx, &data_source);
             }
 
-            SystemCommand::LoadTosDataset { location, region } => {
+            SystemCommand::LoadTosDataset {
+                location,
+                region,
+                curator_dataset,
+            } => {
                 // Credentials come from the deployment/user config, whose fetch may still be
                 // in flight — queue the open, `process_pending_tos_opens` finishes it.
                 crate::viewer_config::request();
-                self.pending_tos_opens.push((location, region));
+                self.pending_tos_opens
+                    .push(super::session_restore::PendingTosOpen {
+                        location,
+                        region,
+                        curator_dataset,
+                    });
                 // The user asked for this dataset explicitly; don't also bring back the
                 // previous session on top of it.
                 self.session_restore_attempted = true;

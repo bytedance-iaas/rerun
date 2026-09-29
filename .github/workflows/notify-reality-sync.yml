@@ -11,6 +11,8 @@ on:
 
 jobs:
   notify-reality:
+    # Needs rerun-io's sync app: skip on forks, where the secret does not exist.
+    if: github.repository_owner == 'rerun-io'
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub App token

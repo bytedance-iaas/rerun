@@ -93,6 +93,48 @@ pub fn endpoint_for_region(region: &str, deployment_endpoint: &str) -> String {
     format!("https://tos-s3-{region}.volces.com")
 }
 
+/// How a [`TosClient`] gets access to a bucket.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TosAccess {
+    /// Sign every request locally with an access key: the native viewer, the "Open from
+    /// Volcengine TOS" dialog, the rrd artifacts store.
+    Keys(TosCredentials),
+
+    /// Ask the Curator console to presign each read (web viewer only, read-only): a dataset
+    /// registered there, opened from its "Visualize" link. See [`super::curator`].
+    CuratorDataset(super::curator::CuratorDatasetAccess),
+}
+
+impl From<TosCredentials> for TosAccess {
+    fn from(credentials: TosCredentials) -> Self {
+        Self::Keys(credentials)
+    }
+}
+
+impl TosAccess {
+    /// The endpoint the bucket is addressed through (for a console-signed dataset: only the
+    /// region's, the URLs come from the console).
+    pub fn endpoint(&self) -> &str {
+        match self {
+            Self::Keys(credentials) => &credentials.endpoint,
+            Self::CuratorDataset(access) => &access.endpoint,
+        }
+    }
+
+    /// The bucket's region.
+    pub fn region(&self) -> String {
+        region_from_endpoint(self.endpoint())
+    }
+
+    /// The console registration behind this access, if any.
+    pub fn curator_dataset_id(&self) -> Option<&str> {
+        match self {
+            Self::Keys(_) => None,
+            Self::CuratorDataset(access) => Some(&access.dataset_id),
+        }
+    }
+}
+
 /// See [`TosCredentials::region`].
 pub fn region_from_endpoint(endpoint: &str) -> String {
     let host = endpoint
@@ -155,15 +197,19 @@ pub struct ObjectHead {
 }
 
 pub struct TosClient {
-    credentials: TosCredentials,
+    access: TosAccess,
     bucket: String,
+
+    /// Console-signed URLs, reused across byte ranges and retries ([`TosAccess::CuratorDataset`]).
+    presigned: super::curator::UrlCache,
 }
 
 impl TosClient {
-    pub fn new(credentials: TosCredentials, bucket: impl Into<String>) -> Self {
+    pub fn new(access: impl Into<TosAccess>, bucket: impl Into<String>) -> Self {
         Self {
-            credentials,
+            access: access.into(),
             bucket: bucket.into(),
+            presigned: Default::default(),
         }
     }
 
@@ -238,8 +284,8 @@ impl TosClient {
     /// Virtual-hosted-style host for the bucket, e.g. `bucket.tos-s3-cn-beijing.volces.com`.
     fn host(&self) -> String {
         let endpoint_host = self
-            .credentials
-            .endpoint
+            .access
+            .endpoint()
             .trim_start_matches("https://")
             .trim_start_matches("http://")
             .trim_end_matches('/');
@@ -247,7 +293,7 @@ impl TosClient {
     }
 
     fn scheme(&self) -> &str {
-        if self.credentials.endpoint.starts_with("http://") {
+        if self.access.endpoint().starts_with("http://") {
             "http"
         } else {
             "https"
@@ -634,15 +680,18 @@ impl TosClient {
         }
         drop(uploads);
 
-        let manifest: String = std::iter::once("<CompleteMultipartUpload>".to_owned())
-            .chain(etags.iter().enumerate().map(|(i, etag)| {
+        let manifest: String = itertools::chain!(
+            std::iter::once("<CompleteMultipartUpload>".to_owned()),
+            etags.iter().enumerate().map(|(i, etag)| {
                 format!(
-                    "<Part><PartNumber>{}</PartNumber><ETag>\"{etag}\"</ETag></Part>",
+                    // The quotes belong to the XML ETag value; this is not a debug print.
+                    "<Part><PartNumber>{}</PartNumber><ETag>\"{etag}\"</ETag></Part>", // NOLINT
                     i + 1
                 )
-            }))
-            .chain(std::iter::once("</CompleteMultipartUpload>".to_owned()))
-            .collect();
+            }),
+            std::iter::once("</CompleteMultipartUpload>".to_owned()),
+        )
+        .collect();
 
         let response = self
             .signed_request(
@@ -719,7 +768,8 @@ impl TosClient {
         Ok(())
     }
 
-    /// Fire a SigV4-signed request with an overall hard deadline.
+    /// Fire a signed request with an overall hard deadline: SigV4-signed here with the
+    /// access key, or presigned by the Curator console ([`TosAccess`]).
     async fn signed_request(
         &self,
         method: &str,               // "GET", "HEAD", "PUT", "POST" or "DELETE"
@@ -733,8 +783,117 @@ impl TosClient {
         // the signature is — so before the first request of the session to this bucket, ask
         // the catalog server (same-origin, exempt from CORS) to install the rule.
         #[cfg(target_arch = "wasm32")]
-        super::cors::ensure_cors_via_server_once(&self.bucket, &self.credentials.region()).await;
+        super::cors::ensure_cors_via_server_once(&self.bucket, &self.access.region()).await;
 
+        match &self.access {
+            TosAccess::Keys(credentials) => {
+                self.key_signed_request(
+                    credentials,
+                    method,
+                    path,
+                    query,
+                    extra_headers,
+                    body,
+                    hard_timeout,
+                )
+                .await
+            }
+            TosAccess::CuratorDataset(access) => {
+                self.console_signed_request(
+                    access,
+                    method,
+                    path,
+                    query,
+                    extra_headers,
+                    body,
+                    hard_timeout,
+                )
+                .await
+            }
+        }
+    }
+
+    /// A read presigned by the Curator console: ask for the URL (or reuse a cached one), then
+    /// fetch it as is. TOS answering 403 gets one fresh signature and one retry — the URL may
+    /// have expired early, or the key behind the registration changed.
+    #[expect(clippy::too_many_arguments)]
+    async fn console_signed_request(
+        &self,
+        access: &super::curator::CuratorDatasetAccess,
+        method: &str,
+        path: &str,
+        query: &[(String, String)],
+        extra_headers: Vec<(String, String)>,
+        body: Vec<u8>,
+        hard_timeout: std::time::Duration,
+    ) -> anyhow::Result<ehttp::Response> {
+        use super::curator::{SignOp, now_ms, presign, without_query};
+
+        let op = SignOp::from_request(method, path, query, &body)?;
+        // Only headers outside the signature may go along; the URL signs `host` alone.
+        if let Some((name, _)) = extra_headers.iter().find(|(name, _)| name != "range") {
+            anyhow::bail!(trf!(
+                "Header {name} is not available for a dataset opened from the curation console",
+                "从质检台打开的数据集不支持请求头 {name}"
+            ));
+        }
+        let cache_key = op.cache_key();
+
+        let mut signed_again = false;
+        loop {
+            let url = if let Some(url) = self.presigned.get(&cache_key, now_ms(), access.sign_ttl_s)
+            {
+                url
+            } else {
+                let (url, expires_at) = presign(access, &op).await?;
+                self.presigned
+                    .put(cache_key.clone(), url.clone(), expires_at, now_ms());
+                url
+            };
+
+            // The URL is used exactly as signed: re-encoding it would break the signature.
+            let mut request = ehttp::Request::get(&url);
+            for (name, value) in &extra_headers {
+                request.headers.insert(name, value);
+            }
+            // Browser only: see the same header in `key_signed_request`.
+            #[cfg(target_arch = "wasm32")]
+            request.headers.insert("cache-control", "no-cache");
+
+            let response = crate::http_client::fetch_async_with_timeout(request, hard_timeout)
+                .await
+                .map_err(|err| {
+                    anyhow::anyhow!(trf!(
+                        "Request failed: {err}\nUrl: {}",
+                        "请求失败：{err}\nURL：{}",
+                        without_query(&url)
+                    ))
+                })?;
+            if response.status == 403 && !signed_again {
+                re_log::debug!(
+                    "TOS refused a console-signed URL (HTTP 403) — signing again\nUrl: {}",
+                    without_query(&url)
+                );
+                self.presigned.forget(&cache_key);
+                signed_again = true;
+                continue;
+            }
+            return Ok(response);
+        }
+    }
+
+    /// Fire a SigV4-signed request, signed here with the access key.
+    #[expect(clippy::too_many_arguments)]
+    async fn key_signed_request(
+        &self,
+        credentials: &TosCredentials,
+        method: &str,
+        path: &str,
+        query: &[(String, String)],
+        extra_headers: Vec<(String, String)>,
+        body: Vec<u8>,
+        hard_timeout: std::time::Duration,
+    ) -> anyhow::Result<ehttp::Response> {
         let host = self.host();
         let (amz_date, date) = amz_timestamps();
 
@@ -774,7 +933,7 @@ impl TosClient {
             uri_encode(path, false),
         );
 
-        let region = &self.credentials.region();
+        let region = &credentials.region();
         let scope = format!("{date}/{region}/s3/aws4_request");
         let string_to_sign = format!(
             "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
@@ -782,7 +941,7 @@ impl TosClient {
         );
 
         let k_date = hmac(
-            format!("AWS4{}", self.credentials.secret_key).as_bytes(),
+            format!("AWS4{}", credentials.secret_key).as_bytes(),
             date.as_bytes(),
         );
         let k_region = hmac(&k_date, region.as_bytes());
@@ -792,7 +951,7 @@ impl TosClient {
 
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={}/{scope},SignedHeaders={signed_headers},Signature={signature}",
-            self.credentials.access_key
+            credentials.access_key
         );
 
         let url = if canonical_query.is_empty() {

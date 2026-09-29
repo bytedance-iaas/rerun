@@ -1,4 +1,5 @@
 use re_i18n::trf;
+
 /// Asynchronously loads RRD data streaming in from standard input.
 ///
 /// This fails synchronously iff the standard input stream could not be opened, otherwise errors

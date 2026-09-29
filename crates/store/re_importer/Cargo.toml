@@ -43,7 +43,6 @@ re_tracing.workspace = true
 ahash.workspace = true
 anyhow.workspace = true
 arrow.workspace = true
-bytes.workspace = true
 memmap2.workspace = true
 crossbeam.workspace = true
 image.workspace = true

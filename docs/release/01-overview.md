@@ -1,6 +1,6 @@
 # 产品概述
 
-## 1. 底座:开源 rerun 项目
+## 1. 底座:开源 Rerun 项目
 
 本产品构建在开源机器人/具身智能领域的多模态数据可视化工具项目 [rerun](https://rerun.io)(GitHub: [rerun-io/rerun](https://github.com/rerun-io/rerun),MIT / Apache-2.0 双许可)之上。
 
@@ -30,7 +30,7 @@
 
 整套服务部署在一个 Kubernetes namespace(`rerun`)中,共四个组件。
 
-### 3.1 Web viewer(常驻)
+### 3.1 web viewer(常驻)
 
 浏览器中使用的可视化界面,本体是编译成 wasm 的 rerun viewer,由 nginx 容器托管。
 
@@ -40,7 +40,7 @@
 - 数据集打开后提供 **「质检」(Diagnose)按钮**,跳转质检台并自动带上数据集名(见 5.2)。
 - 数据集超出浏览器内存限制时,viewer 会提示改用 native viewer(见 3.4)。
 
-### 3.2 Catalog server(常驻,与 web viewer 同一个 pod)
+### 3.2 catalog server(常驻,与 web viewer 同一个 pod)
 
 数据集的注册目录和训练取数入口,gRPC 服务,端口 51234。
 
@@ -60,7 +60,7 @@
   绑定任何桶;跑批先落本地缓存,交付按「完整性标志最后传」的协议整树上传。
 - 与 rerun 是两个独立的工作负载:质检是批处理任务,与交互式 viewer 分开部署互不影响,升级 viewer 不会中断质检任务。
 
-### 3.4 Native viewer(按需)
+### 3.4 native viewer(按需)
 
 web viewer 以 wasm 形式运行在浏览器中,受 wasm 运行环境限制:32 位地址空间,可用内存不足 4 GB,GB 级数据集打不开。
 native viewer 是原生进程,没有这些限制,可用内存只取决于所在机器。

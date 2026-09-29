@@ -41,6 +41,11 @@ pub struct ViewerConfig {
     /// in the native viewer (the web viewer uses its own page address instead).
     /// Absent = links carry the `https://web_viewer_dns/` placeholder to fill in by hand.
     pub web_viewer_url: String,
+
+    /// Lifetime (seconds, 60–3600) asked for each URL the curation console presigns for a
+    /// dataset opened from its "Visualize" link. `0` (or absent) = 30 minutes; set it to 60
+    /// to watch re-signing happen.
+    pub curator_sign_ttl: u32,
 }
 
 impl Default for ViewerConfig {
@@ -56,6 +61,7 @@ impl Default for ViewerConfig {
             rrd_artifacts_prefetch: 0,
             daft_url: String::new(),
             web_viewer_url: String::new(),
+            curator_sign_ttl: 0,
         }
     }
 }
@@ -63,6 +69,37 @@ impl Default for ViewerConfig {
 impl ViewerConfig {
     pub fn has_tos_credentials(&self) -> bool {
         !self.tos_access_key.is_empty() && !self.tos_secret_key.is_empty()
+    }
+
+    /// Access to a dataset registered in the curation console, every read presigned by the
+    /// console with the key bound to the registration — no key in the viewer.
+    ///
+    /// `None` when that is not possible: natively (the signing request rides on the
+    /// console's same-origin login, which only the web viewer has), or when `daft_url` puts
+    /// the console on another origin (it refuses cross-site requests). The caller then
+    /// opens the dataset the old way.
+    pub fn curator_access(
+        &self,
+        region: &str,
+        dataset_id: &str,
+    ) -> Option<re_data_source::tos::TosAccess> {
+        use re_data_source::tos::curator::DEFAULT_SIGN_TTL_S;
+
+        let api_base = curator_api_base()?;
+        let sign_ttl_s = if self.curator_sign_ttl == 0 {
+            DEFAULT_SIGN_TTL_S
+        } else {
+            self.curator_sign_ttl.clamp(60, 3600)
+        };
+        Some(re_data_source::tos::TosAccess::CuratorDataset(
+            re_data_source::tos::CuratorDatasetAccess {
+                // Only the region matters here: the console decides where the URLs point.
+                endpoint: re_data_source::tos::endpoint_for_region(region, &self.tos_endpoint),
+                dataset_id: dataset_id.to_owned(),
+                api_base,
+                sign_ttl_s,
+            },
+        ))
     }
 
     /// The resolved rrd-artifacts target — `None` when disabled or without TOS credentials.
@@ -91,6 +128,38 @@ impl ViewerConfig {
             prefetch_items: self.rrd_artifacts_prefetch,
         })
     }
+}
+
+/// The curation console's REST base (`/curation/api/v1`), when the console is on the web
+/// viewer's own origin; see [`ViewerConfig::curator_access`].
+fn curator_api_base() -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let base = re_viewer_context::daft_link::base_url()?;
+        let same_origin = if base.starts_with('/') && !base.starts_with("//") {
+            true
+        } else {
+            let page = re_web::browser::current_page_url().ok()?;
+            let origin = |url: &str| {
+                url::Url::parse(url)
+                    .ok()
+                    .map(|url| url.origin().ascii_serialization())
+            };
+            origin(&base).is_some() && origin(&base) == origin(&page)
+        };
+        if same_origin {
+            Some(format!("{base}/api/v1"))
+        } else {
+            re_log::warn_once!(
+                "The curation console ({base}, `daft_url` in config.json) is on another origin, \
+                 so it cannot sign reads for this viewer — datasets from its \"Visualize\" links \
+                 open with this deployment's own settings instead."
+            );
+            None
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    None
 }
 
 static CONFIG: Mutex<Option<ViewerConfig>> = Mutex::new(None);

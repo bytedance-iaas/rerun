@@ -41,8 +41,11 @@ web)
         printf '%s\n' "$WEB_HTPASSWD_VALUE" > /run/htpasswd
         chmod 640 /run/htpasswd
         chown root:www-data /run/htpasswd
+        # Same realm as the curation console, which checks the same htpasswd: browsers keep
+        # Basic credentials per realm, so a login on either one then carries over to the
+        # other (the console's "Visualize" link opens the viewer in a new tab).
         cat > /run/nginx-auth.conf <<'AUTH'
-auth_basic "rerun";
+auth_basic "Robot Data Curation";
 auth_basic_user_file /run/htpasswd;
 AUTH
         echo "web: Basic auth enabled"
@@ -57,6 +60,15 @@ AUTH
     require_env TOS_ENDPOINT
     require_env TOS_RRD_ARTIFACTS_URL
     require_env RRD_ARTIFACTS_PREFETCH
+    # Optional: lifetime (seconds) of the URLs the curation console presigns for datasets
+    # opened from its "Visualize" link; 0 = the viewer's default (30 minutes).
+    CURATOR_SIGN_TTL="${CURATOR_SIGN_TTL:-0}"
+    case "$CURATOR_SIGN_TTL" in
+    '' | *[!0-9]*)
+        echo "entrypoint: CURATOR_SIGN_TTL must be a number of seconds, got '$CURATOR_SIGN_TTL'" >&2
+        exit 1
+        ;;
+    esac
 
     # tos_access_key/tos_secret_key/hf_token are the server-side defaults for the browser dialogs
     # (used unless the user opts into "Use non-default AK/SK"). No daft_url: the viewer derives the
@@ -72,7 +84,8 @@ AUTH
   "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL}",
   "tos_rrd_artifacts_region": "${TOS_RRD_ARTIFACTS_REGION:-}",
   "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH},
-  "web_viewer_url": "${WEB_VIEWER_URL:-}"
+  "web_viewer_url": "${WEB_VIEWER_URL:-}",
+  "curator_sign_ttl": ${CURATOR_SIGN_TTL}
 }
 EOF
     chmod 644 /run/config.json

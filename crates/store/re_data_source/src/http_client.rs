@@ -15,6 +15,7 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 use re_i18n::trf;
+
 /// The hard cap for requests without an explicit deadline — must accommodate the largest
 /// legitimate transfer (a 64 MiB range on a slow link).
 pub const DEFAULT_HARD_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(5);
@@ -95,8 +96,11 @@ fn fetch_blocking(request: &ehttp::Request) -> Result<ehttp::Response, String> {
             }
             builder.call()
         }
-        ehttp::Method::PUT => {
-            let mut builder = agent.put(&request.url);
+        ehttp::Method::PUT | ehttp::Method::POST => {
+            let mut builder = match &request.method {
+                ehttp::Method::PUT => agent.put(&request.url),
+                _ => agent.post(&request.url),
+            };
             for (name, value) in &request.headers.headers {
                 builder = builder.header(name.as_str(), value.as_str());
             }
@@ -362,7 +366,7 @@ mod tests {
     #[tokio::test]
     async fn unsupported_methods_are_rejected() {
         // The method check runs before any connection is made, so the unroutable port never hurts.
-        let request = ehttp::Request::post("http://127.0.0.1:9/", Vec::new());
+        let request = ehttp::Request::get("http://127.0.0.1:9/").with_method(ehttp::Method::PATCH);
         let err = super::fetch_async(request).await.unwrap_err();
         assert!(err.contains("Unsupported HTTP method") || err.contains("不支持的 HTTP 方法"));
     }

@@ -30,6 +30,21 @@ FILES_ALLOWED_TO_BE_LARGE = {
     # Examples excluded from the uv workspace so they maintain standalone lockfiles.
     "examples/python/dataloader/uv.lock",
     "examples/python/droid_semantic_search/uv.lock",
+    # Physical AI Kit fork.
+    "crates/store/re_data_source/src/lerobot_remote.rs",  # Could be split up (streaming, retries, artifacts).
+    "crates/store/re_server/src/rerun_cloud/mod.rs",
+    "crates/viewer/re_ui/data/NotoSansSC-subset.otf",  # CJK glyphs for the Chinese UI.
+    # User-guide screenshots, compiled into the Viewer (`ui/user_guide.rs`), so they cannot be LFS pointers.
+    "docs/release/user-guide/images/downloads-sdk-annotated.png",
+    "docs/release/user-guide/images/viewer-add-menu-annotated.png",
+    "docs/release/user-guide/images/viewer-add-menu-raw.jpg",
+    "docs/release/user-guide/images/viewer-hidden-episodes-annotated.png",
+    "docs/release/user-guide/images/viewer-open-view-annotated.png",
+    "docs/release/user-guide/images/viewer-open-view-raw.png",
+    "docs/release/user-guide/images/viewer-tos-dialog-annotated.png",
+    "docs/release/user-guide/images/viewer-tos-dialog-raw.jpg",
+    "docs/release/user-guide/images/viewer-welcome-annotated.png",
+    "docs/release/user-guide/images/viewer-welcome-raw.jpg",
 }
 
 # Paths with the following prefixes are allowed to contain PNG files that are not checked into LFS
@@ -40,6 +55,7 @@ PATH_PREFIXES_ALLOWED_TO_CONTAIN_NON_LFS_PNGS = (
     "crates/viewer/re_viewer/data/app_icon.png",
     "crates/viewer/re_viewer/data/app_icon_mac.png",
     "crates/viewer/re_web_viewer_server/web_viewer/apple-touch-icon.png",
+    "docs/release/user-guide/images/",  # compiled into the Viewer, see above
     "docs/snippets/all/archetypes/ferris.png",
     "docs/snippets/all/archetypes/encoded_depth.png",
     "docs/snippets/src/snippets/ferris.png",

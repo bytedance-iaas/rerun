@@ -19,7 +19,7 @@ const HF_TEST_DATASET: &str = "henry-guo/so101-pick-place";
 #[ignore = "hits the network (huggingface.co)"]
 fn hf_cancel_stream_stops_downloads() {
     re_log::setup_logging();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     let _guard = rt.enter();
 
     let app_id = format!("hf://{HF_TEST_DATASET}");
@@ -87,7 +87,7 @@ fn hf_cancel_stream_stops_downloads() {
 #[ignore = "hits the network (huggingface.co)"]
 fn hf_redownload_episode() {
     re_log::setup_logging();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     let _guard = rt.enter();
 
     let rx = re_data_source::hf::stream_lerobot_dataset(re_data_source::hf::HfDatasetSource {
@@ -161,7 +161,7 @@ fn hf_redownload_episode() {
 #[ignore = "hits the network (huggingface.co)"]
 fn hf_lerobot_v2_stream_smoke() {
     re_log::setup_logging();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     let _guard = rt.enter();
 
     let rx = re_data_source::hf::stream_lerobot_dataset(re_data_source::hf::HfDatasetSource {
@@ -262,7 +262,7 @@ fn hf_lerobot_v2_stream_smoke() {
 #[ignore = "hits the network (huggingface.co)"]
 fn hf_mcap_repo_announces_files() {
     re_log::setup_logging();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     let _guard = rt.enter();
 
     let rx = re_data_source::hf::stream_lerobot_dataset(re_data_source::hf::HfDatasetSource {
@@ -303,7 +303,7 @@ fn hf_mcap_repo_announces_files() {
 #[ignore = "hits the network (huggingface.co)"]
 fn hf_non_lerobot_is_rejected() {
     re_log::setup_logging();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     let _guard = rt.enter();
 
     let rx = re_data_source::hf::stream_lerobot_dataset(re_data_source::hf::HfDatasetSource {
@@ -337,7 +337,7 @@ fn hf_non_lerobot_is_rejected() {
 #[ignore = "hits the network (huggingface.co)"]
 fn hf_lerobot_stream_smoke() {
     re_log::setup_logging();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     let _guard = rt.enter();
 
     let rx = re_data_source::hf::stream_lerobot_dataset(re_data_source::hf::HfDatasetSource {

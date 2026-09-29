@@ -4,7 +4,8 @@
 //! Only entries stamped `open_at_exit` come back (a dataset the user closed stays closed).
 //! Credentials are resolved silently from the deployment/user config ([`crate::viewer_config`]);
 //! entries whose credentials cannot be resolved are skipped and stay in the welcome screen's
-//! recents list for manual opening.
+//! recents list for manual opening. A dataset opened from the curation console needs no
+//! credentials here: the console signs its reads again.
 
 use re_data_source::LogDataSource;
 use re_viewer_context::{StoreHub, SystemCommand, SystemCommandSender as _};
@@ -13,6 +14,46 @@ use super::App;
 
 /// How long to wait for the config fetch before restoring without it (seconds).
 const CONFIG_WAIT_TIMEOUT: f64 = 5.0;
+
+/// A `tos://` URL open waiting for the deployment/user config ([`SystemCommand::LoadTosDataset`]).
+pub(super) struct PendingTosOpen {
+    pub location: re_data_source::tos::TosLocation,
+
+    /// The bucket's region; empty = the deployment endpoint's region.
+    pub region: String,
+
+    /// The curation console registration, whose reads the console signs.
+    pub curator_dataset: Option<String>,
+}
+
+/// How to reach a dataset: the console's signing when it was opened as a console
+/// registration and this viewer can use that (web, same origin), else the deployment keys.
+/// `None`: neither is available.
+fn tos_access(
+    config: &crate::viewer_config::ViewerConfig,
+    region: &str,
+    curator_dataset: Option<&str>,
+    what: &str,
+) -> Option<re_data_source::tos::TosAccess> {
+    if let Some(dataset_id) = curator_dataset {
+        if let Some(access) = config.curator_access(region, dataset_id) {
+            return Some(access);
+        }
+        re_log::info!(
+            "Curation console dataset {dataset_id}: only the web viewer on the console's origin \
+             can have its reads signed there — using this deployment's own settings instead.\n\
+             Url: {what}"
+        );
+    }
+    config.has_tos_credentials().then(|| {
+        re_data_source::tos::TosCredentials {
+            endpoint: re_data_source::tos::endpoint_for_region(region, &config.tos_endpoint),
+            access_key: config.tos_access_key.clone(),
+            secret_key: config.tos_secret_key.clone(),
+        }
+        .into()
+    })
+}
 
 impl App {
     /// Runs once, early in the frame loop.
@@ -79,24 +120,22 @@ impl App {
                     else {
                         continue;
                     };
-                    if !config.has_tos_credentials() {
+                    let Some(access) = tos_access(
+                        &config,
+                        &recent.region,
+                        recent.curator_dataset.as_deref(),
+                        &recent.url,
+                    ) else {
                         re_log::info!(
                             "Not re-opening {} from the last session — no stored credentials; \
                              open it from the welcome screen instead.",
                             recent.url
                         );
                         continue;
-                    }
+                    };
                     LogDataSource::TosDataset(re_data_source::tos::TosDatasetSource {
                         location,
-                        credentials: re_data_source::tos::TosCredentials {
-                            endpoint: re_data_source::tos::endpoint_for_region(
-                                &recent.region,
-                                &config.tos_endpoint,
-                            ),
-                            access_key: config.tos_access_key.clone(),
-                            secret_key: config.tos_secret_key.clone(),
-                        },
+                        access,
                         rrd_artifacts: config.rrd_artifacts(true),
                     })
                 }
@@ -150,27 +189,30 @@ impl App {
             Default::default()
         };
 
-        for (location, region) in std::mem::take(&mut self.pending_tos_opens) {
-            if !config.has_tos_credentials() {
+        for open in std::mem::take(&mut self.pending_tos_opens) {
+            let PendingTosOpen {
+                location,
+                region,
+                curator_dataset,
+            } = open;
+            let Some(access) = tos_access(
+                &config,
+                &region,
+                curator_dataset.as_deref(),
+                &location.to_string(),
+            ) else {
                 re_log::error!(
                     "Can't open {location} — this deployment has no TOS credentials configured \
                      (config.json). Use the 'Open from Volcengine TOS' dialog to enter your own."
                 );
                 continue;
-            }
+            };
 
             self.command_sender
                 .send_system(SystemCommand::LoadDataSource(LogDataSource::TosDataset(
                     re_data_source::tos::TosDatasetSource {
                         location,
-                        credentials: re_data_source::tos::TosCredentials {
-                            endpoint: re_data_source::tos::endpoint_for_region(
-                                &region,
-                                &config.tos_endpoint,
-                            ),
-                            access_key: config.tos_access_key.clone(),
-                            secret_key: config.tos_secret_key.clone(),
-                        },
+                        access,
                         rrd_artifacts: config.rrd_artifacts(true),
                     },
                 )));

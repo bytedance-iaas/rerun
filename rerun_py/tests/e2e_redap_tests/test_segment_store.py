@@ -84,8 +84,9 @@ def test_segment_store_compile_twice_works(first_segment_store: LazyStore) -> No
 @pytest.mark.local_only
 def test_segment_store_direct_read_matches_relay(entry_factory: EntryFactory, resource_prefix: str) -> None:
     """
-    `direct=True` bypasses the server for chunk data (range reads against the segment's
-    storage URL) and must yield exactly what the server-relayed path yields.
+    `direct=True` must yield exactly what the server-relayed path yields.
+
+    It bypasses the server for chunk data (range reads against the segment's storage URL).
 
     Local-only: the direct path reads the registered `file://` RRDs from this machine's
     filesystem; against a remote deployment it would need object-store credentials.
@@ -120,9 +121,10 @@ def test_segment_store_direct_read_unknown_segment_raises(readonly_test_dataset:
 @pytest.mark.local_only
 def test_segment_store_presigned_matches_relay(entry_factory: EntryFactory, resource_prefix: str) -> None:
     """
-    `direct="presigned"` exchanges the segment id for server-issued URLs and reads the
-    data with no storage credentials in this process; the result must be identical to
-    the relayed path.
+    `direct="presigned"` must yield exactly what the server-relayed path yields.
+
+    It exchanges the segment id for server-issued URLs and reads the data with no storage
+    credentials in this process.
     """
     ds = entry_factory.create_dataset("presigned_read")
     handle = ds.register([resource_prefix + "dataset/file1.rrd"])

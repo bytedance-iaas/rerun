@@ -60,7 +60,8 @@ impl App {
             LogDataSource::TosDataset(source) => RecentDataset {
                 url: source.location.to_string(),
                 kind: RecentKind::Tos,
-                region: re_data_source::tos::region_from_endpoint(&source.credentials.endpoint),
+                region: source.access.region(),
+                curator_dataset: source.access.curator_dataset_id().map(ToOwned::to_owned),
                 item_count: None,
                 last_opened_unix: now_unix(),
                 open_at_exit: false,
@@ -75,6 +76,7 @@ impl App {
                     url,
                     kind: RecentKind::Hf,
                     region: String::new(),
+                    curator_dataset: None,
                     item_count: None,
                     last_opened_unix: now_unix(),
                     open_at_exit: false,

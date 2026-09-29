@@ -6,14 +6,16 @@ use std::ops::Range;
 use re_log_channel::LogReceiver;
 
 use super::TosLocation;
-use super::client::{TosClient, TosCredentials};
+use super::client::{TosAccess, TosClient};
 use crate::lerobot_remote::{DatasetStore, ListedFile};
 
 /// Everything needed to open a `LeRobot` dataset stored in TOS.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TosDatasetSource {
     pub location: TosLocation,
-    pub credentials: TosCredentials,
+
+    /// Local keys, or reads presigned by the Curator console.
+    pub access: TosAccess,
 
     /// Where to look up / upload converted rrds; `None` disables the artifacts store.
     pub rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
@@ -110,21 +112,29 @@ impl DatasetStore for TosStore {
 pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
     let TosDatasetSource {
         mut location,
-        credentials,
+        access,
         rrd_artifacts,
     } = source;
     // Remembered for the Diagnose deep link into the curation console: the console
     // asks for URL + region, and this is the last spot where the region (baked into
-    // the credentials by the open dialog) and the final URL are both in hand.
-    let region = credentials.region();
-    let client = TosClient::new(credentials, location.bucket.clone());
+    // the credentials by the open dialog) and the final URL are both in hand. A
+    // console-signed dataset also remembers its registration, for share links.
+    let region = access.region();
+    let curator_dataset_id = access.curator_dataset_id().map(ToOwned::to_owned);
+    let remember = |url: &str| {
+        crate::lerobot_remote::remember_dataset_region(url, &region);
+        if let Some(dataset_id) = &curator_dataset_id {
+            crate::lerobot_remote::remember_dataset_curator_id(url, dataset_id);
+        }
+    };
+    let client = TosClient::new(access, location.bucket.clone());
 
     // A path to a single file (e.g. tos://bucket/path/recording.mcap) is downloaded and run
     // through the regular importers instead of the LeRobot dataset pipeline. Conversion-heavy
     // formats (MCAP) still go through the rrd artifacts store.
     if let Some(file_name) = location.split_off_file_name() {
         let url = format!("{location}{file_name}");
-        crate::lerobot_remote::remember_dataset_region(&url, &region);
+        remember(&url);
         return crate::lerobot_remote::stream_remote_file(
             TosStore { client, location },
             file_name,
@@ -133,7 +143,7 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
         );
     }
 
-    crate::lerobot_remote::remember_dataset_region(&location.to_string(), &region);
+    remember(&location.to_string());
     crate::lerobot_remote::stream_lerobot_dataset(
         TosStore { client, location },
         rrd_artifacts,
@@ -146,10 +156,10 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
 pub fn convert_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
     let TosDatasetSource {
         location,
-        credentials,
+        access,
         rrd_artifacts,
     } = source;
-    let client = TosClient::new(credentials, location.bucket.clone());
+    let client = TosClient::new(access, location.bucket.clone());
     crate::lerobot_remote::stream_lerobot_dataset(
         TosStore { client, location },
         rrd_artifacts,

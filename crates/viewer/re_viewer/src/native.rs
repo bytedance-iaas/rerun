@@ -1,4 +1,5 @@
 use re_i18n::trf;
+
 /// Used by `eframe` to decide where to store the app state.
 pub const APP_ID: &str = "rerun";
 

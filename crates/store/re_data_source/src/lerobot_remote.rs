@@ -635,6 +635,27 @@ pub fn dataset_region_of(dataset_url: &str) -> Option<String> {
     DATASET_REGIONS.lock().get(dataset_url).cloned()
 }
 
+/// Curator console registrations, keyed by dataset URL, remembered when a console-signed
+/// stream is opened ([`crate::tos::TosAccess::CuratorDataset`]).
+///
+/// Same reason as [`DATASET_REGIONS`]: the share link of an open dataset is rebuilt from its
+/// source URL, and without the registration id it would open with the deployment's keys —
+/// or not at all. Never evicted, for the same reason.
+static DATASET_CURATOR_IDS: LazyLock<Mutex<ahash::HashMap<String, String>>> =
+    LazyLock::new(Default::default);
+
+/// Record which console registration a dataset URL was opened as.
+pub fn remember_dataset_curator_id(dataset_url: &str, dataset_id: &str) {
+    DATASET_CURATOR_IDS
+        .lock()
+        .insert(dataset_url.to_owned(), dataset_id.to_owned());
+}
+
+/// The console registration a dataset URL was opened as, if it was opened that way.
+pub fn dataset_curator_id_of(dataset_url: &str) -> Option<String> {
+    DATASET_CURATOR_IDS.lock().get(dataset_url).cloned()
+}
+
 /// Ask the loader of the given recording (if it is a remote dataset item still being loaded)
 /// to fetch that item next. Returns true if a matching active stream was found.
 pub fn prioritize_episode_for_store(store_id: &StoreId) -> bool {

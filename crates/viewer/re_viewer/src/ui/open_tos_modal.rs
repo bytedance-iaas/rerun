@@ -466,7 +466,7 @@ impl OpenTosModal {
                             command_sender.send_system(SystemCommand::LoadDataSource(
                                 LogDataSource::TosDataset(TosDatasetSource {
                                     location,
-                                    credentials,
+                                    access: credentials.into(),
                                     rrd_artifacts,
                                 }),
                             ));
