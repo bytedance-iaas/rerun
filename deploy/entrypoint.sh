@@ -41,8 +41,11 @@ web)
         printf '%s\n' "$WEB_HTPASSWD_VALUE" > /run/htpasswd
         chmod 640 /run/htpasswd
         chown root:www-data /run/htpasswd
+        # Same realm as the curation console, which checks the same htpasswd: browsers keep
+        # Basic credentials per realm, so a login on either one then carries over to the
+        # other (the console's "Visualize" link opens the viewer in a new tab).
         cat > /run/nginx-auth.conf <<'AUTH'
-auth_basic "rerun";
+auth_basic "Robot Data Curation";
 auth_basic_user_file /run/htpasswd;
 AUTH
         echo "web: Basic auth enabled"
