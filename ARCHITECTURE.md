@@ -247,6 +247,7 @@ Update instructions:
 | re_error             | Helpers for handling errors.                                                                  |
 | re_format            | Miscellaneous tools to format and parse numbers, durations, etc.                              |
 | re_grpc_headers      | Rerun gRPC header conventions (`x-rerun-*` consts, version interceptor, tower layers).        |
+| re_i18n              | Minimal runtime English/Chinese switch for the viewer UI.                                     |
 | re_int               | Small numeric helper traits: saturating integer casts and unsigned absolute value.            |
 | re_lenses            | A collection of lenses for mapping component data to Rerun semantic types.                    |
 | re_lenses_core       | Core lens types and composable Arrow array transformations                                    |

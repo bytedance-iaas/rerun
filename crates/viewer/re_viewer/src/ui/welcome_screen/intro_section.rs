@@ -35,6 +35,7 @@ pub enum IntroItem {
         url: &'static str,
         body: &'static str,
     },
+
     /// A link into this deployment (curation console, SDK downloads) — same-domain
     /// paths, so web only: `daft_link` returns `None` natively and the card is not built.
     DeploymentItem {
@@ -43,6 +44,7 @@ pub enum IntroItem {
         url: String,
         body: &'static str,
     },
+
     /// Our user-guide links — the guide is embedded and rendered in-app
     /// (`crate::ui::user_guide`), so this card shows on every viewer alike.
     GuideItem {

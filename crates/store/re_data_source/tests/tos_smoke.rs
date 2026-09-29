@@ -33,7 +33,7 @@ const TEST_ARTIFACTS_URL: &str = "tos://physical-ai-rerun-test/rrd-data/";
 #[test]
 #[ignore = "needs real TOS credentials via TOS_ACCESS_KEY / TOS_SECRET_KEY"]
 fn tos_rrd_artifacts_roundtrip() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     rt.block_on(async {
         use re_data_source::rrd_artifacts;
 
@@ -100,7 +100,7 @@ fn tos_rrd_artifacts_roundtrip() {
 #[test]
 #[ignore = "needs real TOS credentials via TOS_ACCESS_KEY / TOS_SECRET_KEY"]
 fn tos_list_and_get() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     rt.block_on(async {
         let location = TosLocation::parse(TEST_DATASET).unwrap();
         let client = TosClient::new(credentials(), location.bucket.clone());
@@ -128,7 +128,7 @@ fn tos_list_and_get() {
 #[ignore = "needs real TOS credentials via TOS_ACCESS_KEY / TOS_SECRET_KEY"]
 fn tos_lerobot_stream_smoke() {
     re_log::setup_logging();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a standalone smoke test owns its runtime
     let _guard = rt.enter();
 
     // Artifacts on (the default bucket): the first run converts + writes artifacts back,

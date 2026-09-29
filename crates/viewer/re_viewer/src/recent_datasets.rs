@@ -6,6 +6,7 @@
 //! metadata is stored: never access keys or tokens.
 
 use re_i18n::{tr, trf};
+
 /// Which remote backend a recent dataset lives on.
 #[derive(Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RecentKind {

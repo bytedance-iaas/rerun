@@ -453,7 +453,7 @@ fn panel_buttons_r2l(
             if ui
                 .medium_icon_toggle_button(
                     &re_ui::icons::LEFT_PANEL_TOGGLE,
-                    "显示/隐藏 Blueprint 面板",
+                    "显示/隐藏 blueprint 面板",
                     &mut app_blueprint.blueprint_panel_state().is_expanded(),
                 )
                 .on_hover_ui(|ui| UICommand::ToggleBlueprintPanel.tooltip_ui(ui))

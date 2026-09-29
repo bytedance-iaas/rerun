@@ -1102,8 +1102,8 @@ fn entity_path_filter_ui(
         // TODO(andreas): Talk about this root bit only if it's a spatial view.
         // `NOLINT`: `EntityPath`'s debug impl doesn't quote the result.
         ui.warning_label(trf!(
-            "This view is not able to visualize any of the matched entities using the current root \"{origin:?}\".",
-            "在当前根路径 \"{origin:?}\" 下，这个视图无法可视化任何匹配到的实体。"
+            "This view is not able to visualize any of the matched entities using the current root \"{origin:?}\".", // NOLINT
+            "在当前根路径 \"{origin:?}\" 下，这个视图无法可视化任何匹配到的实体。" // NOLINT
         )); // NOLINT
     }
 

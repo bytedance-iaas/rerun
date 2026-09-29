@@ -680,15 +680,18 @@ impl TosClient {
         }
         drop(uploads);
 
-        let manifest: String = std::iter::once("<CompleteMultipartUpload>".to_owned())
-            .chain(etags.iter().enumerate().map(|(i, etag)| {
+        let manifest: String = itertools::chain!(
+            std::iter::once("<CompleteMultipartUpload>".to_owned()),
+            etags.iter().enumerate().map(|(i, etag)| {
                 format!(
-                    "<Part><PartNumber>{}</PartNumber><ETag>\"{etag}\"</ETag></Part>",
+                    // The quotes belong to the XML ETag value; this is not a debug print.
+                    "<Part><PartNumber>{}</PartNumber><ETag>\"{etag}\"</ETag></Part>", // NOLINT
                     i + 1
                 )
-            }))
-            .chain(std::iter::once("</CompleteMultipartUpload>".to_owned()))
-            .collect();
+            }),
+            std::iter::once("</CompleteMultipartUpload>".to_owned()),
+        )
+        .collect();
 
         let response = self
             .signed_request(

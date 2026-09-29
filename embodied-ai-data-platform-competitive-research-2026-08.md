@@ -95,11 +95,11 @@
 
 ---
 
-# 附录 A：国际产品调研全文（英文原文）
+# 附录 A：国际产品调研全文（英文原文） <!-- NOLINT: proper names -->
 
 ## 1. Foxglove (foxglove.dev)
 
-**What it does.** The closest overall competitor. Positions as "the agentic data platform for Physical AI": a multimodal visualization app (web + desktop) plus a data platform for recording, ingesting, indexing, streaming, and managing robot logs, fleet/device management, and teleoperation ([foxglove.dev](https://foxglove.dev/), [product](https://foxglove.dev/product)).
+**What it does.** The closest overall competitor. Positions as "the agentic data platform for Physical AI": a multimodal visualization app (web + desktop) plus a data platform for recording, ingesting, indexing, streaming, and managing robot logs, fleet/device management, and teleoperation ([foxglove.dev](https://foxglove.dev/), [product](https://foxglove.dev/product)). <!-- NOLINT: quoted from the source -->
 
 - **Formats:** MCAP (first-class; Foxglove created MCAP), ROS 1/2 bags, ULog, Protobuf/JSON; live connections to robots ([MCAP product page](https://foxglove.dev/product/mcap)). Notably, **LeRobot 0.6.0 added Foxglove as a native visualization backend** — `--display_mode=foxglove` for teleop/record/replay ([Foxglove SDK blog](https://foxglove.dev/blog/announcing-the-foxglove-sdk)).
 - **Browser streaming from cloud storage:** Yes. app.foxglove.dev opens remote MCAP by URL with seek/streaming; a "remote data loader" caches/merges MCAP from your backend into a storage bucket; enterprise supports bring-your-own bucket ([docs](https://docs.foxglove.dev/docs/visualization/connecting/cloud-data/remote-data-loader)). No native LeRobot-parquet-from-bucket reading.
@@ -127,15 +127,15 @@ Analytics/search engine for robotics logs: ingest, tag, query, agentic triage/ro
 - **Deployment:** secure clouds, on-prem, air-gapped/gov.
 - **Activity:** $75M Series B (Sequoia, June 2025), $80M at $1B valuation (March 2026) ([TechCrunch](https://techcrunch.com/2026/03/05/hardware-testing-startup-nominal-hits-1b-valuation-raises-155m-in-10-months/)); customers: US Air Force, Anduril, Shield AI.
 
-## 4. Heex Technologies (heex.io)
+## 4. Heex Technologies (heex.io) <!-- NOLINT: proper names -->
 
 Edge agents with event triggers capture only relevant data slices ("frugal AI") ([heex.io](https://www.heex.io/)). Hybrid edge + cloud SaaS. €6M round Jan 2024; modest scale.
 
-## 5. ReSim (resim.ai)
+## 5. ReSim (resim.ai) <!-- NOLINT: proper names -->
 
 Cloud platform for autonomy test/eval at scale — simulation, log replay, metrics, regression detection ([resim.ai](https://www.resim.ai/)). Delegates visualization to Foxglove/Rerun. SaaS; [open-core libraries](https://github.com/resim-ai/open-core).
 
-## 6. Scale AI — Physical AI Data Engine
+## 6. Scale AI — Physical AI Data Engine <!-- NOLINT: proper names -->
 
 Data **service**, not software: large-scale robot-demo collection (100k+ production hours), 3D annotation, data streams for robotics foundation-model labs ([Scale blog](https://scale.com/blog/physical-ai)). Customers: Physical Intelligence, Generalist AI, Cobot. Meta bought 49% for $14.3B (June 2025); neutrality concerns push some labs elsewhere ([Sacra](https://sacra.com/c/scale-ai/)).
 
@@ -185,10 +185,10 @@ Open-source dataset curation/visualization, repositioned for Physical AI ([robot
 - The viewer's `LogDataSource` enum supports: HTTP URL to a single file (`.rrd`, `.rbl`, `.mcap`…), local file, `rerun://` redap dataset, `rerun+http://` proxy. No remote-LeRobot-directory source.
 - The capability exists upstream only as the commercial **Rerun Hub**, and even there it streams their catalog/rrd-chunk format, not raw LeRobot directories.
 
-## A) Rerun's commercial direction
+## A) Rerun's commercial direction <!-- NOLINT: proper names -->
 
-- **$17M seed, 2025-03-20**, led by Point Nine; total $20.2M. Goal: "database and cloud data platform purpose-built for Physical AI" ([GlobeNewswire](https://www.globenewswire.com/news-release/2025/03/20/3046617/0/en/), [TechCrunch](https://techcrunch.com/2025/03/20/reruns-open-source-ai-platform-for-robots-drones-and-cars-revs-up-with-17m-seed)).
-- ~78 employees; classic open-core: SDK/viewer OSS, Hub proprietary ([redhat-et deep-dive](https://github.com/redhat-et/physical-ai-platform-intel/blob/main/deliverables/intel/companies/rerun-deep-dive.md)).
+- **$17M seed, 2025-03-20**, led by Point Nine; total $20.2M. Goal: "database and cloud data platform purpose-built for Physical AI" ([GlobeNewswire](https://www.globenewswire.com/news-release/2025/03/20/3046617/0/en/), [TechCrunch](https://techcrunch.com/2025/03/20/reruns-open-source-ai-platform-for-robots-drones-and-cars-revs-up-with-17m-seed)). <!-- NOLINT: quoted from the source -->
+- ~78 employees; classic open-core: SDK/viewer OSS, Hub proprietary ([redhat-et deep-dive](https://github.com/redhat-et/physical-ai-platform-intel/blob/main/deliverables/intel/companies/rerun-deep-dive.md)). <!-- NOLINT: quoted from the source -->
 
 ### Rerun Hub (commercial, private preview)
 
@@ -212,7 +212,7 @@ Announced with "A new data layer for robot learning" (~May 2026) ([blog](https:/
 
 **Trajectory read:** upstream moving in exactly our direction, but the object-storage tier is fenced off as commercial, and everything routes through their catalog/rrd model, not raw LeRobot-from-a-bucket.
 
-## B) LeRobot / Hugging Face ecosystem
+## B) LeRobot / Hugging Face ecosystem <!-- NOLINT: proper names -->
 
 - **LeRobotDataset v3.0** (LeRobot 0.4.0, Oct 2025; v3.1 since): consolidated parquet/MP4, relational episode metadata, `StreamingLeRobotDataset` — Hub-native streaming ([HF docs](https://huggingface.co/docs/lerobot/lerobot-dataset-v3)).
 - De-facto standard: NVIDIA Isaac GR00T trains on LeRobot ([HF blog](https://huggingface.co/blog/nvidia/nvidia-isaac-gr00t-in-lerobot)); Physical Intelligence's openpi converts to LeRobot; OXE and AgiBot republished in LeRobot; [any4lerobot](https://github.com/Tavish9/any4lerobot) converter collection; "nearly all robot datasets are repackaged into LeRobot format" ([Pebblous 2026](https://blog.pebblous.ai/report/robot-physical-ai-datasets-landscape/en/)).
@@ -234,7 +234,7 @@ Announced with "A new data layer for robot learning" (~May 2026) ([blog](https:/
 
 ---
 
-# 附录 C：国内市场调研全文
+# 附录 C：国内市场调研全文 <!-- NOLINT: proper names -->
 
 ## 0. 总览与关键判断
 
@@ -245,7 +245,7 @@ Announced with "A new data layer for robot learning" (~May 2026) ([blog](https:/
 5. **四家云厂商都没有"浏览器直连对象存储、免搬移流式可视化"能力**。
 6. 市场热度极高：Omdia 估 2024 年中国具身智能 AI 云市场 1800 万美元、2030 年 4.08 亿美元（CAGR 69%，份额百度 35%/阿里 17%/腾讯 16%）（[新浪财经](https://finance.sina.com.cn/roll/2026-02-09/doc-inhmfive5356553.shtml)、[36氪](https://36kr.com/p/3855538404988167)）。
 
-## 1. 刻行时空 coScene（最直接对标）
+## 1. 刻行时空 coScene（最直接对标） <!-- NOLINT: proper names -->
 
 「时空多模态数据平台」，SceneOps 概念，覆盖研发-测试-生产-运维数据闭环。四大模块：数据平台、可视化播放器、测试平台、边端控制台（[官网](https://www.coscene.cn/)、[文档](https://docs.coscene.cn/en/docs/overview/)）。2022 年成立于上海。
 
@@ -297,13 +297,13 @@ Announced with "A new data layer for robot learning" (~May 2026) ([blog](https:/
 - **官方可视化脚本直接用 Rerun**（README："will open rerun.io"，已核实）—— 对我们是直接背书。
 - **Genie Studio**（2025-04）：行业首个具身一站式商业化开发平台（[官网](https://genie.agibot.com/geniestudio)）。Genie Sim 3.0 开源仿真（CES 2026）；2025 营收破十亿元。
 
-### 3.2 宇树 Unitree
+### 3.2 宇树 Unitree <!-- NOLINT: proper names -->
 
 - HF 98 个开源数据集（2026-08），**原生 LeRobot v2.0、Apache 2.0**（[HF](https://huggingface.co/unitreerobotics)）。
 - 工具链开源：[xr_teleoperate](https://github.com/unitreerobotics/xr_teleoperate)、[unitree_lerobot](https://github.com/unitreerobotics/unitree_lerobot)。
 - 无自研可视化/质检产品，依赖 LeRobot/HF 生态。
 
-### 3.3 银河通用 Galbot
+### 3.3 银河通用 Galbot <!-- NOLINT: proper names -->
 
 - 合成数据路线：DexGraspNet、SynGrasp-1B 十亿帧（2026-08，CC BY-NC，[GraspVLA](https://github.com/PKU-EPIC/GraspVLA)）。管线不对外产品化；2025-06 融资 11 亿元（[新华网](https://www.news.cn/digital/20250623/00657ee2fbde4b4d8c005ea667b31737/c.html)）。
 

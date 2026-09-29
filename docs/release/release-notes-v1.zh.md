@@ -34,7 +34,7 @@ v1 是首个正式版本,面向在火山引擎上浏览、管理、训练机器�
 ## 支持范围与已知限制
 
 - 目前主要支持机器人 **LeRobot 数据集(v2 / v3)**。
-- Web viewer 运行在浏览器 WASM 环境中,实际可用内存约 1.4 GB,较大的数据集需改用 native viewer。
+- Web viewer 运行在浏览器 Wasm 环境中,实际可用内存约 1.4 GB,较大的数据集需改用 native viewer。
 - 预编译 wheel 覆盖 **Linux x86_64 / arm64、macOS(Apple Silicon)、Windows x64** 四个平台;Intel 芯片的 Mac 暂无预编译 wheel(苹果已停产该硬件),需源码构建。
 - 一键质检(「质检」按钮)仅在 web viewer 中提供;native viewer 无此按钮。
 

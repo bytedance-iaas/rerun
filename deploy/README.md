@@ -41,7 +41,7 @@ open http://127.0.0.1:9091     # web viewer
 open "http://127.0.0.1:9092/vnc.html?autoconnect=true&resize=remote"   # native session
 ```
 
-## SDK wheels (from GitHub Actions, via TOS)
+## SDK wheels (from GitHub Actions, via TOS) <!-- NOLINT: proper names -->
 
 The image serves the Python SDK wheels at nginx `/downloads/sdk/`, viewer bundled inside each wheel — `pip install` it and `rerun` is on PATH.
 The image does **not** build any wheel itself. All platforms (Linux x64/arm64, macOS arm64, Windows x64) are built by the GitHub Actions workflow `.github/workflows/build_binary_and_wheels.yml`, uploaded to a **public-read TOS bucket**, and the Dockerfile only downloads them at build time. Two reasons over building in-image: the Actions Linux wheel is zig-linked against glibc 2.28 (`manylinux_2_28`), so it installs on much older distros than a wheel built in the bookworm container (glibc 2.36) — and the image build gets simpler and faster.
