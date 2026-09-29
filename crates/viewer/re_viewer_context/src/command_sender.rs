@@ -29,12 +29,16 @@ pub enum SystemCommand {
     LoadDataSource(LogDataSource),
 
     /// Open a `tos://` dataset URL: resolve credentials from the deployment/user config
-    /// (waiting for its async fetch if needed), then load the dataset.
+    /// (waiting for its async fetch if needed), then load the dataset. A dataset registered
+    /// in the Curator console is read through URLs the console presigns instead (web only).
     LoadTosDataset {
         location: re_data_source::tos::TosLocation,
 
         /// The bucket's region; empty = the deployment endpoint's region.
         region: String,
+
+        /// The Curator console registration (`ds-…`), whose reads the console signs.
+        curator_dataset: Option<String>,
     },
 
     /// Add a new receiver for log messages.

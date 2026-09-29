@@ -10,9 +10,11 @@
 
 pub(crate) mod client;
 pub mod cors;
+pub mod curator;
 mod lerobot_stream;
 
-pub use client::{TosClient, TosCredentials, endpoint_for_region, region_from_endpoint};
+pub use client::{TosAccess, TosClient, TosCredentials, endpoint_for_region, region_from_endpoint};
+pub use curator::CuratorDatasetAccess;
 pub use lerobot_stream::{TosDatasetSource, convert_lerobot_dataset, stream_lerobot_dataset};
 
 /// A `tos://bucket/prefix/` dataset location.

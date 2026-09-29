@@ -135,7 +135,7 @@ fn tos_lerobot_stream_smoke() {
     // a re-run exercises the parallel prefetch path end-to-end.
     let source = TosDatasetSource {
         location: TosLocation::parse(TEST_DATASET).unwrap(),
-        credentials: credentials(),
+        access: credentials().into(),
         rrd_artifacts: Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
             location: TosLocation::parse(TEST_ARTIFACTS_URL).unwrap(),
             credentials: credentials(),

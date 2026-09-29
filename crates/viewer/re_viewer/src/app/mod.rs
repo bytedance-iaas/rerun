@@ -126,8 +126,9 @@ pub struct App {
     session_restore_wait_since: Option<f64>,
 
     /// `tos://` dataset opens (from `?url=` parameters or shared links) waiting for the
-    /// deployment/user config, which holds the credentials. Location + region.
-    pending_tos_opens: Vec<(re_data_source::tos::TosLocation, String)>,
+    /// deployment/user config, which holds the credentials (and the curation console's
+    /// address, for datasets whose reads it signs).
+    pending_tos_opens: Vec<session_restore::PendingTosOpen>,
 
     /// When the pending TOS opens started waiting for the config fetch (egui time, seconds).
     pending_tos_wait_since: Option<f64>,

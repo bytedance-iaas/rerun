@@ -26,6 +26,11 @@ pub struct RecentDataset {
     #[serde(default)]
     pub region: String,
 
+    /// TOS only: the curation console registration the dataset was opened as (`ds-…`), so
+    /// re-opening has the console sign its reads again. An id, not a credential.
+    #[serde(default)]
+    pub curator_dataset: Option<String>,
+
     /// Episodes/files in the dataset, once a stream reported it.
     pub item_count: Option<usize>,
 
@@ -96,6 +101,7 @@ mod tests {
             url: url.to_owned(),
             kind: RecentKind::Tos,
             region: String::new(),
+            curator_dataset: None,
             item_count: None,
             last_opened_unix: when,
             open_at_exit: false,
@@ -125,6 +131,35 @@ mod tests {
         }
         assert_eq!(list.len(), MAX_RECENT);
         assert_eq!(list[0].url, "tos://b/19/");
+    }
+
+    #[test]
+    fn entries_saved_before_the_curator_registration_still_load() {
+        // What an older viewer persisted (the app state is RON): no `region`, `open_at_exit`
+        // or `curator_dataset` yet.
+        let old: RecentDataset = ron::from_str(
+            r#"(url: "tos://b/a/", kind: Tos, item_count: Some(3), last_opened_unix: 7)"#,
+        )
+        .unwrap();
+        assert_eq!(old.url, "tos://b/a/");
+        assert_eq!(old.item_count, Some(3));
+        assert_eq!(old.curator_dataset, None);
+        assert!(old.region.is_empty() && !old.open_at_exit);
+    }
+
+    #[test]
+    fn the_curator_registration_round_trips() {
+        let mut opened = entry("tos://b/a/", 1);
+        opened.region = "cn-beijing".to_owned();
+        opened.curator_dataset = Some("ds-kqzmrtbwe".to_owned());
+        let back: RecentDataset = ron::from_str(&ron::to_string(&opened).unwrap()).unwrap();
+        assert_eq!(back.curator_dataset.as_deref(), Some("ds-kqzmrtbwe"));
+        assert_eq!(back.region, "cn-beijing");
+
+        // Re-opening the same URL the old way forgets the registration: the latest open wins.
+        let mut list = vec![opened];
+        remember(&mut list, entry("tos://b/a/", 2));
+        assert_eq!(list[0].curator_dataset, None);
     }
 
     #[test]

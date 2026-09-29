@@ -768,11 +768,36 @@ impl AppState {
                                 Some(crate::ui::RecentAction::Open(index)) => {
                                     if let Some(recent) = self.recent_datasets.get(index) {
                                         // Re-open via the matching dialog, pre-filled: credential
-                                        // resolution and validation stay in one place.
+                                        // resolution and validation stay in one place. A dataset
+                                        // opened from the curation console needs no dialog: the
+                                        // console signs its reads again (web viewer only).
                                         match recent.kind {
                                             crate::recent_datasets::RecentKind::Tos => {
-                                                self.open_tos_modal
-                                                    .open_prefilled(&recent.url, &recent.region);
+                                                let console_location = recent
+                                                    .curator_dataset
+                                                    .as_ref()
+                                                    .filter(|_| cfg!(target_arch = "wasm32"))
+                                                    .and_then(|_| {
+                                                        re_data_source::tos::TosLocation::parse(
+                                                            &recent.url,
+                                                        )
+                                                    });
+                                                if let Some(location) = console_location {
+                                                    command_sender.send_system(
+                                                        SystemCommand::LoadTosDataset {
+                                                            location,
+                                                            region: recent.region.clone(),
+                                                            curator_dataset: recent
+                                                                .curator_dataset
+                                                                .clone(),
+                                                        },
+                                                    );
+                                                } else {
+                                                    self.open_tos_modal.open_prefilled(
+                                                        &recent.url,
+                                                        &recent.region,
+                                                    );
+                                                }
                                             }
                                             crate::recent_datasets::RecentKind::Hf => {
                                                 self.open_hf_modal.open_prefilled(&recent.url);

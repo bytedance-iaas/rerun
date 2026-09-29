@@ -82,7 +82,7 @@ impl RrdConvertCommand {
                 re_data_source::tos::convert_lerobot_dataset(
                     re_data_source::tos::TosDatasetSource {
                         location,
-                        credentials: credentials.clone(),
+                        access: credentials.clone().into(),
                         rrd_artifacts: rrd_artifacts.clone(),
                     },
                 )

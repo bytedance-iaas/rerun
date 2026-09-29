@@ -69,10 +69,12 @@ pub enum ViewerOpenUrl {
     RedapProxy(re_uri::ProxyUri),
 
     /// A `tos://bucket/prefix/` `LeRobot` dataset (or single data file) in Volcengine TOS,
-    /// optionally with the bucket's region (`tos://bucket/prefix/?region=cn-guangzhou`).
+    /// optionally with the bucket's region (`tos://bucket/prefix/?region=cn-guangzhou`) and the
+    /// Curator console registration it was opened from (`&curator_dataset=ds-…`).
     ///
-    /// The URL carries no credentials; they are resolved from the deployment/user config
-    /// (`config.json`) when opening — same as the "Open from Volcengine TOS" dialog.
+    /// The URL carries no credentials. With a registration, the web viewer asks the console to
+    /// presign every read; otherwise the credentials are resolved from the deployment/user
+    /// config (`config.json`) when opening — same as the "Open from Volcengine TOS" dialog.
     ///
     /// See also [`LogDataSource::TosDataset`].
     TosDataset {
@@ -80,6 +82,9 @@ pub enum ViewerOpenUrl {
 
         /// The bucket's region; empty = the deployment endpoint's region.
         region: String,
+
+        /// The Curator console registration (`ds-…`), whose reads the console signs.
+        curator_dataset: Option<String>,
     },
 
     /// A URL that points to a redap server.
@@ -127,8 +132,15 @@ impl std::fmt::Debug for ViewerOpenUrl {
             Self::FilePath(path) => write!(f, "FilePath({path:?})"),
             Self::RedapDatasetSegment(uri) => write!(f, "RedapDatasetSegment({uri})"),
             Self::RedapProxy(uri) => write!(f, "RedapProxy({uri})"),
-            Self::TosDataset { location, region } => {
-                write!(f, "TosDataset({location}, region: {region:?})")
+            Self::TosDataset {
+                location,
+                region,
+                curator_dataset,
+            } => {
+                write!(
+                    f,
+                    "TosDataset({location}, region: {region:?}, curator_dataset: {curator_dataset:?})"
+                )
             }
             Self::RedapCatalog(uri) => write!(f, "RedapCatalog({uri})"),
             Self::RedapEntry(uri) => write!(f, "RedapEntry({uri})"),
@@ -211,8 +223,12 @@ impl ViewerOpenUrl {
         } else if url.starts_with(WEB_EVENT_LISTENER_SCHEME) {
             // Web event listener (legacy notebooks).
             Ok(Self::WebEventListener)
-        } else if let Some((location, region)) = parse_tos_url(url) {
-            Ok(Self::TosDataset { location, region })
+        } else if let Some((location, region, curator_dataset)) = parse_tos_url(url) {
+            Ok(Self::TosDataset {
+                location,
+                region,
+                curator_dataset,
+            })
         } else if let Some(data_source) =
             LogDataSource::from_uri(re_log_types::FileSource::Uri, url, from_uri_options)
         {
@@ -263,10 +279,14 @@ impl ViewerOpenUrl {
     }
 }
 
-/// Parse `tos://bucket/prefix/`, optionally with a `?region=…` query (also accepts `s3://`).
+/// Parse `tos://bucket/prefix/`, optionally with a `?region=…&curator_dataset=…` query (also
+/// accepts `s3://`).
 ///
-/// Returns the location and the region (empty if the URL has none).
-fn parse_tos_url(url: &str) -> Option<(re_data_source::tos::TosLocation, String)> {
+/// Returns the location, the region (empty if the URL has none) and the Curator console
+/// registration — dropped, with a warning, when it is not a console dataset id.
+fn parse_tos_url(url: &str) -> Option<(re_data_source::tos::TosLocation, String, Option<String>)> {
+    use re_data_source::tos::curator::{CURATOR_DATASET_PARAM, is_valid_dataset_id};
+
     if !url.starts_with("tos://") && !url.starts_with("s3://") {
         return None;
     }
@@ -275,11 +295,23 @@ fn parse_tos_url(url: &str) -> Option<(re_data_source::tos::TosLocation, String)
         None => (url, ""),
     };
     let location = re_data_source::tos::TosLocation::parse(path)?;
-    let region = url::form_urlencoded::parse(query.as_bytes())
-        .find(|(key, _)| key == "region")
-        .map(|(_, value)| value.into_owned())
-        .unwrap_or_default();
-    Some((location, region))
+    let param = |name: &str| {
+        url::form_urlencoded::parse(query.as_bytes())
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.into_owned())
+    };
+    let region = param("region").unwrap_or_default();
+    let curator_dataset = param(CURATOR_DATASET_PARAM).filter(|id| {
+        let valid = is_valid_dataset_id(id);
+        if !valid {
+            re_log::warn!(
+                "Ignoring {CURATOR_DATASET_PARAM}={id:?}: not a curation console dataset id — \
+                 opening with the deployment's own settings instead.\nUrl: {path}"
+            );
+        }
+        valid
+    });
+    Some((location, region, curator_dataset))
 }
 
 fn parse_webviewer_url(url: &str) -> anyhow::Result<ViewerOpenUrl> {
@@ -383,7 +415,14 @@ impl ViewerOpenUrl {
                 if let Some(location) = re_data_source::tos::TosLocation::parse(url) {
                     let region =
                         re_data_source::lerobot_remote::dataset_region_of(url).unwrap_or_default();
-                    return Ok(Self::TosDataset { location, region });
+                    // Likewise the console registration of a console-signed dataset.
+                    let curator_dataset =
+                        re_data_source::lerobot_remote::dataset_curator_id_of(url);
+                    return Ok(Self::TosDataset {
+                        location,
+                        region,
+                        curator_dataset,
+                    });
                 }
                 Ok(Self::HttpUrl(url.parse::<Url>()?))
             }
@@ -528,11 +567,26 @@ impl ViewerOpenUrl {
                 vec1![proxy_uri.to_string()]
             }
 
-            Self::TosDataset { location, region } => {
-                let mut url = location.to_string();
+            Self::TosDataset {
+                location,
+                region,
+                curator_dataset,
+            } => {
+                let mut query = url::form_urlencoded::Serializer::new(String::new());
                 if !region.is_empty() {
-                    url.push_str("?region=");
-                    url.extend(url::form_urlencoded::byte_serialize(region.as_bytes()));
+                    query.append_pair("region", region);
+                }
+                if let Some(dataset_id) = curator_dataset {
+                    query.append_pair(
+                        re_data_source::tos::curator::CURATOR_DATASET_PARAM,
+                        dataset_id,
+                    );
+                }
+                let query = query.finish();
+                let mut url = location.to_string();
+                if !query.is_empty() {
+                    url.push('?');
+                    url.push_str(&query);
                 }
                 vec1![url]
             }
@@ -704,10 +758,18 @@ impl ViewerOpenUrl {
                     },
                 ));
             }
-            Self::TosDataset { location, region } => {
+            Self::TosDataset {
+                location,
+                region,
+                curator_dataset,
+            } => {
                 // Credentials live in the deployment/user config, whose fetch may still be
                 // in flight — the app resolves them and loads the dataset when it's there.
-                command_sender.send_system(SystemCommand::LoadTosDataset { location, region });
+                command_sender.send_system(SystemCommand::LoadTosDataset {
+                    location,
+                    region,
+                    curator_dataset,
+                });
             }
             Self::RedapProxy(proxy_uri) => {
                 command_sender.send_system(SystemCommand::LoadDataSource(
@@ -1183,6 +1245,7 @@ mod tests {
             ViewerOpenUrl::TosDataset {
                 location: location.clone(),
                 region: String::new(),
+                curator_dataset: None,
             }
         );
         assert_eq!(
@@ -1196,8 +1259,9 @@ mod tests {
         assert_eq!(
             url,
             ViewerOpenUrl::TosDataset {
-                location,
+                location: location.clone(),
                 region: "cn-guangzhou".to_owned(),
+                curator_dataset: None,
             }
         );
         assert_eq!(
@@ -1211,7 +1275,7 @@ mod tests {
         assert_eq!(
             ViewerOpenUrl::from_str(&share_url).unwrap(),
             ViewerOpenUrl::WebViewerUrl {
-                base_url,
+                base_url: base_url.clone(),
                 url_parameters: vec1::vec1![url],
             }
         );
@@ -1226,8 +1290,71 @@ mod tests {
                 )
                 .expect("valid TOS location"),
                 region: "ap-southeast-1".to_owned(),
+                curator_dataset: None,
             }
         );
+
+        // A dataset registered in the Curator console names its registration next to the
+        // region (the console's "Visualize" link); it survives share links.
+        let url = ViewerOpenUrl::from_str(
+            "tos://bucket/path/to/dataset/?region=cn-beijing&curator_dataset=ds-kqzmrtbwe",
+        )
+        .unwrap();
+        assert_eq!(
+            url,
+            ViewerOpenUrl::TosDataset {
+                location: location.clone(),
+                region: "cn-beijing".to_owned(),
+                curator_dataset: Some("ds-kqzmrtbwe".to_owned()),
+            }
+        );
+        assert_eq!(
+            url.sharable_url(None).unwrap(),
+            "tos://bucket/path/to/dataset/?region=cn-beijing&curator_dataset=ds-kqzmrtbwe"
+        );
+        let share_url = url.sharable_url(Some(&base_url)).unwrap();
+        assert_eq!(
+            ViewerOpenUrl::from_str(&share_url).unwrap(),
+            ViewerOpenUrl::WebViewerUrl {
+                base_url: base_url.clone(),
+                url_parameters: vec1::vec1![url],
+            }
+        );
+
+        // Without a region, and with a registration made before the console's short ids.
+        let url =
+            ViewerOpenUrl::from_str("tos://bucket/path/to/dataset/?curator_dataset=ds_01HXR2D8QZ")
+                .unwrap();
+        assert_eq!(
+            url,
+            ViewerOpenUrl::TosDataset {
+                location: location.clone(),
+                region: String::new(),
+                curator_dataset: Some("ds_01HXR2D8QZ".to_owned()),
+            }
+        );
+        assert_eq!(
+            url.sharable_url(None).unwrap(),
+            "tos://bucket/path/to/dataset/?curator_dataset=ds_01HXR2D8QZ"
+        );
+
+        // Anything that is not a console dataset id is ignored: the dataset opens the old way.
+        for bad in ["task-kqzmrtbwe", "ds-KQZ", "ds_../x", ""] {
+            let url = ViewerOpenUrl::from_str(&format!(
+                "tos://bucket/path/to/dataset/?region=cn-beijing&curator_dataset={}",
+                url::form_urlencoded::byte_serialize(bad.as_bytes()).collect::<String>()
+            ))
+            .unwrap();
+            assert_eq!(
+                url,
+                ViewerOpenUrl::TosDataset {
+                    location: location.clone(),
+                    region: "cn-beijing".to_owned(),
+                    curator_dataset: None,
+                },
+                "{bad}"
+            );
+        }
     }
 
     #[test]
