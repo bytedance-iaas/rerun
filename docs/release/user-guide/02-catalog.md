@@ -1,4 +1,4 @@
-# Catalog Server 使用指南
+# Catalog server 使用指南
 
 Catalog server 是本服务的数据集注册目录和训练取数入口。
 本文教你从 Python 里连上它、把 TOS 上的数据集登记进目录、并在训练时直接读取。
@@ -69,7 +69,7 @@ client = rr.catalog.CatalogClient(
     "rerun+https://<你的网关域名>:443",
     token="<你的 token>",
 )
-print([d.name for d in client.datasets()])   # 能列出数据集就是连通了(首次可能是空列表)
+print([d.name for d in client.datasets()])  # 能列出数据集就是连通了(首次可能是空列表)
 ```
 
 **在集群内(与服务同一个 VPC)连**,可直连内网地址,免走网关:
@@ -103,11 +103,11 @@ print(ds.schema())
 查询:
 
 ```python
-for d in client.datasets():          # 列出所有数据集
+for d in client.datasets():  # 列出所有数据集
     print(d.name)
 
-ds = client.get_dataset(name="so101-pick-place")   # 按名字取一个
-print(ds.schema())                                 # 看它有哪些字段
+ds = client.get_dataset(name="so101-pick-place")  # 按名字取一个
+print(ds.schema())  # 看它有哪些字段
 ```
 
 注册记录存在云盘上,服务器重启后不丢,不用重新注册(持久化)。
@@ -148,6 +148,7 @@ for col in schema.component_columns():
 from __future__ import annotations
 
 import torch.multiprocessing
+
 # Rerun 的运行时不是 fork-safe,DataLoader worker 必须用 spawn。
 torch.multiprocessing.set_start_method("spawn", force=True)
 
@@ -163,7 +164,7 @@ from torch.utils.data import DataLoader
 client = rr.catalog.CatalogClient("rerun+https://<网关域名>:443", token="<read token>")
 dataset = client.get_dataset(name="<你的数据集名>")
 
-source = DataSource(dataset=dataset)          # 不填 segments = 全部片段
+source = DataSource(dataset=dataset)  # 不填 segments = 全部片段
 
 fields = {
     # 路径按上面 schema 打印出来的真实值改
@@ -177,7 +178,7 @@ ds = RerunIterableDataset(
     fetch_size=128,
 )
 
-loader = DataLoader(ds, batch_size=8, num_workers=0)   # 先 num_workers=0 跑通,再加 worker
+loader = DataLoader(ds, batch_size=8, num_workers=0)  # 先 num_workers=0 跑通,再加 worker
 
 for batch in loader:
     # batch 是 {字段名: 张量},接你的训练循环
