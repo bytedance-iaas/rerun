@@ -25,7 +25,7 @@ spec:
       http:
         paths:
           # The catalog's plain-HTTP endpoints, on the same domain (HTTP/1.1 through the gateway):
-          #   /api       same-origin calls from the browser (ensure-cors and friends)
+          #   /api       same-origin calls from the browser (ensure-cors, the HF cache proxy)
           #   /catalog   presign / sources, which is what direct reads during training use
           #   /version   unauthenticated health check
           - path: /api
@@ -52,7 +52,7 @@ spec:
           {{- if .Values.curator.enabled }}
           # One domain, split by path: /curation is the curation console, everything else is the
           # web viewer. The gateway does not strip the prefix — the console registers all of its
-          # routes under that path itself (--root-path). The path is fixed because the viewer
+          # routes under that path itself (CURATOR_BASE_PATH). The path is fixed because the viewer
           # derives it as a same-origin sibling for its Diagnose buttons.
           - path: /curation
             pathType: Prefix
@@ -60,7 +60,7 @@ spec:
               service:
                 name: {{ include "dataverse.fullname" . }}-curation
                 port:
-                  number: 7860
+                  number: 8080
           {{- end }}
           - path: /
             pathType: Prefix

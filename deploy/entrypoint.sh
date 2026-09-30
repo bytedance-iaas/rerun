@@ -93,6 +93,10 @@ AUTH
 }
 EOF
     chmod 644 /run/config.json
+
+    # The /api reverse proxy's upstream (see nginx.conf): catalog in the same pod on
+    # k8s (default), the `server` service under docker compose (set by compose).
+    echo "proxy_pass http://${CATALOG_UPSTREAM:-127.0.0.1}:51234;" > /run/nginx-api-upstream.conf
     # Adopt the cache volume: a volume created by an earlier image keeps that
     # image's ownership, which blocks WebDAV PUTs from this nginx's www-data.
     chown www-data:www-data /rrd-cache

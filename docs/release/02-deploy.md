@@ -29,7 +29,11 @@
 **资源侧**:
 
 - 一个火山引擎账户,已开通 TOS 服务,具备读写权限,容量足够存放数据集;
-- 该账户下一对有 TOS 读写权限的 AK/SK;
+- (可选)该账户下一对有 TOS 读写权限的 AK/SK。**缺省部署不需要它**:不配时,
+  viewer 会在每个用户第一次需要读 TOS 时弹框请用户输入自己的凭证(AK/SK 或 STS 临时凭证,
+  会话内记住,菜单「配置火山凭证」随时可改);火山 HF 缓存和质检台跳转的数据集本来就不需要凭证。
+  但有四件事**只认部署级 AK/SK**:质检台的 TOS 读写、catalog 的 tos:// 注册、
+  桶 CORS 的自动配置(4.3)、以及全体用户共享的 rrd 缓存写入 —— 需要它们就配上(2.2 的可选段);
 - 一个 rrd 缓存桶(viewer 写转换产物,可与数据桶同一个),建议建在部署所在的地域(下文 `tos.region`);
   建在别的地域也行,但要多配一行 `tos.rrdArtifactsRegion` 告诉系统它在哪;
   数据集桶没有任何地域要求,打开数据集时单独选;
@@ -59,7 +63,7 @@ git checkout <分支名> # like: release_v1
 |---|---|---|
 | token 签名密钥 | catalog server 验证用户 token 用的"印章":server 拿它验签,你拿它给用户签发 token(见第 5 节) | 本节用 openssl 生成:**自己留一份**,同时写入集群 Secret |
 | web 登录账号表 | 浏览器打开 web viewer / 质检台时的用户名密码(存的是密码哈希) | 本节生成并直接写入集群 Secret |
-| 火山引擎 AK/SK | 各组件读写 TOS 对象存储的云账户凭证 | 火山引擎控制台(第 1 节资源侧) |
+| (可选)火山引擎 AK/SK | 部署级的 TOS 默认凭证。**缺省不配**:viewer 用户各自带自己的凭证(首次需要时弹框输入);见本节末"可选:部署级 AK/SK" | 火山引擎控制台(第 1 节资源侧) |
 
 特别注意:**token 签名密钥和火山引擎 AK/SK 是两回事**。
 前者只在本产品内部用(签发/验证 catalog token),后者是云厂商的账户凭证,两者互填部署都起不来且报错不直观。
@@ -75,12 +79,9 @@ export DATAVERSE_NS=dataverse   # 换成你要的名字;同一集群装第二套
 kubectl create namespace $DATAVERSE_NS
 ```
 
-把 AK/SK、火山方舟 API KEY 和 web 登录账号读进当前终端的环境变量(后文命令都引用这些变量,新开终端要重新 export):
+把 web 登录账号读进当前终端的环境变量(后文命令都引用这些变量,新开终端要重新 export):
 
 ```sh
-export TOS_ACCESS_KEY="##############"
-export TOS_SECRET_KEY="##############"
-export ARK_API_KEY="##############"
 
 # web viewer / 质检台的登录账号:
 export WEB_USER="##############"
@@ -98,29 +99,53 @@ echo "$SERVER_TOKEN_SECRET"   # 抄走存好,后面不会再打印
 
 ```sh
 # 各 key 的含义:
-# - tos_access_key / tos_secret_key:各组件访问 TOS 的凭证。web viewer 靠它让浏览器
-#   直读数据集并回写 rrd 缓存,catalog server 靠它读桶和给训练侧签预签名 URL,
-#   native 会话同样复用。
 # - server_token_secret:catalog 的 token 签名密钥(上面 openssl 生成的那串)。server 只用它
 #   验签,不会替你保管;签发在你手里那份上做(第 5 节)。
 # - web_htpasswd:登录账号表。key 名指的是它的【格式】(Apache 密码表:
 #   「用户名:密码哈希」,nginx 和质检台都认这个格式验证),不需要 htpasswd 工具,
 #   哈希由 openssl 现场生成,账号表只存在于这个 Secret 里。
-# - ark_api_key:质检台走火山方舟 VLM 后端用的 key(配套 base url 是普通配置,
-#   在 2.3 的 curator.arkBaseUrl);不用方舟(比如用自托管 vLLM)就删掉那一行。
+# - curator_master_key:质检台的主密钥,加密它库里保存的所有密钥(TOS 访问密钥、
+#   VLM API key 都是部署后在质检台界面里添加的,不再经 Secret 注入)。
+#   ⚠️ 它和 token 签名密钥一样要**自己备份一份**:丢了的话库里存的密钥全部解不开,只能逐个重填。
 # - 访问 HF 私有数据集才需要再加 --from-literal=hf_token=<token>。
-# - AK/SK 若是 STS 临时凭证(不是长期 AK/SK),必须再加
-#   --from-literal=tos_session_token=<SessionToken>:三者须同一次签发、未过期,缺了 token
-#   TOS 会报 InvalidAccessKeyId(看着像权限问题,其实不是)。⚠️ 目前只有质检台读它;
-#   web viewer、catalog 和 native 会话只用 AK/SK 签名,用 STS 凭证时这三者访问不了 TOS,
-#   仍需长期 AK/SK。临时凭证过期后三个 key 要一起换,再重启。
+# 注意这里【没有】AK/SK —— 这是缺省形态:viewer 用户各自带自己的凭证。
+# 要配部署级默认凭证见下面"可选:部署级 AK/SK"。
+export CURATOR_MASTER_KEY="$(openssl rand -base64 32)"
+echo "$CURATOR_MASTER_KEY"   # 抄走存好,同 token 签名密钥一个待遇
+
 kubectl -n $DATAVERSE_NS create secret generic dataverse-secrets \
-    --from-literal=tos_access_key="$TOS_ACCESS_KEY" \
-    --from-literal=tos_secret_key="$TOS_SECRET_KEY" \
     --from-literal=server_token_secret="$SERVER_TOKEN_SECRET" \
-    --from-literal=ark_api_key="$ARK_API_KEY" \
+    --from-literal=curator_master_key="$CURATOR_MASTER_KEY" \
     --from-literal=web_htpasswd="$WEB_USER:$(openssl passwd -apr1 "$WEB_PASS")"
 ```
+
+#### 可选:部署级 AK/SK(及 STS 临时凭证)
+
+缺省(不配 AK/SK)时各功能的行为:
+
+- **web / native viewer**:用户第一次打开需要凭证的 TOS 数据集时弹框输入自己的
+  AK/SK 或 STS 临时凭证,会话内记住;菜单「配置火山凭证」随时可更新;凭证失效(403)自动作废重问。
+  原生 viewer 还可勾选"在本机记住"写入本机 `~/.rerun/config.json`;
+- **免凭证来源不受影响**:火山 HF 缓存(4.5)、从质检台"可视化"跳转的数据集(质检台代签)都照常打开;
+- **暂不可用,直到配上部署级凭证**:质检台的 TOS 读写、catalog 的 tos:// 注册、
+  桶 CORS 自动配置(4.3 有手动后备)、全体用户共享的 rrd 缓存写入
+  (用户自带的凭证若对缓存桶有写权限,缓存对该用户仍然生效)。
+
+要配部署级默认凭证(全体用户共用、上述四项全部启用),把 AK/SK 补进同一个 Secret:
+
+```sh
+export TOS_ACCESS_KEY="##############"
+export TOS_SECRET_KEY="##############"
+kubectl -n $DATAVERSE_NS patch secret dataverse-secrets --type merge \
+    -p "{\"stringData\":{\"tos_access_key\":\"$TOS_ACCESS_KEY\",\"tos_secret_key\":\"$TOS_SECRET_KEY\"}}"
+# 已在运行的部署补配后要滚动重启才生效(第 7 节)。
+```
+
+AK/SK 若是 **STS 临时凭证**(不是长期对),必须把 SessionToken 一起配上
+(`tos_session_token` key):三者须同一次签发、未过期,缺了 token TOS 会报
+InvalidAccessKeyId(看着像权限问题,其实不是)。所有组件(viewer、catalog、
+native 会话、质检台)都支持用 STS 三件套签名;临时凭证会过期,过期后三个 key
+一起换,再滚动重启。
 
 ### 2.3 写 values 文件
 
@@ -137,12 +162,15 @@ image:
   curator: <仓库地址>/robot_curator:<tag>
 
 apig:
-  # 复用集群里已有的 APIG 网关(推荐):create 保持 false,填平台实例 id —— APIG 控制台
-  # https://console.volcengine.com/veapig → 实例列表里那一串。
+  # 复用集群里已有的 APIG 网关(推荐):create 保持 false,填平台实例 id。
+  # id 哪里找 —— APIG 控制台 https://console.volcengine.com/veapig 的实例列表,或直接问集群:
+  #   kubectl get apiginstance -A -o custom-columns=NAME:.metadata.name,ID:.status.id
+  # (填错会直接安装报错,并附上这条列表命令。)
   # 复用时不需要 subnetIds(网关和它的前置 CLB 都已存在);网关声明的 ingressClass
-  # 会在安装时自动从集群反查出来,不用填(id 填错会直接安装报错,并附上列出
-  # 集群里所有网关的命令)。只有离线渲染(helm template 不连集群)才需要显式
-  # 加一行 ingressClassName: <该网关声明的 class>。
+  # 会在安装时自动从集群反查出来,不用填;只有离线渲染(helm template 不连集群)
+  # 才需要显式加一行 ingressClassName: <该网关声明的 class>。
+  # 特例:集群里【恰好只有一个】网关时,existingId 也可以省 —— 安装时自动发现并采用;
+  # 多网关集群(共享集群通常如此)必须指明,省了就是你刚才会看到的那个报错。
   create: false
   existingId: <apig 实例 id>
 
@@ -195,7 +223,7 @@ chart 不接受明文密钥输入,也不会自己渲染 Secret:helm 的 release 
 
 ### 2.5 启用自带的 vLLM 后端(可选)
 
-质检台的模型检查需要一个 VLM 后端,默认走火山方舟(2.2 的 `ark_api_key`,已配好)。
+质检台的模型检查需要一个 VLM 后端。方舟等外部后端的 API key 是部署后在质检台界面里添加的(主密钥加密保存),不经 Secret。
 chart 还内置了一套 **vLLM 部署**,默认关闭(`vllm.enabled: false`,因为要 GPU);
 打开后它会自动以 `self-hosted` 为名注册进质检台的后端列表,界面里直接可选,不用手抄任何地址。
 
@@ -293,7 +321,9 @@ export GW_DOMAIN=<控制台查到的域名>   # 例 xxxx.apigateway-cn-beijing.v
 
 浏览器直读 TOS 需要桶上有放行 viewer 域名的 CORS 规则(浏览器的跨域安全机制),否则打不开 `tos://` 数据集。
 本产品**自动处理**:web viewer 每次打开一个桶,会先经同域 `/api/ensure-cors` 请 catalog server 检查该桶的 CORS,缺我们的规则就补上(只追加,不覆盖桶上别家的规则)。
-所以运行时用新桶、甚至新建的桶,都不需要预先配置 — 前提是 AK/SK 具备桶管理权限。
+所以运行时用新桶、甚至新建的桶,都不需要预先配置 — 前提是**部署配置了 AK/SK**(2.2 的可选段)且它具备桶管理权限。
+零凭证部署没有这层自动化:要么用下面的手动后备给桶配一次 CORS,要么桶本身已有放行规则。
+(火山 HF 缓存不受影响 —— 它走同域代理,压根不需要桶 CORS,见 4.5。)
 
 需要了解的三点:
 
@@ -312,7 +342,17 @@ export GW_DOMAIN=<控制台查到的域名>   # 例 xxxx.apigateway-cn-beijing.v
 catalog 的 gRPC 走网关同一个域名(TLS 加密 + token 认证),**没有单独的公网入口**,无需额外配置。
 token 的签发见第 5 节。
 
-### 4.5 验证
+### 4.5 火山 HF 缓存(开箱即用)
+
+viewer 菜单里的「从火山 HF 缓存打开」读的是内部 HF 镜像缓存(公开读的 `ai-infra` TOS 桶,
+北京,数据集清单见 huggingface-mirror.bytedance.net/all)。**不需要任何配置和凭证**:
+该桶不发 CORS 头,浏览器不能直读,web viewer 自动改走同域 `/api/hf-cache` 路径 ——
+网关已把 `/api` 路由到 catalog server,由它转发(只放行该桶 `dataset/` 下的只读请求,
+不是开放代理);原生 viewer 直连公网端点。
+⚠️ `ai-infra` 桶仅限内部使用,对客部署请勿把它的入口暴露给客户(菜单项跟镜像走,
+对客镜像裁掉此功能或换自建缓存桶,布局规范相同即可)。
+
+### 4.6 验证
 
 浏览器打开 `https://<域名>`,用 2.2 建的账号登录,应看到 viewer 界面;
 `https://<域名>/curation` 应看到质检台(共用账号表,免再登录)。
@@ -393,6 +433,19 @@ helm upgrade dataverse deploy/helm/dataverse -n $DATAVERSE_NS \
     -f deploy/secrets/values-prod.yaml
 ```
 
+**一次性迁移(chart < 0.2.0 升上来)**:0.2.0 给质检台换了持久盘方案(volumeClaimTemplates),
+而这是 StatefulSet 创建后不可变的字段,原地升级会报
+`Forbidden: updates to statefulset spec for fields other than …`。
+先删旧 StatefulSet 再升级(旧版质检台的 /data 是临时盘,没有要保留的数据):
+
+```sh
+kubectl -n $DATAVERSE_NS delete statefulset dataverse-curation
+helm upgrade dataverse deploy/helm/dataverse -n $DATAVERSE_NS -f deploy/secrets/values-prod.yaml
+```
+
+升级后质检台首次就绪前会先建两块 EBS 盘并跑库初始化,等待几分钟属正常
+(`kubectl -n $DATAVERSE_NS rollout status statefulset dataverse-curation --timeout=10m`)。
+
 改密钥(密钥在集群 Secret 里,不归 helm 管;chart 看不到内容,改完必须手动重启生效)。
 用 `kubectl patch` 只改要改的 key,**其他 key 原样保留** —— 千万不要重跑 2.2 的 create 命令覆盖写:整个部署的密钥都在这一个 Secret 里,覆盖写会把没列出的 key(尤其 `server_token_secret`)一并抹掉,catalog 认证会当场失效、所有已发 token 作废。
 以改登录账号/密码为例:
@@ -406,7 +459,8 @@ kubectl -n $DATAVERSE_NS patch secret dataverse-secrets --type merge \
 kubectl -n $DATAVERSE_NS rollout restart statefulset rerun-cloud dataverse-curation
 ```
 
-改其他 key 同理,换掉 `stringData` 里的 key/值即可(比如补 `hf_token`、换 AK/SK)。
+改其他 key 同理,换掉 `stringData` 里的 key/值即可(比如补 `hf_token`、补/换部署级 AK/SK、
+换 STS 三件套 —— STS 的 `tos_access_key`/`tos_secret_key`/`tos_session_token` 三个要一起换)。
 
 卸载:
 

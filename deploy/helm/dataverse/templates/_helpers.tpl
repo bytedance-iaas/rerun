@@ -161,6 +161,32 @@ read them back.
 {{/* ── APIG ────────────────────────────────────────────────────────────────────────────────── */}}
 
 {{/*
+The adopted gateway's instance id: apig.existingId when set, else discovered from the cluster —
+when exactly one APIGInstance exists, that one is the gateway (the common case: a cluster has one
+gateway). Ambiguity and offline renders fail with the way out, never guess.
+*/}}
+{{- define "dataverse.apig.resolvedId" -}}
+{{- if .Values.apig.existingId }}
+{{- .Values.apig.existingId }}
+{{- else }}
+{{- $ids := list }}
+{{- range (lookup "loadbalancer.vke.volcengine.com/v1beta1" "APIGInstance" "" "").items }}
+{{- with (dig "status" "id" "" .) | default (dig "spec" "id" "" .) }}
+{{- $ids = append $ids . }}
+{{- end }}
+{{- end }}
+{{- $ids = $ids | uniq }}
+{{- if eq (len $ids) 1 }}
+{{- first $ids }}
+{{- else if gt (len $ids) 1 }}
+{{- fail (printf "apig.existingId is required: this cluster has %d APIG gateways and the chart will not guess. Pick one:\n  kubectl get apiginstance -A -o custom-columns=NAME:.metadata.name,ID:.status.id,CLASSES:.spec.ingress.ingressClasses" (len $ids)) }}
+{{- else }}
+{{- fail "apig.existingId is required: no APIG gateway was found to adopt. Either the cluster has none (set apig.create=true to provision one), or this is an offline render (helm template/lint cannot look up the cluster — pass the id explicitly, or render with --dry-run=server)." }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Name of the APIGInstance object the Ingresses bind to.
   create=true  -> the CR this chart renders, <release>-apig
   create=false -> the CR the platform already made for the adopted gateway, which it names
@@ -170,7 +196,7 @@ Name of the APIGInstance object the Ingresses bind to.
 {{- if .Values.apig.create }}
 {{- printf "%s-apig" (include "dataverse.fullname" .) }}
 {{- else }}
-{{- printf "%s-apig-instance" .Values.apig.existingId }}
+{{- printf "%s-apig-instance" (include "dataverse.apig.resolvedId" .) }}
 {{- end }}
 {{- end -}}
 
@@ -187,16 +213,17 @@ hatch and the hard error, rather than a default that would leave the Ingress sil
 {{- else if .Values.apig.create }}
 {{- printf "%s-apig" (include "dataverse.fullname" .) }}
 {{- else }}
+{{- $resolvedId := include "dataverse.apig.resolvedId" . }}
 {{- $found := "" }}
 {{- range (lookup "loadbalancer.vke.volcengine.com/v1beta1" "APIGInstance" "" "").items }}
-{{- if or (eq (dig "status" "id" "" .) $.Values.apig.existingId) (eq (dig "spec" "id" "" .) $.Values.apig.existingId) }}
+{{- if or (eq (dig "status" "id" "" .) $resolvedId) (eq (dig "spec" "id" "" .) $resolvedId) }}
 {{- $found = dig "spec" "ingress" "ingressClasses" (list) . | first | default "" }}
 {{- end }}
 {{- end }}
 {{- if $found }}
 {{- $found }}
 {{- else }}
-{{- fail (printf "could not resolve the ingress class for apig.existingId=%q: no APIGInstance in the cluster reports this id (or it declares no ingress classes).\nDuring a real install/upgrade this means the id is wrong — list the gateways:\n  kubectl get apiginstance -A -o custom-columns=NAME:.metadata.name,ID:.status.id,CLASSES:.spec.ingress.ingressClasses\nWhen rendering offline (helm template/lint), the cluster is not reachable — render with --dry-run=server, or set apig.ingressClassName explicitly." .Values.apig.existingId) }}
+{{- fail (printf "could not resolve the ingress class for gateway id %q: no APIGInstance in the cluster reports this id (or it declares no ingress classes).\nDuring a real install/upgrade this means the id is wrong — list the gateways:\n  kubectl get apiginstance -A -o custom-columns=NAME:.metadata.name,ID:.status.id,CLASSES:.spec.ingress.ingressClasses\nWhen rendering offline (helm template/lint), the cluster is not reachable — render with --dry-run=server, or set apig.ingressClassName explicitly." $resolvedId) }}
 {{- end }}
 {{- end }}
 {{- end -}}
@@ -217,9 +244,9 @@ create=true is only true after the gateway finishes provisioning.
 {{- with .Values.apig.annotations }}
 {{- toYaml . }}
 {{- end }}
-{{- with .Values.apig.existingId }}
-ingress.vke.volcengine.com/apig-instance-name: {{ include "dataverse.apig.instanceObjectName" $ | quote }}
-ingress.vke.volcengine.com/loadbalancer-id: {{ . | quote }}
+{{- if not .Values.apig.create }}
+ingress.vke.volcengine.com/apig-instance-name: {{ include "dataverse.apig.instanceObjectName" . | quote }}
+ingress.vke.volcengine.com/loadbalancer-id: {{ include "dataverse.apig.resolvedId" . | quote }}
 {{- end }}
 {{- end -}}
 
@@ -241,10 +268,6 @@ surfacing later as an Ingress that never gets an address.
 {{- end }}
 {{- if .Values.apig.existingId }}
 {{- fail "apig.existingId must be empty when apig.create=true. The provisioned gateway's id is reported in the APIGInstance's status.id and the Ingresses bind by ingress class, so nothing needs it back. Setting it writes spec.id, which is immutable — the admission webhook then rejects every upgrade with 'spec.id: Forbidden: forbidden to update'. Use existingId only with apig.create=false." }}
-{{- end }}
-{{- else }}
-{{- if not .Values.apig.existingId }}
-{{- fail "apig.existingId is required when apig.create=false: set it to the gateway's instance id from the APIG console, or set apig.create=true to provision a new gateway." }}
 {{- end }}
 {{- end }}
 {{- end }}

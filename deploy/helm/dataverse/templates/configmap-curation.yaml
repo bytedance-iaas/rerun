@@ -23,6 +23,12 @@ metadata:
     app.kubernetes.io/component: curation
 data:
   site.yaml: |
+    {{- /* curator.siteConfig is written verbatim (only keys that differ from the factory
+           defaults belong in it); the vlm_backends and public_datasets sections rendered
+           below are merged on top and win over same-named keys in it. */}}
+    {{- with .Values.curator.siteConfig }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     {{- $backends := deepCopy (.Values.curator.vlmBackends | default dict) }}
     {{- if .Values.vllm.enabled }}
     {{- $endpoint := printf "http://%s-vllm.%s.svc.cluster.local:%v/v1" (include "dataverse.fullname" .) .Release.Namespace (.Values.vllm.port | int) }}
@@ -52,7 +58,7 @@ data:
       label: {{ . | quote }}
       {{- end }}
     {{- end }}
-    {{- if and (not $backends) (not $pd.bucket) }}
+    {{- if and (not $backends) (not $pd.bucket) (not .Values.curator.siteConfig) }}
     {}
     {{- end }}
 {{- end }}

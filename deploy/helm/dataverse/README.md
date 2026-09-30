@@ -6,7 +6,7 @@ public entry point they share.
 | Component | Objects |
 |---|---|
 | **ReRun** | A StatefulSet with two containers — the web viewer and the catalog server — its headless and web Services, and the catalog's data disk |
-| **Curation console** | Its own StatefulSet, reading and writing TOS directly with the shared AK/SK, plus its site-configuration ConfigMap. `curator.enabled=false` drops it |
+| **Curation console** | Its own StatefulSet (curator v2: the API Daemon on 8080, two EBS disks for state and scratch; TOS/VLM keys are added in its UI, encrypted with `curator_master_key`), plus its site-configuration ConfigMap. `curator.enabled=false` drops it |
 
 Shared between them: the two Secrets, the APIG gateway, and the path-routed Ingresses — including
 the catalog's gRPC route. An optional self-hosted vLLM (`vllm.enabled=true`) serves the console
@@ -28,11 +28,16 @@ stays readable to anyone who can run `helm get values`:
 kubectl create namespace rerun
 
 kubectl -n rerun create secret generic dataverse-secrets \
-    --from-literal=tos_access_key=<ak> \
-    --from-literal=tos_secret_key=<sk> \
     --from-literal=server_token_secret="$(openssl rand -base64 32)" \
     --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"   # prompts for the password
 ```
+
+That is the zero-credential default: no AK/SK anywhere — the viewer asks each user for their
+own Volcengine credentials when an operation first needs them (kept for the session, updatable
+from the menu). To bake in deployment-wide default credentials instead, add
+`--from-literal=tos_access_key=<ak> --from-literal=tos_secret_key=<sk>` — the curation console's
+TOS features, the catalog's `tos://` registration, automatic bucket CORS and the shared
+rrd-artifacts cache all sign with the deployment pair, so leave it out only when those can wait.
 
 Then install, naming that Secret rather than its contents:
 
@@ -54,18 +59,18 @@ the deployment guide and the `rerun-native-session` chart's defaults assume. The
 the ReRun workload itself, which is always `rerun-cloud` — its pod is `rerun-cloud-0` and its disk
 `server-data-rerun-cloud-0` regardless of the release name.
 
-The keys the application Secret must carry are `tos_access_key`, `tos_secret_key`,
-`server_token_secret` whenever `catalog.tokenAuth.enabled`, and `web_htpasswd` whenever
-`web.basicAuth.enabled` (the viewer and the console share that one account
-table). `hf_token`, `ark_api_key` and `tos_session_token` are optional and read with
-`optional: true`, so leaving any of them out simply leaves the matching feature off. Both Secrets
-have to live in the release's namespace — Kubernetes does not let a pod reference a Secret from
-another one.
+The keys the application Secret must carry are `server_token_secret` whenever
+`catalog.tokenAuth.enabled`, and `web_htpasswd` whenever `web.basicAuth.enabled` (the viewer and
+the console share that one account table). `tos_access_key`/`tos_secret_key`, `hf_token`,
+`ark_api_key` and `tos_session_token` are all optional and read with `optional: true`, so leaving
+any of them out simply leaves the matching feature off. Both Secrets have to live in the release's
+namespace — Kubernetes does not let a pod reference a Secret from another one.
 
 `tos_session_token` is for STS temporary credentials, which only authenticate as an AK/SK/token
-triple — without the token TOS rejects the pair as `InvalidAccessKeyId`. Only the curation console
-reads it: the viewer, the catalog and native sessions sign with the AK/SK alone, so they still need
-a long-term pair.
+triple — without the token TOS rejects the pair as `InvalidAccessKeyId`. Every component signs
+with it (the viewer, the catalog, native sessions and the console), so a deployment can run
+entirely on STS credentials; they expire on their own schedule — replace all three keys together,
+then restart the pods.
 
 ## One region, not four endpoints
 

@@ -18,6 +18,9 @@ services:
     ports:
       - "9091:80"
     env_file: .env
+    environment:
+      # nginx's same-origin /api proxy targets the catalog container (see nginx.conf).
+      CATALOG_UPSTREAM: server
     secrets:
       - tos_access_key
       - tos_secret_key
