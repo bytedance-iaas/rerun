@@ -46,6 +46,7 @@ impl RrdConvertCommand {
             endpoint: config.tos_endpoint.clone(),
             access_key: config.tos_access_key.clone(),
             secret_key: config.tos_secret_key.clone(),
+            session_token: config.tos_session_token.clone(),
         };
 
         let artifacts_url = self

@@ -147,12 +147,21 @@ fn add_button_ui(
                     false,
                     egui::Button::new(egui::RichText::new(tr("Extended", "扩展功能")).italics()),
                 );
+                // Grouped by data source: Volcengine TOS first (open + its credentials),
+                // then Hugging Face (the ai-infra HF-cache entry will join this group).
                 if re_ui::UICommand::OpenTosDataset
                     .menu_button_ui(ui, ctx.command_sender())
                     .clicked()
                 {
                     ui.close();
                 }
+                if re_ui::UICommand::SetTosCredentials
+                    .menu_button_ui(ui, ctx.command_sender())
+                    .clicked()
+                {
+                    ui.close();
+                }
+                ui.separator();
                 if re_ui::UICommand::OpenHfDataset
                     .menu_button_ui(ui, ctx.command_sender())
                     .clicked()

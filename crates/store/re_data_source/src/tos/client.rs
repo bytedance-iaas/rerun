@@ -52,6 +52,12 @@ pub struct TosCredentials {
 
     pub access_key: String,
     pub secret_key: String,
+
+    /// The session token of STS temporary credentials. STS only authenticates as a triple
+    /// from the same issue: an STS AK/SK sent without its token is rejected as
+    /// `InvalidAccessKeyId` — which reads like a permission problem but is not one.
+    /// Empty for a long-term AK/SK pair.
+    pub session_token: String,
 }
 
 impl TosCredentials {
@@ -915,6 +921,13 @@ impl TosClient {
             ("x-amz-content-sha256".to_owned(), payload_sha256.clone()),
             ("x-amz-date".to_owned(), amz_date.clone()),
         ];
+        // STS temporary credentials carry their session token as a signed header.
+        if !credentials.session_token.is_empty() {
+            headers.push((
+                "x-amz-security-token".to_owned(),
+                credentials.session_token.clone(),
+            ));
+        }
         headers.extend(extra_headers);
         headers.sort();
 
@@ -1000,14 +1013,23 @@ impl TosClient {
         #[cfg(target_arch = "wasm32")]
         request.headers.insert("cache-control", "no-cache");
 
-        crate::http_client::fetch_async_with_timeout(request, hard_timeout)
+        let response = crate::http_client::fetch_async_with_timeout(request, hard_timeout)
             .await
             .map_err(|err| {
                 anyhow::anyhow!(trf!(
                     "Request failed: {err}\nUrl: {url}",
                     "请求失败：{err}\nURL：{url}"
                 ))
-            })
+            })?;
+
+        // Authorization failed with the session-entered credentials: drop them so the next
+        // open prompts for fresh ones. CORS-management requests are exempt — credentials
+        // that read objects fine may legitimately lack the CORS-admin permission.
+        if response.status == 403 && !query.iter().any(|(k, _)| k == "cors") {
+            super::session_credentials::clear_if_matches(&credentials.access_key);
+        }
+
+        Ok(response)
     }
 }
 

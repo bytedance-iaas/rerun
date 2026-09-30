@@ -545,6 +545,11 @@ impl App {
                 // The user asked for this dataset explicitly; don't also bring back the
                 // previous session on top of it.
                 self.session_restore_attempted = true;
+                // Nor greet them with the startup credentials prompt: entering through a
+                // link is its own flow — a console-signed open (curation console's
+                // "Visualize") needs no credentials at all, and a plain tos:// link
+                // raises the on-demand prompt by itself if keys turn out to be missing.
+                self.startup_credentials_prompt_attempted = true;
                 egui_ctx.request_repaint();
             }
 
@@ -975,6 +980,10 @@ impl App {
 
             UICommand::OpenHfDataset => {
                 self.state.open_hf_modal.open();
+            }
+
+            UICommand::SetTosCredentials => {
+                self.state.tos_credentials_modal.open();
             }
 
             UICommand::CloseAllEntries => {

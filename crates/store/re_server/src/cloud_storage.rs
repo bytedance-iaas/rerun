@@ -106,6 +106,11 @@ fn client_for_bucket(
     if let Some(secret_key) = env_non_empty("TOS_SECRET_KEY") {
         builder = builder.with_secret_access_key(secret_key);
     }
+    // STS temporary credentials authenticate as a triple; without the token the AK/SK
+    // alone are rejected as InvalidAccessKeyId.
+    if let Some(session_token) = env_non_empty("TOS_SESSION_TOKEN") {
+        builder = builder.with_token(session_token);
+    }
 
     builder = builder.with_virtual_hosted_style_request(!path_style);
 

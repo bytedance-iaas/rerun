@@ -96,6 +96,8 @@ pub struct AppState {
     #[serde(skip)]
     pub(crate) open_hf_modal: crate::ui::OpenHfModal,
     #[serde(skip)]
+    pub(crate) tos_credentials_modal: crate::ui::TosCredentialsModal,
+    #[serde(skip)]
     pub(crate) user_guide_modal: crate::ui::UserGuideModal,
     #[serde(skip)]
     pub(crate) delete_artifacts_modal: crate::ui::DeleteArtifactsModal,
@@ -174,6 +176,7 @@ impl Default for AppState {
             open_url_modal: Default::default(),
             open_tos_modal: Default::default(),
             open_hf_modal: Default::default(),
+            tos_credentials_modal: Default::default(),
             user_guide_modal: Default::default(),
             delete_artifacts_modal: Default::default(),
             share_modal: Default::default(),
@@ -885,6 +888,7 @@ impl AppState {
         self.open_url_modal.ui(ui);
         self.open_tos_modal.ui(ui, command_sender);
         self.open_hf_modal.ui(ui, command_sender);
+        self.tos_credentials_modal.ui(ui);
         self.user_guide_modal.ui(ui);
         self.delete_artifacts_modal.ui(ui);
 

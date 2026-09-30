@@ -22,6 +22,7 @@ fn credentials() -> TosCredentials {
             .unwrap_or_else(|_| "https://tos-s3-cn-beijing.volces.com".to_owned()),
         access_key: std::env::var("TOS_ACCESS_KEY").expect("set TOS_ACCESS_KEY"),
         secret_key: std::env::var("TOS_SECRET_KEY").expect("set TOS_SECRET_KEY"),
+        session_token: std::env::var("TOS_SESSION_TOKEN").unwrap_or_default(),
     }
 }
 

@@ -20,6 +20,9 @@ struct ServerTosConfig {
     tos_access_key: String,
     tos_secret_key: String,
 
+    /// Set when the deployment's AK/SK are STS temporary credentials (a triple).
+    tos_session_token: String,
+
     /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     tos_rrd_artifacts_url: String,
 
@@ -36,6 +39,7 @@ impl Default for ServerTosConfig {
             tos_endpoint: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
+            tos_session_token: String::new(),
             tos_rrd_artifacts_url: String::new(),
             tos_rrd_artifacts_region: String::new(),
             rrd_artifacts_prefetch: 0,
@@ -96,11 +100,14 @@ pub struct OpenTosModal {
     /// connection field the user ever touches.
     region: String,
 
-    /// Show the AK/SK inputs and use them instead of the deployment's credentials —
+    /// Show the credential inputs and use them instead of the deployment's credentials —
     /// the TOS counterpart of the HF dialog's "Use non-default token".
     use_custom_credentials: bool,
-    access_key: String,
-    secret_key: String,
+    credentials: super::credential_fields::CredentialFields,
+
+    /// Whether the credential inputs were already auto-expanded once because no credentials
+    /// were configured anywhere — done once so unticking the checkbox stays possible.
+    custom_auto_shown: bool,
 
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
@@ -157,6 +164,9 @@ impl OpenTosModal {
                         serde_json::from_slice::<ServerTosConfig>(&response.bytes)
                             .map_err(|err| format!("invalid JSON: {err}"))
                     }
+                    // No config.json at all: a deployment without baked-in defaults — the
+                    // user enters credentials themselves. Normal, not an error.
+                    Ok(response) if response.status == 404 => Ok(ServerTosConfig::default()),
                     Ok(response) => {
                         Err(format!("HTTP {} {}", response.status, response.status_text))
                     }
@@ -191,6 +201,7 @@ impl OpenTosModal {
             env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
+            env_override(&mut parsed.tos_session_token, "TOS_SESSION_TOKEN");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
             env_override(
                 &mut parsed.tos_rrd_artifacts_region,
@@ -215,6 +226,21 @@ impl OpenTosModal {
         // Default region: wherever the deployment's endpoint lives.
         if self.region.is_empty() && config_resolved {
             self.region = re_data_source::tos::region_from_endpoint(&server_config.tos_endpoint);
+        }
+
+        // Credentials the user entered earlier this session (e.g. in another dialog or the
+        // standalone prompt) — the fallback when the deployment has none of its own.
+        let session_credentials = re_data_source::tos::session_credentials::get();
+
+        // Nothing configured anywhere: expand the AK/SK inputs right away instead of
+        // making the user discover the checkbox. Once only — it stays a checkbox.
+        if config_resolved
+            && !self.custom_auto_shown
+            && !server_config.has_credentials()
+            && session_credentials.is_none()
+        {
+            self.use_custom_credentials = true;
+            self.custom_auto_shown = true;
         }
         let resolved_endpoint =
             re_data_source::tos::endpoint_for_region(&self.region, &server_config.tos_endpoint);
@@ -281,27 +307,12 @@ impl OpenTosModal {
                 // Credentials: the deployment's (docker secrets on the web, config.json
                 // natively) are used unless the user opts into entering their own.
                 ui.add_space(2.0);
-                ui.re_checkbox(&mut self.use_custom_credentials, tr("Use non-default credentials", "使用自带 AK/SK"));
+                ui.re_checkbox(&mut self.use_custom_credentials, tr("Use non-default credentials", "使用自带凭证"));
 
                 if self.use_custom_credentials {
-                    egui::Grid::new("tos_credentials_fields")
-                        .num_columns(2)
-                        .spacing([8.0, 6.0])
-                        .show(ui, |ui| {
-                            ui.label("Access key：");
-                            egui::TextEdit::singleline(&mut self.access_key)
-                                .hint_text("AK…")
-                                .desired_width(f32::INFINITY)
-                                .show(ui);
-                            ui.end_row();
-
-                            ui.label("Secret key：");
-                            egui::TextEdit::singleline(&mut self.secret_key)
-                                .password(true)
-                                .desired_width(f32::INFINITY)
-                                .show(ui);
-                            ui.end_row();
-                        });
+                    // `persistent: false` — credentials entered here override for this open
+                    // only; the session-wide ones are managed by the "TOS credentials…" prompt.
+                    self.credentials.ui(ui, "tos_credentials_fields", false, false);
                 }
 
                 // In the browser the requests go out from the user's machine, so internal
@@ -320,9 +331,10 @@ impl OpenTosModal {
                 if let Some(err) = &config_error {
                     ui.warning_label(trf!(
                         "Failed to load the deployment's TOS settings (endpoint, credentials): \
-                         {err}\nFile: config.json — datasets cannot be opened until this is fixed.",
+                         {err}\nFile: config.json — you can still open datasets with credentials \
+                         you enter yourself.",
                         "加载部署的 TOS 设置（endpoint、凭证）失败：\
-                         {err}\n文件：config.json — 不修复就无法打开数据集。",
+                         {err}\n文件：config.json — 仍可用你自己输入的凭证打开数据集。",
                     ));
                 }
 
@@ -340,9 +352,9 @@ impl OpenTosModal {
                 // The endpoint is derived from the chosen region; the signing region in
                 // turn is derived from the endpoint (see `TosCredentials::region`).
                 let have_credentials = if self.use_custom_credentials {
-                    !self.access_key.trim().is_empty() && !self.secret_key.trim().is_empty()
+                    self.credentials.complete()
                 } else {
-                    server_config.has_credentials()
+                    server_config.has_credentials() || session_credentials.is_some()
                 };
                 let connection_ok = !self.region.trim().is_empty() && have_credentials;
 
@@ -379,16 +391,14 @@ impl OpenTosModal {
                     } else if self.region.trim().is_empty() {
                         tr("Region is required.", "请选择地区。")
                     } else if self.use_custom_credentials {
-                        tr(
-                            "Enter the access key and secret key.",
-                            "请输入 access key 和 secret key。",
-                        )
+                        self.credentials.missing_hint()
                     } else {
                         tr(
-                            "This deployment has no TOS credentials configured (config.json) — \
-                             check \"Use non-default credentials\" to enter your own.",
-                            "这个部署没有配置 TOS 凭证（config.json）— \
-                             勾选“使用自带 AK/SK”后输入你自己的。",
+                            "This deployment has no Volcengine credentials configured \
+                             (config.json) — check \"Use non-default credentials\" to \
+                             enter your own.",
+                            "这个部署没有配置火山凭证（config.json）— \
+                             勾选“使用自带凭证”后输入你自己的。",
                         )
                     });
                 } else {
@@ -412,16 +422,40 @@ impl OpenTosModal {
                     {
                         if let Some(location) = location {
                             let credentials = if self.use_custom_credentials {
+                                // A per-open override: deliberately NOT stored in the
+                                // session slot (that one is managed by the credentials
+                                // prompt / the "TOS credentials…" menu item).
                                 TosCredentials {
                                     endpoint: resolved_endpoint.clone(),
-                                    access_key: self.access_key.trim().to_owned(),
-                                    secret_key: self.secret_key.trim().to_owned(),
+                                    access_key: self.credentials.access_key().to_owned(),
+                                    secret_key: self.credentials.secret_key().to_owned(),
+                                    session_token: self.credentials.session_token().to_owned(),
                                 }
                             } else {
+                                // Session credentials first (explicitly set by the user),
+                                // then the deployment's defaults. `have_credentials` gated
+                                // the Open button, so one of the two exists.
+                                let (access_key, secret_key, session_token) =
+                                    if let Some(session) = &session_credentials {
+                                        (
+                                            session.access_key.clone(),
+                                            session.secret_key.clone(),
+                                            session.session_token.clone(),
+                                        )
+                                    } else if server_config.has_credentials() {
+                                        (
+                                            server_config.tos_access_key.clone(),
+                                            server_config.tos_secret_key.clone(),
+                                            server_config.tos_session_token.clone(),
+                                        )
+                                    } else {
+                                        (String::new(), String::new(), String::new())
+                                    };
                                 TosCredentials {
                                     endpoint: resolved_endpoint.clone(),
-                                    access_key: server_config.tos_access_key.clone(),
-                                    secret_key: server_config.tos_secret_key.clone(),
+                                    access_key,
+                                    secret_key,
+                                    session_token,
                                 }
                             };
                             // The artifacts bucket belongs to the deployment, so prefer its
@@ -444,6 +478,7 @@ impl OpenTosModal {
                                     endpoint: artifact_endpoint,
                                     access_key: server_config.tos_access_key.clone(),
                                     secret_key: server_config.tos_secret_key.clone(),
+                                    session_token: server_config.tos_session_token.clone(),
                                 }
                             } else {
                                 TosCredentials {

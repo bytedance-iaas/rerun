@@ -26,7 +26,8 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 | `gen-ca-bundle.sh` | Exports macOS keychain certs so cargo can download deps behind a corporate TLS-intercepting proxy. Optional; skip on Linux / no proxy. |
 | `run-native.sh` | Runs a host-built native viewer with credentials from `secrets/` (dev convenience). |
 
-Credentials live in `deploy/secrets/` (`tos_access_key`, `tos_secret_key`, `hf_token`) — gitignored, mounted as docker secrets. `secrets/`, `.env`, and `ca-bundle.pem` are all gitignored.
+Credentials live in `deploy/secrets/` (`tos_access_key`, `tos_secret_key`, `hf_token`) — gitignored, mounted as docker secrets.
+**Empty files are the default** (`touch` them so docker compose finds them): without a baked-in AK/SK the viewer asks each user for credentials once per session. Fill them only when the deployment should carry default credentials of its own. `secrets/`, `.env`, and `ca-bundle.pem` are all gitignored.
 
 ## Local build & run
 
@@ -87,13 +88,15 @@ pixi run local-viewer
 
 # 2. (Optional) pre-fill credentials so you don't retype them.
 #    Same file the web deployment serves as /config.json, read from your home dir.
+#    Skippable — with no config file the viewer asks for credentials when needed
+#    (and its "remember on this machine" checkbox writes this file for you).
 mkdir -p ~/.rerun
 cat > ~/.rerun/config.json <<'EOF'
 {
   "tos_endpoint": "https://tos-s3-cn-beijing.volces.com",
-  "tos_access_key": "AK…",
-  "tos_secret_key": "SK…",
-  "hf_token": "hf_…"
+  "tos_access_key": "<access key>",
+  "tos_secret_key": "<secret key>",
+  "hf_token": "<hf token, optional>"
 }
 EOF
 chmod 600 ~/.rerun/config.json

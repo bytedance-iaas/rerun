@@ -622,6 +622,8 @@ impl Args {
                                     ),
                                     access_key,
                                     secret_key,
+                                    session_token: std::env::var("TOS_SESSION_TOKEN")
+                                        .unwrap_or_default(),
                                 };
                                 let origins: Vec<String> = std::env::var("RERUN_AUTO_CORS_ORIGINS")
                                     .ok()

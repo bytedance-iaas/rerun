@@ -17,6 +17,10 @@ pub struct ViewerConfig {
     pub tos_endpoint: String,
     pub tos_access_key: String,
     pub tos_secret_key: String,
+
+    /// Set when the AK/SK are STS temporary credentials — STS only authenticates as a triple.
+    /// Empty for a long-term pair.
+    pub tos_session_token: String,
     pub hf_token: String,
 
     /// Hub base-URL override (e.g. a mirror); empty = the official huggingface.co.
@@ -54,6 +58,7 @@ impl Default for ViewerConfig {
             tos_endpoint: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
+            tos_session_token: String::new(),
             hf_token: String::new(),
             hf_endpoint: String::new(),
             tos_rrd_artifacts_url: String::new(),
@@ -123,6 +128,7 @@ impl ViewerConfig {
                 ),
                 access_key: self.tos_access_key.clone(),
                 secret_key: self.tos_secret_key.clone(),
+                session_token: self.tos_session_token.clone(),
             },
             write_back,
             prefetch_items: self.rrd_artifacts_prefetch,
@@ -195,6 +201,8 @@ pub fn request() {
                         ViewerConfig::default()
                     })
                 }
+                // No config.json at all: a deployment without baked-in defaults. Normal.
+                Ok(response) if response.status == 404 => ViewerConfig::default(),
                 Ok(response) => {
                     re_log::warn!(
                         "{}",
@@ -240,6 +248,7 @@ pub fn request() {
         env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
         env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
         env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
+        env_override(&mut parsed.tos_session_token, "TOS_SESSION_TOKEN");
         env_override(&mut parsed.hf_token, "HF_TOKEN");
         env_override(&mut parsed.hf_endpoint, "HF_ENDPOINT");
         env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
@@ -260,8 +269,18 @@ pub fn request() {
 }
 
 /// The resolved config, once [`request`] finished (immediately on native, async on the web).
+///
+/// TOS credentials the user entered this session (the session credential slot) take
+/// precedence over the deployment/user config: explicitly-set credentials are what the
+/// menu's "TOS credentials…" update means, and the deployment's are only the default.
 pub fn get() -> Option<ViewerConfig> {
-    CONFIG.lock().clone()
+    let mut config = CONFIG.lock().clone()?;
+    if let Some(session) = re_data_source::tos::session_credentials::get() {
+        config.tos_access_key = session.access_key;
+        config.tos_secret_key = session.secret_key;
+        config.tos_session_token = session.session_token;
+    }
+    Some(config)
 }
 
 #[cfg(test)]

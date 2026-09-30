@@ -80,16 +80,21 @@ spec:
             # traffic billed); the code reads only two facts out of it, the region and
             # internal-vs-public, and swaps in the matching public endpoint when the user picks
             # another region.
+            # `optional`, both of them: a deployment may ship without any AK/SK (the viewer then
+            # asks each user for credentials per session) and the console pod must still start —
+            # its TOS mounts just fail until credentials exist.
             - name: TOS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "dataverse.viewerSecretName" . }}
                   key: tos_access_key
+                  optional: true
             - name: TOS_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "dataverse.viewerSecretName" . }}
                   key: tos_secret_key
+                  optional: true
             # The session token of STS temporary credentials, which only authenticate as a triple:
             # an STS AK/SK sent without it is rejected as InvalidAccessKeyId — which reads like a
             # permission problem but is not one. `optional`, because a long-term AK/SK pair has no

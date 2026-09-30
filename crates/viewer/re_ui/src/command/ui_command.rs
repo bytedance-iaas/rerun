@@ -23,6 +23,7 @@ pub enum UICommand {
     OpenUrl,
     OpenTosDataset,
     OpenHfDataset,
+    SetTosCredentials,
     Import,
 
     CloseAllEntries,
@@ -131,6 +132,13 @@ impl UICommand {
                 tr(
                     "Open a dataset from Hugging Face.",
                     "从 Hugging Face 打开数据集。",
+                ),
+            ),
+            Self::SetTosCredentials => (
+                tr("Configure Volcengine Credential…", "配置火山凭证…"),
+                tr(
+                    "Configure or update this session's Volcengine credentials (AK/SK or STS).",
+                    "配置或更新本次会话的火山凭证（AK/SK 或 STS）。",
                 ),
             ),
             Self::Import => (
@@ -423,6 +431,7 @@ impl UICommand {
             Self::OpenUrl => smallvec![cmd_shift(Key::L)],
             Self::OpenTosDataset => smallvec![],
             Self::OpenHfDataset => smallvec![],
+            Self::SetTosCredentials => smallvec![],
             Self::Import => smallvec![cmd_shift(Key::O)],
             Self::CloseAllEntries => smallvec![],
 
