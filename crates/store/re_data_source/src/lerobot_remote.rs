@@ -2214,7 +2214,13 @@ async fn stream_items<S: DatasetStore>(
                 let attempt = attempts.entry(next).or_insert(0);
                 *attempt += 1;
 
-                if *attempt < MAX_ATTEMPTS {
+                // The browser size limit is a permanent condition: retrying would just
+                // repeat the same message three times. Straight to the give-up path.
+                let err_text = format!("{err:#}");
+                let permanently_failed = err_text.contains("too large to load in the browser")
+                    || err_text.contains("无法在浏览器中加载");
+
+                if !permanently_failed && *attempt < MAX_ATTEMPTS {
                     re_log::warn!(
                         "{}",
                         trf!(
@@ -2224,20 +2230,27 @@ async fn stream_items<S: DatasetStore>(
                     );
                     deferred.push(next);
                 } else {
-                    re_log::warn!(
-                        "{}",
-                        trf!(
-                            "Giving up on item {next} after {MAX_ATTEMPTS} attempts: {err:#}\nDataset: {dataset_url}",
-                            "第 {next} 项已尝试 {MAX_ATTEMPTS} 次，放弃加载：{err:#}\n数据集：{dataset_url}"
-                        )
-                    );
+                    if permanently_failed {
+                        re_log::warn!(
+                            "{}",
+                            trf!(
+                                "Cannot load item {next}: {err:#}\nDataset: {dataset_url}",
+                                "第 {next} 项无法加载：{err:#}\n数据集：{dataset_url}"
+                            )
+                        );
+                    } else {
+                        re_log::warn!(
+                            "{}",
+                            trf!(
+                                "Giving up on item {next} after {MAX_ATTEMPTS} attempts: {err:#}\nDataset: {dataset_url}",
+                                "第 {next} 项已尝试 {MAX_ATTEMPTS} 次，放弃加载：{err:#}\n数据集：{dataset_url}"
+                            )
+                        );
+                    }
                     // Make the failure visible in the recording panel; the item's
                     // re-download button can revive it. The browser size limit gets its
                     // own wording — "load failed" would read as a transient error.
-                    let err_text = format!("{err:#}");
-                    let suffix = if err_text.contains("too large to load in the browser")
-                        || err_text.contains("无法在浏览器中加载")
-                    {
+                    let suffix = if permanently_failed {
                         tr(
                             "⚠ too large for browser — use the native viewer",
                             "⚠ 文件过大，浏览器无法加载 — 请使用本地原生 Viewer",

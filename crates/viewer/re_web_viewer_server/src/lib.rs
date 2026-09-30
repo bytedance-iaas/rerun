@@ -530,6 +530,31 @@ impl WebViewerServerInner {
             return Ok(());
         }
 
+        // Local parity with the web deployment, which serves its TOS/HF defaults at
+        // /config.json: hand out the user's local viewer config ($RERUN_CONFIG, else
+        // ~/.rerun/config.json). Without it the browser viewer has no rrd-artifacts
+        // store or default credentials, silently degrading every open to a fresh
+        // conversion. Loopback clients only: the file may hold credentials, and this
+        // server can be bound to every interface.
+        if path == "/config.json" {
+            let from_loopback = request
+                .remote_addr()
+                .is_some_and(|addr| addr.ip().is_loopback());
+            let config = from_loopback.then(local_viewer_config_bytes).flatten();
+            return match config {
+                Some(bytes) => {
+                    let mut response = tiny_http::Response::from_data(bytes);
+                    for header in ["Content-Type: application/json", "Cache-Control: no-store"] {
+                        if let Ok(header) = tiny_http::Header::from_str(header) {
+                            response.add_header(header);
+                        }
+                    }
+                    request.respond(response)
+                }
+                None => request.respond(tiny_http::Response::empty(404)),
+            };
+        }
+
         let data = &self.data;
         let (mime, bytes): (&str, &[u8]) = match path {
             "/" | "/index.html" => ("text/html", data.index_html()),
@@ -635,8 +660,10 @@ fn proxy_hf_cache(request: tiny_http::Request, url: &str) {
     let mut upstream_response = match upstream_request.call() {
         Ok(response) => response,
         Err(err) => {
-            re_log::warn!("HF cache upstream fetch failed: {err}
-Url: {upstream_url}");
+            re_log::warn!(
+                "HF cache upstream fetch failed: {err}
+Url: {upstream_url}"
+            );
             let _ = request.respond(tiny_http::Response::empty(502));
             return;
         }
@@ -668,8 +695,10 @@ Url: {upstream_url}");
     {
         Ok(body) => body,
         Err(err) => {
-            re_log::warn!("HF cache upstream body read failed: {err}
-Url: {upstream_url}");
+            re_log::warn!(
+                "HF cache upstream body read failed: {err}
+Url: {upstream_url}"
+            );
             let _ = request.respond(tiny_http::Response::empty(502));
             return;
         }
@@ -680,6 +709,22 @@ Url: {upstream_url}");
         response.add_header(header);
     }
     let _ = request.respond(response);
+}
+
+/// The local viewer config file, same resolution as the viewer's own
+/// `native_config::load_local_config_bytes`: `$RERUN_CONFIG`, else `~/.rerun/config.json`.
+/// (Duplicated here — this small static-file crate does not depend on the viewer.)
+#[cfg(not(disable_web_viewer_server))]
+fn local_viewer_config_bytes() -> Option<Vec<u8>> {
+    let path = if let Some(path) = std::env::var_os("RERUN_CONFIG") {
+        std::path::PathBuf::from(path)
+    } else {
+        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+        std::path::PathBuf::from(home)
+            .join(".rerun")
+            .join("config.json")
+    };
+    std::fs::read(path).ok()
 }
 
 #[cfg(test)]
