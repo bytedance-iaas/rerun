@@ -801,7 +801,16 @@ impl TosClient {
         // CORS is not ours to manage.
         #[cfg(target_arch = "wasm32")]
         if !self.is_anonymous() {
-            super::cors::ensure_cors_via_server_once(&self.bucket, &self.access.region()).await;
+            let signing_credentials = match &self.access {
+                TosAccess::Keys(credentials) => Some(credentials),
+                TosAccess::CuratorDataset(_) => None,
+            };
+            super::cors::ensure_cors_via_server_once(
+                &self.bucket,
+                &self.access.region(),
+                signing_credentials,
+            )
+            .await;
         }
 
         match &self.access {

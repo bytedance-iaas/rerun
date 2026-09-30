@@ -138,8 +138,17 @@ fn config_after_ensure(
 /// Best-effort by design: on any failure (endpoint absent — e.g. local docker without the
 /// gateway —, auto-CORS disabled server-side, no permission) we log and move on; the read
 /// then either works (bucket was already configured) or fails with the usual CORS guidance.
+///
+/// `credentials`: the pair the caller is about to sign bucket reads with. It rides along in
+/// the POST body so the server can configure the bucket even when the deployment itself has
+/// no credentials (the zero-credential shape, where users bring their own): same-origin TLS
+/// to the server that already serves this very code, used for this one call, never stored.
 #[cfg(target_arch = "wasm32")]
-pub async fn ensure_cors_via_server_once(bucket: &str, region: &str) {
+pub async fn ensure_cors_via_server_once(
+    bucket: &str,
+    region: &str,
+    credentials: Option<&super::TosCredentials>,
+) {
     use std::collections::HashSet;
     use std::sync::{Mutex, OnceLock};
 
@@ -155,7 +164,20 @@ pub async fn ensure_cors_via_server_once(bucket: &str, region: &str) {
         super::client::uri_encode(bucket, true),
         super::client::uri_encode(region, true)
     );
-    let request = ehttp::Request::post(&url, Vec::new());
+    let body = credentials
+        .filter(|creds| !creds.access_key.is_empty() && !creds.secret_key.is_empty())
+        .map(|creds| {
+            serde_json::json!({
+                "access_key": creds.access_key,
+                "secret_key": creds.secret_key,
+                "session_token": creds.session_token,
+            })
+            .to_string()
+            .into_bytes()
+        })
+        .unwrap_or_default();
+    let mut request = ehttp::Request::post(&url, body);
+    request.headers.insert("content-type", "application/json");
     match crate::http_client::fetch_async_with_timeout(request, std::time::Duration::from_secs(10))
         .await
     {

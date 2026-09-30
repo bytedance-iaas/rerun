@@ -117,7 +117,10 @@ fn client_for_bucket(
     builder.build().map(Arc::new).map_err(|err| {
         tonic::Status::invalid_argument(format!(
             "Failed to configure S3-compatible storage (check TOS_ENDPOINT/TOS_REGION/\
-             TOS_ACCESS_KEY/TOS_SECRET_KEY): {err:#}"
+             TOS_ACCESS_KEY/TOS_SECRET_KEY). tos:// registration needs LONG-TERM deployment \
+             credentials — the catalog re-reads registered objects at any later time, which \
+             expiring STS credentials cannot serve; a zero-credential deployment does not \
+             support tos:// registration: {err:#}"
         ))
     })
 }

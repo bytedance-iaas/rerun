@@ -553,7 +553,8 @@ impl Args {
                     > = std::sync::Arc::default();
                     move |query: axum::extract::Query<
                         std::collections::HashMap<String, String>,
-                    >| {
+                    >,
+                          body: axum::body::Bytes| {
                         let cache = std::sync::Arc::clone(&cache);
                         async move {
                             use axum::http::StatusCode;
@@ -624,14 +625,51 @@ impl Args {
                                 cached
                             } else {
                                 let deployment_endpoint = std::env::var("TOS_ENDPOINT").unwrap_or_default();
-                                let access_key =
-                                    std::env::var("TOS_ACCESS_KEY").unwrap_or_default();
-                                let secret_key =
-                                    std::env::var("TOS_SECRET_KEY").unwrap_or_default();
+                                // The caller's own signing credentials may ride in the body
+                                // (the zero-credential deployment shape, where users bring
+                                // their own pair): prefer those, fall back to the
+                                // deployment's. Used for this one call, never stored or
+                                // logged.
+                                #[derive(serde::Deserialize, Default)]
+                                struct BodyCredentials {
+                                    #[serde(default)]
+                                    access_key: String,
+                                    #[serde(default)]
+                                    secret_key: String,
+                                    #[serde(default)]
+                                    session_token: String,
+                                }
+                                let body_credentials: BodyCredentials =
+                                    serde_json::from_slice(&body).unwrap_or_default();
+                                let (access_key, secret_key, session_token) =
+                                    if !body_credentials.access_key.is_empty()
+                                        && !body_credentials.secret_key.is_empty()
+                                    {
+                                        (
+                                            body_credentials.access_key,
+                                            body_credentials.secret_key,
+                                            body_credentials.session_token,
+                                        )
+                                    } else {
+                                        (
+                                            std::env::var("TOS_ACCESS_KEY").unwrap_or_default(),
+                                            std::env::var("TOS_SECRET_KEY").unwrap_or_default(),
+                                            std::env::var("TOS_SESSION_TOKEN").unwrap_or_default(),
+                                        )
+                                    };
                                 if deployment_endpoint.is_empty() || access_key.is_empty() || secret_key.is_empty() {
+                                    // A zero-credential deployment is a supported shape, and
+                                    // bucket-CORS self-service simply does not exist in it —
+                                    // same quiet answer as RERUN_AUTO_CORS=off, so the viewer
+                                    // does not warn every user on every bucket. Buckets are
+                                    // then configured manually (deployment docs) or were
+                                    // configured while credentials still existed.
                                     return json(
-                                        StatusCode::SERVICE_UNAVAILABLE,
-                                        serde_json::json!({"error": "server has no TOS credentials (TOS_ENDPOINT/TOS_ACCESS_KEY/TOS_SECRET_KEY)"}),
+                                        StatusCode::OK,
+                                        serde_json::json!({
+                                            "status": "skipped",
+                                            "reason": "no credentials in the deployment or the request",
+                                        }),
                                     );
                                 }
                                 // The allowed origins follow the *deployment's* region
@@ -647,8 +685,7 @@ impl Args {
                                     ),
                                     access_key,
                                     secret_key,
-                                    session_token: std::env::var("TOS_SESSION_TOKEN")
-                                        .unwrap_or_default(),
+                                    session_token,
                                 };
                                 let origins: Vec<String> = std::env::var("RERUN_AUTO_CORS_ORIGINS")
                                     .ok()
@@ -799,9 +836,7 @@ async fn hf_cache_proxy(
 ) -> axum::response::Response {
     use axum::response::IntoResponse as _;
 
-    let Some(upstream) =
-        re_data_source::tos::hf_cache::proxy_upstream_url(key, raw_query)
-    else {
+    let Some(upstream) = re_data_source::tos::hf_cache::proxy_upstream_url(key, raw_query) else {
         return (
             axum::http::StatusCode::FORBIDDEN,
             "not a cache dataset path",
