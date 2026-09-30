@@ -509,6 +509,31 @@ impl Args {
                     }
                 }),
             )
+            // Same-origin proxy to the ByteDance HF cache (the public-read ai-infra
+            // bucket). The bucket serves no CORS headers, so the browser cannot read it
+            // directly — it goes through this server instead, on the same /api channel
+            // as ensure-cors. Locked to that one upstream and its dataset/ prefix
+            // (`proxy_upstream_url`), so it cannot be abused as an open relay.
+            .with_http_route(
+                "/api/hf-cache/{*key}",
+                axum::routing::get(
+                    |axum::extract::Path(key): axum::extract::Path<String>,
+                     query: axum::extract::RawQuery,
+                     headers: axum::http::HeaderMap| async move {
+                        hf_cache_proxy(&key, query.0.as_deref(), &headers).await
+                    },
+                ),
+            )
+            .with_http_route(
+                // The S3 listing addresses the bucket root — an empty key, which the
+                // wildcard route above cannot match.
+                "/api/hf-cache/",
+                axum::routing::get(
+                    |query: axum::extract::RawQuery, headers: axum::http::HeaderMap| async move {
+                        hf_cache_proxy("", query.0.as_deref(), &headers).await
+                    },
+                ),
+            )
             // Self-service bucket CORS for the web viewer. The browser cannot fix a
             // bucket's CORS itself (the fix request is itself CORS-gated), so the viewer
             // asks this server — reached same-origin through the gateway's /api route.
@@ -759,6 +784,70 @@ impl Args {
         }
 
         Ok(())
+    }
+}
+
+/// Forward one GET to the ByteDance HF cache bucket (see the `/api/hf-cache` routes).
+///
+/// The whole upstream response is buffered before answering. That is fine here: the
+/// streaming engine reads metadata files whole and everything big via bounded byte
+/// ranges, so no single forwarded response grows beyond an episode's slice.
+async fn hf_cache_proxy(
+    key: &str,
+    raw_query: Option<&str>,
+    request_headers: &axum::http::HeaderMap,
+) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+
+    let Some(upstream) =
+        re_data_source::tos::hf_cache::proxy_upstream_url(key, raw_query)
+    else {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "not a cache dataset path",
+        )
+            .into_response();
+    };
+
+    let mut request = ehttp::Request::get(&upstream);
+    if let Some(range) = request_headers
+        .get(axum::http::header::RANGE)
+        .and_then(|value| value.to_str().ok())
+    {
+        request.headers.insert("range", range);
+    }
+
+    // Generous deadline: an episode-sized range over the public internet.
+    const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+    match re_data_source::http_client::fetch_async_with_timeout(request, TIMEOUT).await {
+        Ok(response) => {
+            let mut builder = axum::http::Response::builder().status(response.status);
+            for name in [
+                "content-type",
+                "content-range",
+                "accept-ranges",
+                "etag",
+                "last-modified",
+            ] {
+                if let Some(value) = response.headers.get(name) {
+                    builder = builder.header(name, value);
+                }
+            }
+            builder
+                .body(axum::body::Body::from(response.bytes))
+                .unwrap_or_else(|err| {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to build proxy response: {err}"),
+                    )
+                        .into_response()
+                })
+        }
+        Err(err) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            format!("HF cache upstream fetch failed: {err}"),
+        )
+            .into_response(),
     }
 }
 

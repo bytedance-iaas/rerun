@@ -982,6 +982,10 @@ impl App {
                 self.state.open_hf_modal.open();
             }
 
+            UICommand::OpenHfCacheDataset => {
+                self.state.open_hf_cache_modal.open();
+            }
+
             UICommand::SetTosCredentials => {
                 self.state.tos_credentials_modal.open();
             }
@@ -1283,7 +1287,10 @@ impl App {
                     if let Err(err) = save_active_recording(self, store_context) {
                         re_log::error!(
                             "{}",
-                            trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                            trf!(
+                                "Failed to save recording: {err}",
+                                "保存 episode 失败：{err}"
+                            )
                         );
                     }
                 }
@@ -1318,7 +1325,10 @@ impl App {
                         if let Err(err) = save_active_recording(self, store_context) {
                             re_log::error!(
                                 "{}",
-                                trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                                trf!(
+                                    "Failed to save recording: {err}",
+                                    "保存 episode 失败：{err}"
+                                )
                             );
                         }
                     } else if selected_stores.len() == 1 {
@@ -1327,7 +1337,10 @@ impl App {
                         if let Err(err) = save_recording(self, selected_stores[0], None) {
                             re_log::error!(
                                 "{}",
-                                trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                                trf!(
+                                    "Failed to save recording: {err}",
+                                    "保存 episode 失败：{err}"
+                                )
                             );
                         }
                     } else {
@@ -1353,7 +1366,10 @@ impl App {
                 if let Err(err) = save_active_recording(self, store_context) {
                     re_log::error!(
                         "{}",
-                        trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                        trf!(
+                            "Failed to save recording: {err}",
+                            "保存 episode 失败：{err}"
+                        )
                     );
                 }
             }

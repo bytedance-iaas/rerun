@@ -86,6 +86,8 @@ re_log = { workspace = true, features = ["setup"] }
 document-features.workspace = true
 tiny_http.workspace = true
 thiserror.workspace = true
+# For the local /api/hf-cache proxy (deployments use the catalog server's instead).
+ureq.workspace = true
 zip.workspace = true
 
 # Optional dependencies:

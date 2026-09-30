@@ -3,6 +3,7 @@ mod delete_artifacts_modal;
 mod mobile_warning_ui;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod native_config;
+mod open_hf_cache_modal;
 mod open_hf_modal;
 mod open_tos_modal;
 mod open_url_modal;
@@ -21,6 +22,7 @@ mod settings_screen;
 pub use rerun_menu::about_rerun_ui;
 
 pub(crate) use delete_artifacts_modal::DeleteArtifactsModal;
+pub(crate) use open_hf_cache_modal::OpenHfCacheModal;
 pub(crate) use open_hf_modal::OpenHfModal;
 pub(crate) use open_tos_modal::OpenTosModal;
 pub(crate) use open_url_modal::OpenUrlModal;

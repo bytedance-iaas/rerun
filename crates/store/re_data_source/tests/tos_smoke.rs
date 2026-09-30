@@ -98,6 +98,46 @@ fn tos_rrd_artifacts_roundtrip() {
     });
 }
 
+/// The ByteDance HF cache (public-read `ai-infra` bucket) is read with NO credentials at
+/// all: unsigned requests, minimal headers. Needs network (and reachability of the bucket),
+/// not credentials.
+#[test]
+#[ignore = "needs network access to the public ai-infra bucket"]
+fn tos_anonymous_public_bucket() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let anonymous = TosCredentials {
+            endpoint: "https://tos-s3-cn-beijing.volces.com".to_owned(),
+            access_key: String::new(),
+            secret_key: String::new(),
+            session_token: String::new(),
+        };
+        let client = TosClient::new(anonymous, "ai-infra");
+
+        let objects = client
+            .list_objects("dataset/so101-pick-place/meta/")
+            .await
+            .unwrap();
+        println!("listed {} objects anonymously", objects.len());
+        assert!(!objects.is_empty());
+
+        let info = client
+            .get_object("dataset/so101-pick-place/meta/info.json", None)
+            .await
+            .unwrap();
+        println!("info.json: {} bytes", info.len());
+        assert!(info.starts_with(b"{"));
+
+        // Byte-range read (what episode streaming relies on).
+        let ranged = client
+            .get_object("dataset/so101-pick-place/meta/info.json", Some(0..16))
+            .await
+            .unwrap();
+        assert_eq!(ranged.len(), 16);
+        assert_eq!(&ranged[..], &info[..16]);
+    });
+}
+
 #[test]
 #[ignore = "needs real TOS credentials via TOS_ACCESS_KEY / TOS_SECRET_KEY"]
 fn tos_list_and_get() {

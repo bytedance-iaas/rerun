@@ -23,6 +23,7 @@ pub enum UICommand {
     OpenUrl,
     OpenTosDataset,
     OpenHfDataset,
+    OpenHfCacheDataset,
     SetTosCredentials,
     Import,
 
@@ -132,6 +133,15 @@ impl UICommand {
                 tr(
                     "Open a dataset from Hugging Face.",
                     "从 Hugging Face 打开数据集。",
+                ),
+            ),
+            Self::OpenHfCacheDataset => (
+                tr("Open from Volcengine HF Cache…", "从火山 HF 缓存打开…"),
+                tr(
+                    "Open a dataset from the ByteDance Hugging Face cache (the public \
+                     ai-infra TOS bucket) — no credentials needed.",
+                    "从字节的 Hugging Face 缓存（公开的 ai-infra TOS 桶）打开数据集，\
+                     无需任何凭证。",
                 ),
             ),
             Self::SetTosCredentials => (
@@ -431,6 +441,7 @@ impl UICommand {
             Self::OpenUrl => smallvec![cmd_shift(Key::L)],
             Self::OpenTosDataset => smallvec![],
             Self::OpenHfDataset => smallvec![],
+            Self::OpenHfCacheDataset => smallvec![],
             Self::SetTosCredentials => smallvec![],
             Self::Import => smallvec![cmd_shift(Key::O)],
             Self::CloseAllEntries => smallvec![],

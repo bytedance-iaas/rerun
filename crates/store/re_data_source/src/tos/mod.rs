@@ -11,6 +11,7 @@
 pub(crate) mod client;
 pub mod cors;
 pub mod curator;
+pub mod hf_cache;
 mod lerobot_stream;
 pub mod session_credentials;
 

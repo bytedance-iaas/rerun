@@ -29,6 +29,10 @@ pub struct RecordingPanelData<'a> {
     /// Datasets streamed straight from a TOS/S3 bucket (application ids starting with `tos:`).
     pub tos_apps: Vec<AppIdData<'a>>,
 
+    /// Datasets from the Volcengine HF cache (the public ai-infra bucket) — technically TOS
+    /// too, but opened from their own menu, so they get their own section.
+    pub hf_cache_apps: Vec<AppIdData<'a>>,
+
     /// Datasets streamed straight from Hugging Face (application ids starting with `hf:`).
     pub hf_apps: Vec<AppIdData<'a>>,
 
@@ -105,6 +109,7 @@ impl<'a> RecordingPanelData<'a> {
 
         let mut local_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
         let mut tos_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
+        let mut hf_cache_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
         let mut hf_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
         let mut examples_apps: BTreeMap<ApplicationId, Vec<&EntityDb>> = Default::default();
 
@@ -114,6 +119,23 @@ impl<'a> RecordingPanelData<'a> {
                 // Note: since 0.36.0 the app id is a normalized form of the dataset URL
                 // ("tos://b/x" becomes "tos:--b-x-<hash>"), so only the scheme prefix is
                 // reliable — colons survive normalization, slashes do not.
+                // The HF cache is TOS underneath, but its datasets are opened from their
+                // own menu — filing them under "Volcengine TOS" next to private buckets
+                // reads as a mix-up. The app id is the normalized dataset URL (slashes
+                // become dashes), so the cache's fixed bucket/prefix make a stable prefix.
+                EntityDbClass::LocalRecording
+                    if app_id.as_str().starts_with(&format!(
+                        "tos:--{}-{}-",
+                        re_data_source::tos::hf_cache::BUCKET,
+                        re_data_source::tos::hf_cache::DATASET_PREFIX.trim_end_matches('/'),
+                    )) =>
+                {
+                    hf_cache_apps
+                        .entry(app_id.clone())
+                        .or_default()
+                        .push(entity_db);
+                }
+
                 EntityDbClass::LocalRecording if app_id.as_str().starts_with("tos:") => {
                     tos_apps.entry(app_id.clone()).or_default().push(entity_db);
                 }
@@ -149,6 +171,11 @@ impl<'a> RecordingPanelData<'a> {
             .map(|(app_id, entity_dbs)| AppIdData::new(ctx, app_id, entity_dbs))
             .collect();
 
+        let hf_cache_apps = hf_cache_apps
+            .into_iter()
+            .map(|(app_id, entity_dbs)| AppIdData::new(ctx, app_id, entity_dbs))
+            .collect();
+
         let hf_apps = hf_apps
             .into_iter()
             .map(|(app_id, entity_dbs)| AppIdData::new(ctx, app_id, entity_dbs))
@@ -173,6 +200,7 @@ impl<'a> RecordingPanelData<'a> {
             servers,
             local_apps,
             tos_apps,
+            hf_cache_apps,
             hf_apps,
             local_tables,
             example_apps,
@@ -184,6 +212,7 @@ impl<'a> RecordingPanelData<'a> {
     pub fn is_empty(&self) -> bool {
         self.local_apps.is_empty()
             && self.tos_apps.is_empty()
+            && self.hf_cache_apps.is_empty()
             && self.hf_apps.is_empty()
             && self.local_tables.is_empty()
             && self.example_apps.is_empty()
@@ -209,6 +238,7 @@ impl<'a> RecordingPanelData<'a> {
         for local_app in itertools::chain!(
             &self.local_apps,
             &self.tos_apps,
+            &self.hf_cache_apps,
             &self.hf_apps,
             &self.example_apps
         ) {

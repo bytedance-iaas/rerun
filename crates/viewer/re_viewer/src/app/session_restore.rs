@@ -116,6 +116,18 @@ impl App {
 
         for recent in to_restore {
             let source = match recent.kind {
+                crate::recent_datasets::RecentKind::HfCache => {
+                    let Some(location) = re_data_source::tos::TosLocation::parse(&recent.url)
+                    else {
+                        continue;
+                    };
+                    // The cache bucket is public-read: restorable without any credentials.
+                    LogDataSource::TosDataset(re_data_source::tos::hf_cache::source(
+                        location,
+                        config.rrd_artifacts(true),
+                    ))
+                }
+
                 crate::recent_datasets::RecentKind::Tos => {
                     let Some(location) = re_data_source::tos::TosLocation::parse(&recent.url)
                     else {
@@ -190,11 +202,22 @@ impl App {
             Default::default()
         };
 
-        // Console-signed opens (a curation-console "Visualize" link) carry their own
-        // access — no credentials of any kind involved. Finish those right away; only
-        // the opens that actually need local keys stay to face the credential gate.
+        // Two kinds of opens need no local credentials at all — finish those right away:
+        // HF-cache locations (the public ai-infra bucket, read anonymously) and
+        // console-signed opens (a curation-console "Visualize" link, signed there).
+        // Only the opens that actually need local keys stay to face the credential gate.
         let mut needing_keys = Vec::new();
         for open in std::mem::take(&mut self.pending_tos_opens) {
+            if re_data_source::tos::hf_cache::is_cache_location(&open.location) {
+                self.command_sender
+                    .send_system(SystemCommand::LoadDataSource(LogDataSource::TosDataset(
+                        re_data_source::tos::hf_cache::source(
+                            open.location,
+                            config.rrd_artifacts(true),
+                        ),
+                    )));
+                continue;
+            }
             let console_access = open
                 .curator_dataset
                 .as_deref()

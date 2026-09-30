@@ -33,6 +33,7 @@ pub fn recent_datasets_ui(ui: &mut egui::Ui, recents: &[RecentDataset]) -> Optio
         let source_label = match recent.kind {
             RecentKind::Tos => "TOS",
             RecentKind::Hf => "Hugging Face",
+            RecentKind::HfCache => tr("Volcengine HF Cache", "火山 HF 缓存"),
         };
         let mut meta = format!(
             "{source_label} · {}",

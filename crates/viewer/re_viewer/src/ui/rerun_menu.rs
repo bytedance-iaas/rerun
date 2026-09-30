@@ -114,6 +114,7 @@ impl App {
         UICommand::SetTosCredentials.menu_button_ui(ui, &self.command_sender);
         ui.separator();
         UICommand::OpenHfDataset.menu_button_ui(ui, &self.command_sender);
+        UICommand::OpenHfCacheDataset.menu_button_ui(ui, &self.command_sender);
         ui.separator();
 
         self.save_buttons_ui(ui, _store_context);
