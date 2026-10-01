@@ -509,6 +509,31 @@ impl Args {
                     }
                 }),
             )
+            // Same-origin proxy to the ByteDance HF cache (the public-read ai-infra
+            // bucket). The bucket serves no CORS headers, so the browser cannot read it
+            // directly — it goes through this server instead, on the same /api channel
+            // as ensure-cors. Locked to that one upstream and its dataset/ prefix
+            // (`proxy_upstream_url`), so it cannot be abused as an open relay.
+            .with_http_route(
+                "/api/hf-cache/{*key}",
+                axum::routing::get(
+                    |axum::extract::Path(key): axum::extract::Path<String>,
+                     query: axum::extract::RawQuery,
+                     headers: axum::http::HeaderMap| async move {
+                        hf_cache_proxy(&key, query.0.as_deref(), &headers).await
+                    },
+                ),
+            )
+            .with_http_route(
+                // The S3 listing addresses the bucket root — an empty key, which the
+                // wildcard route above cannot match.
+                "/api/hf-cache/",
+                axum::routing::get(
+                    |query: axum::extract::RawQuery, headers: axum::http::HeaderMap| async move {
+                        hf_cache_proxy("", query.0.as_deref(), &headers).await
+                    },
+                ),
+            )
             // Self-service bucket CORS for the web viewer. The browser cannot fix a
             // bucket's CORS itself (the fix request is itself CORS-gated), so the viewer
             // asks this server — reached same-origin through the gateway's /api route.
@@ -528,7 +553,8 @@ impl Args {
                     > = std::sync::Arc::default();
                     move |query: axum::extract::Query<
                         std::collections::HashMap<String, String>,
-                    >| {
+                    >,
+                          body: axum::body::Bytes| {
                         let cache = std::sync::Arc::clone(&cache);
                         async move {
                             use axum::http::StatusCode;
@@ -599,14 +625,51 @@ impl Args {
                                 cached
                             } else {
                                 let deployment_endpoint = std::env::var("TOS_ENDPOINT").unwrap_or_default();
-                                let access_key =
-                                    std::env::var("TOS_ACCESS_KEY").unwrap_or_default();
-                                let secret_key =
-                                    std::env::var("TOS_SECRET_KEY").unwrap_or_default();
+                                // The caller's own signing credentials may ride in the body
+                                // (the zero-credential deployment shape, where users bring
+                                // their own pair): prefer those, fall back to the
+                                // deployment's. Used for this one call, never stored or
+                                // logged.
+                                #[derive(serde::Deserialize, Default)]
+                                struct BodyCredentials {
+                                    #[serde(default)]
+                                    access_key: String,
+                                    #[serde(default)]
+                                    secret_key: String,
+                                    #[serde(default)]
+                                    session_token: String,
+                                }
+                                let body_credentials: BodyCredentials =
+                                    serde_json::from_slice(&body).unwrap_or_default();
+                                let (access_key, secret_key, session_token) =
+                                    if !body_credentials.access_key.is_empty()
+                                        && !body_credentials.secret_key.is_empty()
+                                    {
+                                        (
+                                            body_credentials.access_key,
+                                            body_credentials.secret_key,
+                                            body_credentials.session_token,
+                                        )
+                                    } else {
+                                        (
+                                            std::env::var("TOS_ACCESS_KEY").unwrap_or_default(),
+                                            std::env::var("TOS_SECRET_KEY").unwrap_or_default(),
+                                            std::env::var("TOS_SESSION_TOKEN").unwrap_or_default(),
+                                        )
+                                    };
                                 if deployment_endpoint.is_empty() || access_key.is_empty() || secret_key.is_empty() {
+                                    // A zero-credential deployment is a supported shape, and
+                                    // bucket-CORS self-service simply does not exist in it —
+                                    // same quiet answer as RERUN_AUTO_CORS=off, so the viewer
+                                    // does not warn every user on every bucket. Buckets are
+                                    // then configured manually (deployment docs) or were
+                                    // configured while credentials still existed.
                                     return json(
-                                        StatusCode::SERVICE_UNAVAILABLE,
-                                        serde_json::json!({"error": "server has no TOS credentials (TOS_ENDPOINT/TOS_ACCESS_KEY/TOS_SECRET_KEY)"}),
+                                        StatusCode::OK,
+                                        serde_json::json!({
+                                            "status": "skipped",
+                                            "reason": "no credentials in the deployment or the request",
+                                        }),
                                     );
                                 }
                                 // The allowed origins follow the *deployment's* region
@@ -622,6 +685,7 @@ impl Args {
                                     ),
                                     access_key,
                                     secret_key,
+                                    session_token,
                                 };
                                 let origins: Vec<String> = std::env::var("RERUN_AUTO_CORS_ORIGINS")
                                     .ok()
@@ -757,6 +821,68 @@ impl Args {
         }
 
         Ok(())
+    }
+}
+
+/// Forward one GET to the ByteDance HF cache bucket (see the `/api/hf-cache` routes).
+///
+/// The whole upstream response is buffered before answering. That is fine here: the
+/// streaming engine reads metadata files whole and everything big via bounded byte
+/// ranges, so no single forwarded response grows beyond an episode's slice.
+async fn hf_cache_proxy(
+    key: &str,
+    raw_query: Option<&str>,
+    request_headers: &axum::http::HeaderMap,
+) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+
+    let Some(upstream) = re_data_source::tos::hf_cache::proxy_upstream_url(key, raw_query) else {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "not a cache dataset path",
+        )
+            .into_response();
+    };
+
+    let mut request = ehttp::Request::get(&upstream);
+    if let Some(range) = request_headers
+        .get(axum::http::header::RANGE)
+        .and_then(|value| value.to_str().ok())
+    {
+        request.headers.insert("range", range);
+    }
+
+    // Generous deadline: an episode-sized range over the public internet.
+    const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+    match re_data_source::http_client::fetch_async_with_timeout(request, TIMEOUT).await {
+        Ok(response) => {
+            let mut builder = axum::http::Response::builder().status(response.status);
+            for name in [
+                "content-type",
+                "content-range",
+                "accept-ranges",
+                "etag",
+                "last-modified",
+            ] {
+                if let Some(value) = response.headers.get(name) {
+                    builder = builder.header(name, value);
+                }
+            }
+            builder
+                .body(axum::body::Body::from(response.bytes))
+                .unwrap_or_else(|err| {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to build proxy response: {err}"),
+                    )
+                        .into_response()
+                })
+        }
+        Err(err) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            format!("HF cache upstream fetch failed: {err}"),
+        )
+            .into_response(),
     }
 }
 

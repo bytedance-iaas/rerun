@@ -26,6 +26,9 @@ struct ServerHfConfig {
     tos_access_key: String,
     tos_secret_key: String,
 
+    /// Set when the deployment's AK/SK are STS temporary credentials (a triple).
+    tos_session_token: String,
+
     /// Where converted rrds are stored; absent/`""`/`"off"` disables the artifacts store.
     tos_rrd_artifacts_url: String,
 
@@ -44,6 +47,7 @@ impl Default for ServerHfConfig {
             tos_endpoint: String::new(),
             tos_access_key: String::new(),
             tos_secret_key: String::new(),
+            tos_session_token: String::new(),
             tos_rrd_artifacts_url: String::new(),
             tos_rrd_artifacts_region: String::new(),
             rrd_artifacts_prefetch: 0,
@@ -59,9 +63,23 @@ impl ServerHfConfig {
     ) -> Option<re_data_source::rrd_artifacts::RrdArtifactsConfig> {
         let location =
             re_data_source::rrd_artifacts::parse_artifacts_url(&self.tos_rrd_artifacts_url)?;
-        if self.tos_access_key.is_empty() || self.tos_secret_key.is_empty() {
-            return None; // No credentials for the artifacts bucket: silently skip.
-        }
+        // Session credentials first (explicitly set by the user), then the deployment's.
+        let (access_key, secret_key, session_token) =
+            if let Some(session) = re_data_source::tos::session_credentials::get() {
+                (
+                    session.access_key,
+                    session.secret_key,
+                    session.session_token,
+                )
+            } else if !self.tos_access_key.is_empty() && !self.tos_secret_key.is_empty() {
+                (
+                    self.tos_access_key.clone(),
+                    self.tos_secret_key.clone(),
+                    self.tos_session_token.clone(),
+                )
+            } else {
+                return None; // No credentials for the artifacts bucket: silently skip.
+            };
         Some(re_data_source::rrd_artifacts::RrdArtifactsConfig {
             location,
             credentials: re_data_source::tos::TosCredentials {
@@ -70,8 +88,9 @@ impl ServerHfConfig {
                     &self.tos_rrd_artifacts_region,
                     &self.tos_endpoint,
                 ),
-                access_key: self.tos_access_key.clone(),
-                secret_key: self.tos_secret_key.clone(),
+                access_key,
+                secret_key,
+                session_token,
             },
             write_back,
             prefetch_items: self.rrd_artifacts_prefetch,
@@ -142,6 +161,9 @@ impl OpenHfModal {
                             })
                             .map_err(|err| format!("invalid JSON: {err}"))
                     }
+                    // No config.json at all: a deployment without baked-in defaults — the
+                    // user enters credentials themselves. Normal, not an error.
+                    Ok(response) if response.status == 404 => Ok(ServerHfConfig::default()),
                     Ok(response) => {
                         Err(format!("HTTP {} {}", response.status, response.status_text))
                     }
@@ -178,6 +200,7 @@ impl OpenHfModal {
             env_override(&mut parsed.tos_endpoint, "TOS_ENDPOINT");
             env_override(&mut parsed.tos_access_key, "TOS_ACCESS_KEY");
             env_override(&mut parsed.tos_secret_key, "TOS_SECRET_KEY");
+            env_override(&mut parsed.tos_session_token, "TOS_SESSION_TOKEN");
             env_override(&mut parsed.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");
             env_override(
                 &mut parsed.tos_rrd_artifacts_region,

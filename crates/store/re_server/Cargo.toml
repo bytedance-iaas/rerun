@@ -71,6 +71,8 @@ tonic.workspace = true
 url.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The /api/hf-cache proxy forwards requests through re_data_source's HTTP client.
+ehttp = { workspace = true, features = ["native-async"] }
 re_auth.workspace = true
 re_data_source.workspace = true # TOS 客户端与 ensure-cors 逻辑(/api/ensure-cors 端点)
 re_format.workspace = true

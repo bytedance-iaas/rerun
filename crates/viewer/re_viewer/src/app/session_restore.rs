@@ -50,6 +50,7 @@ fn tos_access(
             endpoint: re_data_source::tos::endpoint_for_region(region, &config.tos_endpoint),
             access_key: config.tos_access_key.clone(),
             secret_key: config.tos_secret_key.clone(),
+            session_token: config.tos_session_token.clone(),
         }
         .into()
     })
@@ -115,6 +116,18 @@ impl App {
 
         for recent in to_restore {
             let source = match recent.kind {
+                crate::recent_datasets::RecentKind::HfCache => {
+                    let Some(location) = re_data_source::tos::TosLocation::parse(&recent.url)
+                    else {
+                        continue;
+                    };
+                    // The cache bucket is public-read: restorable without any credentials.
+                    LogDataSource::TosDataset(re_data_source::tos::hf_cache::source(
+                        location,
+                        config.rrd_artifacts(true),
+                    ))
+                }
+
                 crate::recent_datasets::RecentKind::Tos => {
                     let Some(location) = re_data_source::tos::TosLocation::parse(&recent.url)
                     else {
@@ -189,33 +202,134 @@ impl App {
             Default::default()
         };
 
+        // Two kinds of opens need no local credentials at all — finish those right away:
+        // HF-cache locations (the public ai-infra bucket, read anonymously) and
+        // console-signed opens (a curation-console "Visualize" link, signed there).
+        // Only the opens that actually need local keys stay to face the credential gate.
+        let mut needing_keys = Vec::new();
         for open in std::mem::take(&mut self.pending_tos_opens) {
-            let PendingTosOpen {
-                location,
-                region,
-                curator_dataset,
-            } = open;
+            if re_data_source::tos::hf_cache::is_cache_location(&open.location) {
+                self.command_sender
+                    .send_system(SystemCommand::LoadDataSource(LogDataSource::TosDataset(
+                        re_data_source::tos::hf_cache::source(
+                            open.location,
+                            config.rrd_artifacts(true),
+                        ),
+                    )));
+                continue;
+            }
+            let console_access = open
+                .curator_dataset
+                .as_deref()
+                .and_then(|dataset_id| config.curator_access(&open.region, dataset_id));
+            if let Some(access) = console_access {
+                self.command_sender
+                    .send_system(SystemCommand::LoadDataSource(LogDataSource::TosDataset(
+                        re_data_source::tos::TosDatasetSource {
+                            location: open.location,
+                            access,
+                            rrd_artifacts: config.rrd_artifacts(true),
+                        },
+                    )));
+            } else {
+                needing_keys.push(open);
+            }
+        }
+        self.pending_tos_opens = needing_keys;
+        if self.pending_tos_opens.is_empty() {
+            self.credentials_prompt_owned_by_pending = false;
+            return;
+        }
+
+        // No credentials anywhere (deployment config, env, session slot): prompt for them
+        // and keep the opens pending — the next frames re-enter here, and the session slot
+        // shows up through `viewer_config::get` once the user saves. Only an outcome of a
+        // prompt this flow itself opened may drop the queue: cancelling a startup or
+        // menu-opened prompt says nothing about these opens.
+        if !config.has_tos_credentials() {
+            if self.credentials_prompt_owned_by_pending {
+                match self.state.tos_credentials_modal.take_outcome() {
+                    Some(crate::ui::CredentialsOutcome::Cancelled) => {
+                        self.credentials_prompt_owned_by_pending = false;
+                        for open in std::mem::take(&mut self.pending_tos_opens) {
+                            re_log::error!(
+                                "Can't open {} — no Volcengine credentials were provided.",
+                                open.location
+                            );
+                        }
+                    }
+                    // `Saved` with still-missing credentials cannot happen (saving fills
+                    // the slot); `None` means the prompt is still open.
+                    outcome => {
+                        if outcome.is_some() {
+                            self.credentials_prompt_owned_by_pending = false;
+                        }
+                    }
+                }
+            } else if !self.state.tos_credentials_modal.is_open() {
+                self.state.tos_credentials_modal.open();
+                self.credentials_prompt_owned_by_pending = true;
+            }
+            // A prompt someone else opened is already on screen: wait for it — a save
+            // fills the slot and the next frame proceeds normally.
+            return;
+        }
+        self.credentials_prompt_owned_by_pending = false;
+
+        for open in std::mem::take(&mut self.pending_tos_opens) {
             let Some(access) = tos_access(
                 &config,
-                &region,
-                curator_dataset.as_deref(),
-                &location.to_string(),
+                &open.region,
+                open.curator_dataset.as_deref(),
+                &open.location.to_string(),
             ) else {
-                re_log::error!(
-                    "Can't open {location} — this deployment has no TOS credentials configured \
-                     (config.json). Use the 'Open from Volcengine TOS' dialog to enter your own."
-                );
+                // `has_tos_credentials` held above, so the keys fallback always resolves.
                 continue;
             };
-
             self.command_sender
                 .send_system(SystemCommand::LoadDataSource(LogDataSource::TosDataset(
                     re_data_source::tos::TosDatasetSource {
-                        location,
+                        location: open.location,
                         access,
                         rrd_artifacts: config.rrd_artifacts(true),
                     },
                 )));
+        }
+    }
+
+    /// On startup, once: if no TOS credentials are configured anywhere (deployment config,
+    /// env, session slot), open the credentials prompt so the user can enter them up front.
+    ///
+    /// Dismissable — someone viewing local files or public HF datasets never needs TOS.
+    /// Skipping just means the on-demand prompt (or the open dialogs) asks later.
+    pub(super) fn maybe_prompt_startup_credentials(&mut self, egui_ctx: &egui::Context) {
+        if self.startup_credentials_prompt_attempted {
+            return;
+        }
+
+        // A pending `tos://` open prompts on its own; don't stack a second prompt.
+        if !self.pending_tos_opens.is_empty() {
+            self.startup_credentials_prompt_attempted = true;
+            return;
+        }
+
+        crate::viewer_config::request();
+        let config = if let Some(config) = crate::viewer_config::get() {
+            config
+        } else {
+            let now = egui_ctx.input(|i| i.time);
+            let started = *self.startup_credentials_wait_since.get_or_insert(now);
+            if now - started < CONFIG_WAIT_TIMEOUT {
+                egui_ctx.request_repaint_after(std::time::Duration::from_millis(100));
+                return; // Try again next frame.
+            }
+            // Config never arrived — treat as empty, same as the other flows.
+            Default::default()
+        };
+        self.startup_credentials_prompt_attempted = true;
+
+        if !config.has_tos_credentials() && !self.state.tos_credentials_modal.is_open() {
+            self.state.tos_credentials_modal.open();
         }
     }
 }

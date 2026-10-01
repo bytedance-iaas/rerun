@@ -12,6 +12,9 @@ use re_i18n::{tr, trf};
 pub enum RecentKind {
     Tos,
     Hf,
+
+    /// The ByteDance HF cache (public `ai-infra` TOS bucket) — opens without credentials.
+    HfCache,
 }
 
 /// One remembered remote dataset. No credentials, ever.

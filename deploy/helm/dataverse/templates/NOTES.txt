@@ -12,7 +12,7 @@ vLLM:     {{ include "dataverse.fullname" . }}-vllm (1 GPU x {{ .Values.vllm.gpu
 
 {{- if .Values.apig.enabled }}
 
-2. Everything is published on {{ if .Values.apig.create }}the gateway this release provisions{{ else }}adopted gateway {{ .Values.apig.existingId }}{{ end }} (class {{ include "dataverse.apig.ingressClassName" . }}), on one host:
+2. Everything is published on {{ if .Values.apig.create }}the gateway this release provisions{{ else }}adopted gateway {{ include "dataverse.apig.resolvedId" . }}{{ end }} (class {{ include "dataverse.apig.ingressClassName" . }}), on one host:
 
      {{ include "dataverse.apig.host" . }}
 {{- if and .Values.apig.create (not .Values.apig.existingId) }}

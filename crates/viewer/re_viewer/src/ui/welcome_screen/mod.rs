@@ -88,8 +88,7 @@ impl WelcomeScreen {
                         }
                     } else {
                         // The full welcome screen draws the recents below the feature cards.
-                        recent_action =
-                            self.example_page.ui(ui, ctx, login_state, recent_datasets);
+                        recent_action = self.example_page.ui(ui, ctx, login_state, recent_datasets);
                     }
                 });
             });

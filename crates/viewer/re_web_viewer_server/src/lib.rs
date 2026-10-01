@@ -517,6 +517,44 @@ impl WebViewerServerInner {
         let url = request.url();
         let path = url.split('?').next().unwrap_or(url);
 
+        // Same-origin proxy to the ByteDance HF cache, mirroring the catalog server's
+        // /api/hf-cache route — so the web viewer served locally can stream the cache
+        // too (its bucket serves no CORS headers, ruling out direct browser reads).
+        // Handled on its own thread: data fetches must not stall asset serving.
+        if path.starts_with("/api/hf-cache") {
+            let url = url.to_owned();
+            std::thread::Builder::new()
+                .name("hf_cache_proxy".to_owned())
+                .spawn(move || proxy_hf_cache(request, &url))
+                .ok();
+            return Ok(());
+        }
+
+        // Local parity with the web deployment, which serves its TOS/HF defaults at
+        // /config.json: hand out the user's local viewer config ($RERUN_CONFIG, else
+        // ~/.rerun/config.json). Without it the browser viewer has no rrd-artifacts
+        // store or default credentials, silently degrading every open to a fresh
+        // conversion. Loopback clients only: the file may hold credentials, and this
+        // server can be bound to every interface.
+        if path == "/config.json" {
+            let from_loopback = request
+                .remote_addr()
+                .is_some_and(|addr| addr.ip().is_loopback());
+            let config = from_loopback.then(local_viewer_config_bytes).flatten();
+            return match config {
+                Some(bytes) => {
+                    let mut response = tiny_http::Response::from_data(bytes);
+                    for header in ["Content-Type: application/json", "Cache-Control: no-store"] {
+                        if let Ok(header) = tiny_http::Header::from_str(header) {
+                            response.add_header(header);
+                        }
+                    }
+                    request.respond(response)
+                }
+                None => request.respond(tiny_http::Response::empty(404)),
+            };
+        }
+
         let data = &self.data;
         let (mime, bytes): (&str, &[u8]) = match path {
             "/" | "/index.html" => ("text/html", data.index_html()),
@@ -557,6 +595,136 @@ impl WebViewerServerInner {
 
         request.respond(response)
     }
+}
+
+/// Forward one `/api/hf-cache/…` request to the public ai-infra bucket and answer with
+/// the upstream's status, body and range/type headers.
+///
+/// The allowlist mirrors `re_data_source::tos::hf_cache::proxy_upstream_url` — kept
+/// inline (and small) so this static-file crate does not pull the whole data-source
+/// stack: only object reads under `dataset/` and the S3 listing restricted to that
+/// prefix pass; anything else answers 403, keeping this from being an open relay.
+#[cfg(not(disable_web_viewer_server))]
+fn proxy_hf_cache(request: tiny_http::Request, url: &str) {
+    const UPSTREAM: &str = "https://ai-infra.tos-s3-cn-beijing.volces.com";
+
+    let (path, query) = match url.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (url, None),
+    };
+    let key = path
+        .strip_prefix("/api/hf-cache")
+        .unwrap_or_default()
+        .trim_start_matches('/');
+
+    let allowed = if key.is_empty() {
+        // Bucket-level request: only the S3 listing, only under the dataset prefix
+        // (the client percent-encodes `/` in the prefix value, hence `dataset%2F`).
+        query.is_some_and(|query| {
+            query.contains("list-type=")
+                && query.split('&').any(|pair| {
+                    pair.strip_prefix("prefix=")
+                        .is_some_and(|value| value.starts_with("dataset%2F"))
+                })
+        })
+    } else {
+        key.starts_with("dataset/")
+            && !key.contains("..")
+            && !key.contains('%')
+            && !key.contains(':')
+    };
+    if !allowed {
+        let _ = request.respond(tiny_http::Response::empty(403));
+        return;
+    }
+
+    let upstream_url = match query {
+        Some(query) => format!("{UPSTREAM}/{key}?{query}"),
+        None => format!("{UPSTREAM}/{key}"),
+    };
+
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false) // Forward 404s and friends verbatim.
+        .timeout_global(Some(std::time::Duration::from_secs(300)))
+        .build()
+        .into();
+    let mut upstream_request = agent.get(&upstream_url);
+    if let Some(range) = request
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv("range"))
+    {
+        upstream_request = upstream_request.header("range", range.value.as_str());
+    }
+
+    let mut upstream_response = match upstream_request.call() {
+        Ok(response) => response,
+        Err(err) => {
+            re_log::warn!(
+                "HF cache upstream fetch failed: {err}
+Url: {upstream_url}"
+            );
+            let _ = request.respond(tiny_http::Response::empty(502));
+            return;
+        }
+    };
+
+    let status = upstream_response.status().as_u16();
+    let mut headers = Vec::new();
+    for name in [
+        "content-type",
+        "content-range",
+        "accept-ranges",
+        "etag",
+        "last-modified",
+    ] {
+        if let Some(value) = upstream_response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            && let Ok(header) = tiny_http::Header::from_str(&format!("{name}: {value}"))
+        {
+            headers.push(header);
+        }
+    }
+    let body = match upstream_response
+        .body_mut()
+        .with_config()
+        .limit(u64::MAX)
+        .read_to_vec()
+    {
+        Ok(body) => body,
+        Err(err) => {
+            re_log::warn!(
+                "HF cache upstream body read failed: {err}
+Url: {upstream_url}"
+            );
+            let _ = request.respond(tiny_http::Response::empty(502));
+            return;
+        }
+    };
+
+    let mut response = tiny_http::Response::from_data(body).with_status_code(status);
+    for header in headers {
+        response.add_header(header);
+    }
+    let _ = request.respond(response);
+}
+
+/// The local viewer config file, same resolution as the viewer's own
+/// `native_config::load_local_config_bytes`: `$RERUN_CONFIG`, else `~/.rerun/config.json`.
+/// (Duplicated here — this small static-file crate does not depend on the viewer.)
+#[cfg(not(disable_web_viewer_server))]
+fn local_viewer_config_bytes() -> Option<Vec<u8>> {
+    let path = if let Some(path) = std::env::var_os("RERUN_CONFIG") {
+        std::path::PathBuf::from(path)
+    } else {
+        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+        std::path::PathBuf::from(home)
+            .join(".rerun")
+            .join("config.json")
+    };
+    std::fs::read(path).ok()
 }
 
 #[cfg(test)]

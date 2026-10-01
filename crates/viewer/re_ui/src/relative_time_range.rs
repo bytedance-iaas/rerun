@@ -239,11 +239,13 @@ pub fn relative_time_range_label_text(
                 "{from_formatted} to {to_formatted}",
                 "{from_formatted} 到 {to_formatted}"
             ),
-            Some(tr(
-                "Showing data in this range (inclusive).",
-                "显示此范围内的数据（含边界）。",
-            )
-            .to_owned()),
+            Some(
+                tr(
+                    "Showing data in this range (inclusive).",
+                    "显示此范围内的数据（含边界）。",
+                )
+                .to_owned(),
+            ),
         )
     }
 }

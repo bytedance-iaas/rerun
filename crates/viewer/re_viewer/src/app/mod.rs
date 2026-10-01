@@ -133,6 +133,17 @@ pub struct App {
     /// When the pending TOS opens started waiting for the config fetch (egui time, seconds).
     pending_tos_wait_since: Option<f64>,
 
+    /// Whether the startup no-credentials check already ran (it prompts at most once).
+    startup_credentials_prompt_attempted: bool,
+
+    /// When the startup credentials check started waiting for the config fetch.
+    startup_credentials_wait_since: Option<f64>,
+
+    /// Whether the currently-open credentials prompt was opened by a pending `tos://` open —
+    /// only that flow may consume the prompt's outcome (a startup or menu prompt's cancel
+    /// must not silently drop a queued open).
+    credentials_prompt_owned_by_pending: bool,
+
     /// Pending background tasks, e.g. files being saved.
     pub(crate) background_tasks: BackgroundTasks,
 
@@ -526,6 +537,9 @@ impl App {
             session_restore_wait_since: None,
             pending_tos_opens: Vec::new(),
             pending_tos_wait_since: None,
+            startup_credentials_prompt_attempted: false,
+            startup_credentials_wait_since: None,
+            credentials_prompt_owned_by_pending: false,
             background_tasks: Default::default(),
             store_hub: Some(StoreHub::new(
                 if is_test {

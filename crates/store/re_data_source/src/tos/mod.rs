@@ -11,7 +11,9 @@
 pub(crate) mod client;
 pub mod cors;
 pub mod curator;
+pub mod hf_cache;
 mod lerobot_stream;
+pub mod session_credentials;
 
 pub use client::{TosAccess, TosClient, TosCredentials, endpoint_for_region, region_from_endpoint};
 pub use curator::CuratorDatasetAccess;

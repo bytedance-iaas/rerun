@@ -35,11 +35,12 @@ impl Language {
         }
     }
 
-    /// The label to show on a toggle that switches to the *other* language.
+    /// The label to show on the language toggle: the language currently in use
+    /// (the hover text explains that clicking switches to the other one).
     pub fn toggle_label(self) -> &'static str {
         match self {
-            Self::Chinese => "EN",
-            Self::English => "中",
+            Self::Chinese => "中",
+            Self::English => "EN",
         }
     }
 
@@ -82,11 +83,7 @@ pub fn is_chinese() -> bool {
 /// ```
 #[inline]
 pub fn tr(english: &'static str, chinese: &'static str) -> &'static str {
-    if is_chinese() {
-        chinese
-    } else {
-        english
-    }
+    if is_chinese() { chinese } else { english }
 }
 
 /// Like [`tr`], but for `format!`-style templates with interpolation. Both templates

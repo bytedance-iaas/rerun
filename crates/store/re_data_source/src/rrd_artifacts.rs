@@ -266,6 +266,9 @@ pub struct LocalConfig {
     pub tos_endpoint: String,
     pub tos_access_key: String,
     pub tos_secret_key: String,
+
+    /// Set when the AK/SK are STS temporary credentials; empty for a long-term pair.
+    pub tos_session_token: String,
     pub hf_token: String,
     pub hf_endpoint: String,
     pub tos_rrd_artifacts_url: String,
@@ -303,6 +306,7 @@ pub fn load_local_config() -> LocalConfig {
     env_override(&mut config.tos_endpoint, "TOS_ENDPOINT");
     env_override(&mut config.tos_access_key, "TOS_ACCESS_KEY");
     env_override(&mut config.tos_secret_key, "TOS_SECRET_KEY");
+    env_override(&mut config.tos_session_token, "TOS_SESSION_TOKEN");
     env_override(&mut config.hf_token, "HF_TOKEN");
     env_override(&mut config.hf_endpoint, "HF_ENDPOINT");
     env_override(&mut config.tos_rrd_artifacts_url, "TOS_RRD_ARTIFACTS_URL");

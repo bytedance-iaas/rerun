@@ -71,13 +71,22 @@ secrets:
   # first install:
   #
   #   kubectl -n <namespace> create secret generic dataverse-secrets \
-  #       --from-literal=tos_access_key=<ak> \
-  #       --from-literal=tos_secret_key=<sk> \
   #       --from-literal=server_token_secret="$(openssl rand -base64 32)" \
   #       --from-literal=web_htpasswd="<user>:$(openssl passwd -apr1)"
   #
+  # That is the zero-credential default: no AK/SK anywhere — the viewer asks each user
+  # for credentials when needed. To bake in deployment-wide defaults instead, add:
+  #       --from-literal=tos_access_key=<ak> \
+  #       --from-literal=tos_secret_key=<sk>
+  #
   # Keys, and what reads them:
-  #   tos_access_key / tos_secret_key   REQUIRED — the viewer, the catalog and the console
+  #   tos_access_key / tos_secret_key   optional — the deployment-wide default credentials for the
+  #                                     viewer, the catalog and the console. Leave them out to run
+  #                                     without baked-in credentials: the viewer then asks each
+  #                                     user for an AK/SK the first time one is needed and keeps it
+  #                                     for that session. Note the catalog's tos:// registration
+  #                                     and the console's TOS mounts have no dialog to fall back
+  #                                     on — those stay unavailable until credentials exist
   #   server_token_secret               REQUIRED when catalog.tokenAuth.enabled — the catalog's
   #                                     token signing key: 32 random bytes in base64, which is
   #                                     exactly what `openssl rand -base64 32` prints and exactly
@@ -94,11 +103,10 @@ secrets:
   #                                     tos_secret_key are STS temporary credentials rather than a
   #                                     long-term pair. STS only authenticates as a triple from the
   #                                     same issue, unexpired; without the token TOS answers
-  #                                     InvalidAccessKeyId. ⚠️ Only the console reads it: the
-  #                                     viewer, the catalog and native sessions sign with the AK/SK
-  #                                     alone, so on STS credentials those cannot reach TOS — they
-  #                                     still need a long-term pair. STS credentials also expire:
-  #                                     replace all three keys together, then restart
+  #                                     InvalidAccessKeyId. Read by every component: the viewer,
+  #                                     the catalog, native sessions and the console all sign with
+  #                                     it. STS credentials expire on their own schedule: replace
+  #                                     all three keys together, then restart the pods
   #   hf_token                          optional — only for private HuggingFace datasets
   #   ark_api_key                       optional — the console's Volcengine Ark VLM backend. The
   #                                     matching base url is not a secret, see curator.arkBaseUrl
@@ -182,71 +190,76 @@ curator:
   # false drops the console, its site-configuration ConfigMap and its Ingress path together.
   enabled: true
 
-  # The console's image is image.curator (top-level, next to the rerun one).
+  # The console's image is image.curator (top-level, next to the rerun one). Since curator v2 the
+  # image runs one process, the API Daemon (port 8080, non-root uid 10001), and this chart follows
+  # the contract in the curator repo's docs/design/09-deployment.md §2: the URL prefix /curation,
+  # the probes, the graceful-stop windows and the run user are deliberately NOT values — they are
+  # the same in every deployment and live in the template.
 
-  # The console's URL path is fixed at /curation (its --root-path, the Ingress route, and the
-  # viewer's built-in Diagnose-button target are all this one value — the viewer derives it as a
-  # same-origin sibling path, so there is nothing to configure and nothing to keep in sync).
+  # Base of the absolute links the console hands to agents (the public domain, once known from the
+  # APIG console — fine to fill in after the first install). Empty = relative links.
+  publicBaseUrl: ""
 
-  # The Terminal tab: an embedded web terminal on a real shell, behind the same Basic auth as the
-  # rest of the console. Useful for triage. false does not render the tab and does not register the
-  # /ws/term route — set it if handing out a shell is a concern.
-  terminal: true
+  # Site configuration, written verbatim into the console's site.yaml: only keys that differ from
+  # the console's factory defaults belong here (do not set concurrency — the Daemon derives CPU
+  # workers from the container's CPU limit by itself). The vlm_backends / public_datasets sections
+  # rendered from the values below are merged on top.
+  siteConfig: {}
 
-  # VLM backends the console offers for its model-based checks, rendered verbatim into the
-  # console's site.yaml (keys and fields follow its format). There is no in-cluster discovery: a
-  # backend that is not listed cannot be selected in the UI at all.
-  # What belongs here are EXTERNAL, already-running vLLM or MaaS backends. The vLLM this chart can
-  # deploy (vllm.enabled=true) is merged in automatically under the `self-hosted` key; an entry of
-  # that name here wins over it.
-  # Every backend needs at least an endpoint; the UI filters out entries whose endpoint is empty or
-  # still contains "YOUR-". For example:
+  # VLM backends the console offers for its model-based checks, rendered into site.yaml
+  # (keys and fields follow its format). There is no in-cluster discovery: a backend that is not
+  # listed cannot be selected in the UI at all. What belongs here are EXTERNAL, already-running
+  # vLLM or MaaS backends; the vLLM this chart can deploy (vllm.enabled=true) is merged in
+  # automatically under the `self-hosted` key, and an entry of that name here wins over it.
   #   vlmBackends:
   #     h20-8b:
   #       endpoint: http://vllm-cosmos-8b.<namespace>.svc.cluster.local:8000/v1
   #       model: nvidia/Cosmos-Reason2-8B
-  #       api_key_env:
-  #       hardware: NVIDIA H20
-  #       service_type: Self-hosted vLLM
   vlmBackends: {}
 
   # The console's "public datasets" source: Volcengine's anonymous-readable TOS mirror of
-  # HuggingFace (maintained by oniond), rendered into the console's site.yaml as its
-  # `public_datasets` section. With a bucket set, the UI's data-source picker gains a public
-  # catalog entry (the console filters the mirror down to its few LeRobot-format datasets)
-  # and the CLI gains `curation public`; an empty bucket drops the feature entirely.
-  # The mirror is read anonymously — do NOT grant the deployment's AK/SK any rights on it
-  # (signing requests against it is actually refused; the console uses an unsigned client).
-  # ⚠️ The mirror is reachable from the Volcengine network only. On a cluster outside it,
-  #    set bucket to "" to switch the feature off.
+  # HuggingFace (maintained by oniond), rendered into site.yaml as its `public_datasets` section.
+  # With a bucket set, the UI's data-source picker gains a public catalog entry; an empty bucket
+  # drops the feature entirely. The mirror is read anonymously — do NOT grant any AK/SK rights on
+  # it. ⚠️ Reachable from the Volcengine network only; outside it set bucket to "".
   publicDatasets:
-    # The mirror bucket. "" = feature off.
     bucket: ai-infra
-    # The mirror bucket's region. Empty = tos.region, which is right when the mirror sits in
-    # the same region as the deployment — override only when it does not.
+    # Empty = tos.region; override only when the mirror sits elsewhere.
     region: ""
-    # Layout details (object prefix, manifest name) and the source's display label all have
-    # matching console defaults — override only a mirror with a different layout:
+    # Layout details (prefix, manifest name) and the display label have console defaults —
+    # override only for a mirror with a different layout:
     #   prefix: dataset
     #   manifest: dataset_files.json
     #   label: 字节 HuggingFace 镜像
 
-  # Base url of the Volcengine Ark VLM service, injected as the console's ARK_BASE_URL. Ordinary
-  # configuration, not a secret — the matching key is `ark_api_key` in secrets.existingSecret.
-  # Empty = not injected, which is correct when the console does not use the Ark backend.
-  arkBaseUrl: https://ark.cn-beijing.volces.com/api/v3
+  # Two disks, both created by volumeClaimTemplates — so className/size CANNOT change after the
+  # first install (to grow one, patch the PVC directly). Both MUST be block storage (EBS):
+  # SQLite's WAL corrupts on NAS/FSX, and FSX refuses the random writes video export needs.
+  persistence:
+    # /data: SQLite + task workspaces + library snapshots. Survives restarts.
+    data:
+      className: ebs-essd
+      size: 100Gi
+      # Adopt a pre-existing disk (e.g. when folding in a standalone release) instead of
+      # creating one. No data is copied.
+      existingClaim: ""
+    # /scratch: export temp files + local copies of TOS-hosted mcap / Lance datasets.
+    # Disposable; size it for the largest dataset under QA plus export headroom.
+    scratch:
+      className: ebs-essd
+      size: 500Gi
 
-  # The curation pipeline is CPU-bound: optical flow, video decoding and the checks themselves all
-  # run on CPU.
-  # ⚠️ ephemeral-storage is what enables the size precheck. The dataset cache and batch staging
-  #    live in an emptyDir, which counts against this limit, and the console reads the limit through
-  #    the downward API to work out how much it can still write — without it, a large dataset can
-  #    write the pod into a kubelet eviction. Tune it to the node's disk.
-  #    The request is kept well below the limit on purpose: it only gates scheduling, so a small
-  #    request keeps mid-sized nodes eligible while the limit still allows large datasets.
+  # The curation pipeline is CPU-bound. limits.cpu doubles as the console's CPU budget: the
+  # Daemon runs (limit − 2) CPU workers shared across its (default 3) concurrent tasks — no
+  # chart knob for that. On VCI the instance is sized and billed from limits.
   resources:
-    requests: { cpu: "16", memory: 128Gi, ephemeral-storage: 50Gi }
-    limits:   { cpu: "32", memory: 256Gi, ephemeral-storage: 200Gi }
+    requests: { cpu: "16", memory: 128Gi }
+    limits: { cpu: "32", memory: 256Gi }
+
+  # Any further Daemon settings, as literal env entries — e.g.
+  #   extraEnv:
+  #     - { name: CURATOR_WORK_RETENTION_DAYS, value: "14" }
+  extraEnv: []
 
 # Run this deployment's workloads on VCI (Volcengine Container Instance) instead of the cluster's
 # own nodes: `enabled: true` puts BOTH the ReRun pod and the curation console on serverless
@@ -261,10 +274,10 @@ curator:
 #    for 16 CPU but limits 32, so on VCI the console costs a 32-core instance the whole time it is
 #    up. Size the limits before turning this on.
 # ⚠️ A VCI instance's root filesystem is a fixed 40 GiB and `ephemeral-storage` limits are silently
-#    ignored there. Both /data (the console's cache and staging) and /rrd-cache are emptyDirs, so
-#    they live on those 40 GiB — and the console's size precheck, which reads its 200Gi limit
-#    through the downward API, will believe it has far more room than it does. Raising the root
-#    disk needs Volcengine to enable CustomizedSystemStorage for the account.
+#    ignored there. The console's disks are real EBS volumes (curator.persistence) and unaffected;
+#    what still lives on those 40 GiB is the viewer pod's /rrd-cache emptyDir. Raising the root
+#    disk needs Volcengine to enable CustomizedSystemStorage for the account. VCI also skips
+#    fsGroup, which is why the chart adds a root init container that chowns the console's disks.
 # The catalog's /server-data is a real EBS volume and is unaffected: cloud disks attach to VCI
 # instances normally. The existing volume is pinned to one availability zone, and the scheduler
 # matches it against the virtual node of that zone on its own.
@@ -397,7 +410,10 @@ apig:
   # the fact has no effect and the gateway still goes.
   retainOnDelete: false
 
-  existingId: ""                  # create=false: REQUIRED, the gateway's instance id
+  # create=false: the gateway's instance id. May stay empty when the cluster has exactly ONE
+  # APIG gateway — the chart discovers and adopts it at install/upgrade time. Several gateways
+  # (or an offline render, which cannot look up the cluster) require the explicit id.
+  existingId: ""
   instanceName: ""                # create=true: gateway name (default: <release>-apig)
   # create=true: REQUIRED, at least one. The gateway is replicated for HA, so prefer two subnets in
   # DIFFERENT availability zones and the platform spreads the replicas and their CLB across them.

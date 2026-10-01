@@ -11386,6 +11386,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "tiny_http",
+ "ureq",
  "zip",
 ]
 

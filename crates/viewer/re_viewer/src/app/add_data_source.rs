@@ -59,7 +59,12 @@ impl App {
         let entry = match data_source {
             LogDataSource::TosDataset(source) => RecentDataset {
                 url: source.location.to_string(),
-                kind: RecentKind::Tos,
+                // HF-cache datasets re-open through their own (credential-free) dialog.
+                kind: if re_data_source::tos::hf_cache::is_cache_location(&source.location) {
+                    RecentKind::HfCache
+                } else {
+                    RecentKind::Tos
+                },
                 region: source.access.region(),
                 curator_dataset: source.access.curator_dataset_id().map(ToOwned::to_owned),
                 item_count: None,

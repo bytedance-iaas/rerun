@@ -29,6 +29,8 @@ read_secret() {
 }
 TOS_AK="$(read_secret tos_access_key TOS_ACCESS_KEY)"
 TOS_SK="$(read_secret tos_secret_key TOS_SECRET_KEY)"
+# The session token of STS temporary credentials; empty for a long-term pair.
+TOS_TOKEN="$(read_secret tos_session_token TOS_SESSION_TOKEN)"
 HF_TOKEN_VALUE="$(read_secret hf_token HF_TOKEN)"
 
 case "$MODE" in
@@ -71,14 +73,16 @@ AUTH
     esac
 
     # tos_access_key/tos_secret_key/hf_token are the server-side defaults for the browser dialogs
-    # (used unless the user opts into "Use non-default AK/SK"). No daft_url: the viewer derives the
-    # curation console as the same-origin /curation sibling path on its own.
+    # (used unless the user opts into "Use non-default AK/SK"). All three may be empty: without an
+    # AK/SK the viewer asks each user for credentials once per session instead. No daft_url: the
+    # viewer derives the curation console as the same-origin /curation sibling path on its own.
     # hf_endpoint is optional: empty = the official https://huggingface.co.
     cat > /run/config.json <<EOF
 {
   "tos_endpoint": "${TOS_ENDPOINT}",
   "tos_access_key": "${TOS_AK}",
   "tos_secret_key": "${TOS_SK}",
+  "tos_session_token": "${TOS_TOKEN}",
   "hf_token": "${HF_TOKEN_VALUE}",
   "hf_endpoint": "${HF_ENDPOINT:-}",
   "tos_rrd_artifacts_url": "${TOS_RRD_ARTIFACTS_URL}",
@@ -89,6 +93,10 @@ AUTH
 }
 EOF
     chmod 644 /run/config.json
+
+    # The /api reverse proxy's upstream (see nginx.conf): catalog in the same pod on
+    # k8s (default), the `server` service under docker compose (set by compose).
+    echo "proxy_pass http://${CATALOG_UPSTREAM:-127.0.0.1}:51234;" > /run/nginx-api-upstream.conf
     # Adopt the cache volume: a volume created by an earlier image keeps that
     # image's ownership, which blocks WebDAV PUTs from this nginx's www-data.
     chown www-data:www-data /rrd-cache
@@ -98,6 +106,7 @@ EOF
 native)
     export TOS_ACCESS_KEY="$TOS_AK"
     export TOS_SECRET_KEY="$TOS_SK"
+    export TOS_SESSION_TOKEN="$TOS_TOKEN"
     export HF_TOKEN="$HF_TOKEN_VALUE"
 
     require_env SESSION_GEOMETRY
@@ -169,6 +178,7 @@ server)
     # The catalog server reads TOS credentials from the environment for tos:// registration.
     export TOS_ACCESS_KEY="$TOS_AK"
     export TOS_SECRET_KEY="$TOS_SK"
+    export TOS_SESSION_TOKEN="$TOS_TOKEN"
 
     # Catalog + remote-file cache live on the mounted volume: restarts keep the catalog.
     export RERUN_SERVER_DATA_DIR="${RERUN_SERVER_DATA_DIR:-/server-data}"

@@ -545,6 +545,11 @@ impl App {
                 // The user asked for this dataset explicitly; don't also bring back the
                 // previous session on top of it.
                 self.session_restore_attempted = true;
+                // Nor greet them with the startup credentials prompt: entering through a
+                // link is its own flow — a console-signed open (curation console's
+                // "Visualize") needs no credentials at all, and a plain tos:// link
+                // raises the on-demand prompt by itself if keys turn out to be missing.
+                self.startup_credentials_prompt_attempted = true;
                 egui_ctx.request_repaint();
             }
 
@@ -977,6 +982,14 @@ impl App {
                 self.state.open_hf_modal.open();
             }
 
+            UICommand::OpenHfCacheDataset => {
+                self.state.open_hf_cache_modal.open();
+            }
+
+            UICommand::SetTosCredentials => {
+                self.state.tos_credentials_modal.open();
+            }
+
             UICommand::CloseAllEntries => {
                 self.command_sender
                     .send_system(SystemCommand::CloseAllEntries);
@@ -1274,7 +1287,10 @@ impl App {
                     if let Err(err) = save_active_recording(self, store_context) {
                         re_log::error!(
                             "{}",
-                            trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                            trf!(
+                                "Failed to save recording: {err}",
+                                "保存 episode 失败：{err}"
+                            )
                         );
                     }
                 }
@@ -1309,7 +1325,10 @@ impl App {
                         if let Err(err) = save_active_recording(self, store_context) {
                             re_log::error!(
                                 "{}",
-                                trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                                trf!(
+                                    "Failed to save recording: {err}",
+                                    "保存 episode 失败：{err}"
+                                )
                             );
                         }
                     } else if selected_stores.len() == 1 {
@@ -1318,7 +1337,10 @@ impl App {
                         if let Err(err) = save_recording(self, selected_stores[0], None) {
                             re_log::error!(
                                 "{}",
-                                trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                                trf!(
+                                    "Failed to save recording: {err}",
+                                    "保存 episode 失败：{err}"
+                                )
                             );
                         }
                     } else {
@@ -1344,7 +1366,10 @@ impl App {
                 if let Err(err) = save_active_recording(self, store_context) {
                     re_log::error!(
                         "{}",
-                        trf!("Failed to save recording: {err}", "保存 episode 失败：{err}")
+                        trf!(
+                            "Failed to save recording: {err}",
+                            "保存 episode 失败：{err}"
+                        )
                     );
                 }
             }

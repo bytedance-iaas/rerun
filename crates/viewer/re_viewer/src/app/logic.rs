@@ -59,6 +59,9 @@ impl App {
         // `tos://` URL opens queued above, once the config (credentials) has resolved.
         self.process_pending_tos_opens(egui_ctx);
 
+        // First launch without any TOS credentials: offer to enter them right away.
+        self.maybe_prompt_startup_credentials(egui_ctx);
+
         {
             // We also need to check for Ui commands, especially `UiCommand::Quit`.
 

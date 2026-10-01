@@ -52,6 +52,12 @@ pub struct TosCredentials {
 
     pub access_key: String,
     pub secret_key: String,
+
+    /// The session token of STS temporary credentials. STS only authenticates as a triple
+    /// from the same issue: an STS AK/SK sent without its token is rejected as
+    /// `InvalidAccessKeyId` — which reads like a permission problem but is not one.
+    /// Empty for a long-term AK/SK pair.
+    pub session_token: String,
 }
 
 impl TosCredentials {
@@ -290,6 +296,15 @@ impl TosClient {
             .trim_start_matches("http://")
             .trim_end_matches('/');
         format!("{}.{endpoint_host}", self.bucket)
+    }
+
+    /// Empty keys mean anonymous access to a public-read bucket — nothing to sign with.
+    fn is_anonymous(&self) -> bool {
+        matches!(
+            &self.access,
+            TosAccess::Keys(credentials)
+                if credentials.access_key.is_empty() && credentials.secret_key.is_empty()
+        )
     }
 
     fn scheme(&self) -> &str {
@@ -782,8 +797,21 @@ impl TosClient {
         // In the browser, a bucket without our CORS rule is unreadable no matter how valid
         // the signature is — so before the first request of the session to this bucket, ask
         // the catalog server (same-origin, exempt from CORS) to install the rule.
+        // Anonymous public-read buckets (e.g. the ai-infra HF cache) skip this: their
+        // CORS is not ours to manage.
         #[cfg(target_arch = "wasm32")]
-        super::cors::ensure_cors_via_server_once(&self.bucket, &self.access.region()).await;
+        if !self.is_anonymous() {
+            let signing_credentials = match &self.access {
+                TosAccess::Keys(credentials) => Some(credentials),
+                TosAccess::CuratorDataset(_) => None,
+            };
+            super::cors::ensure_cors_via_server_once(
+                &self.bucket,
+                &self.access.region(),
+                signing_credentials,
+            )
+            .await;
+        }
 
         match &self.access {
             TosAccess::Keys(credentials) => {
@@ -894,6 +922,30 @@ impl TosClient {
         body: Vec<u8>,
         hard_timeout: std::time::Duration,
     ) -> anyhow::Result<ehttp::Response> {
+        // Public-read buckets (e.g. the ai-infra HF cache) are fetched anonymously: no
+        // signature, no x-amz-* headers (fewer headers = simpler CORS preflights).
+        let anonymous = credentials.access_key.is_empty() && credentials.secret_key.is_empty();
+
+        // HTTP header values must be ISO-8859-1; credentials with anything else (an
+        // unreplaced placeholder like "AK…", a stray full-width character) would die
+        // deep in the HTTP stack with a cryptic TypeError. Name the actual cause instead.
+        if !anonymous
+            && [
+                &credentials.access_key,
+                &credentials.secret_key,
+                &credentials.session_token,
+            ]
+            .iter()
+            .any(|value| !value.is_ascii())
+        {
+            anyhow::bail!(trf!(
+                "The configured TOS credentials contain non-ASCII characters — probably an \
+                 unreplaced placeholder (e.g. \"AK…\"). Check the access key / secret key.",
+                "配置的 TOS 凭证含有非 ASCII 字符 — 多半是没替换的占位符(如 \"AK…\")。\
+                 请检查 access key / secret key。"
+            ));
+        }
+
         let host = self.host();
         let (amz_date, date) = amz_timestamps();
 
@@ -910,54 +962,78 @@ impl TosClient {
             .join("&");
 
         // Signed headers: host + x-amz-* + any extra (e.g. range, metadata), sorted by name.
-        let mut headers: Vec<(String, String)> = vec![
-            ("host".to_owned(), host.clone()),
-            ("x-amz-content-sha256".to_owned(), payload_sha256.clone()),
-            ("x-amz-date".to_owned(), amz_date.clone()),
-        ];
-        headers.extend(extra_headers);
+        let mut headers: Vec<(String, String)> = if anonymous {
+            extra_headers
+        } else {
+            let mut headers = vec![
+                ("host".to_owned(), host.clone()),
+                ("x-amz-content-sha256".to_owned(), payload_sha256.clone()),
+                ("x-amz-date".to_owned(), amz_date.clone()),
+            ];
+            // STS temporary credentials carry their session token as a signed header.
+            if !credentials.session_token.is_empty() {
+                headers.push((
+                    "x-amz-security-token".to_owned(),
+                    credentials.session_token.clone(),
+                ));
+            }
+            headers.extend(extra_headers);
+            headers
+        };
         headers.sort();
 
-        let canonical_headers: String = headers
-            .iter()
-            .map(|(k, v)| format!("{k}:{}\n", v.trim()))
-            .collect();
-        let signed_headers = headers
-            .iter()
-            .map(|(k, _)| k.as_str())
-            .collect::<Vec<_>>()
-            .join(";");
-
-        let canonical_request = format!(
-            "{method}\n{}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{payload_sha256}",
-            uri_encode(path, false),
-        );
-
-        let region = &credentials.region();
-        let scope = format!("{date}/{region}/s3/aws4_request");
-        let string_to_sign = format!(
-            "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
-            hex(&Sha256::digest(canonical_request.as_bytes()))
-        );
-
-        let k_date = hmac(
-            format!("AWS4{}", credentials.secret_key).as_bytes(),
-            date.as_bytes(),
-        );
-        let k_region = hmac(&k_date, region.as_bytes());
-        let k_service = hmac(&k_region, b"s3");
-        let k_signing = hmac(&k_service, b"aws4_request");
-        let signature = hex(&hmac(&k_signing, string_to_sign.as_bytes()));
-
-        let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={}/{scope},SignedHeaders={signed_headers},Signature={signature}",
-            credentials.access_key
-        );
-
-        let url = if canonical_query.is_empty() {
-            format!("{}://{host}{path}", self.scheme())
+        let authorization = if anonymous {
+            String::new()
         } else {
-            format!("{}://{host}{path}?{canonical_query}", self.scheme())
+            let canonical_headers: String = headers
+                .iter()
+                .map(|(k, v)| format!("{k}:{}\n", v.trim()))
+                .collect();
+            let signed_headers = headers
+                .iter()
+                .map(|(k, _)| k.as_str())
+                .collect::<Vec<_>>()
+                .join(";");
+
+            let canonical_request = format!(
+                "{method}\n{}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{payload_sha256}",
+                uri_encode(path, false),
+            );
+
+            let region = &credentials.region();
+            let scope = format!("{date}/{region}/s3/aws4_request");
+            let string_to_sign = format!(
+                "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
+                hex(&Sha256::digest(canonical_request.as_bytes()))
+            );
+
+            let k_date = hmac(
+                format!("AWS4{}", credentials.secret_key).as_bytes(),
+                date.as_bytes(),
+            );
+            let k_region = hmac(&k_date, region.as_bytes());
+            let k_service = hmac(&k_region, b"s3");
+            let k_signing = hmac(&k_service, b"aws4_request");
+            let signature = hex(&hmac(&k_signing, string_to_sign.as_bytes()));
+
+            format!(
+                "AWS4-HMAC-SHA256 Credential={}/{scope},SignedHeaders={signed_headers},Signature={signature}",
+                credentials.access_key
+            )
+        };
+
+        // Endpoints that are a bare path (e.g. `/api/hf-cache`) address a same-origin
+        // proxy: the URL is the path joined onto it, with no bucket host of its own.
+        // Only anonymous public-bucket reads use this form (nothing to sign against it).
+        let base = if credentials.endpoint.starts_with('/') {
+            format!("{}{path}", credentials.endpoint.trim_end_matches('/'))
+        } else {
+            format!("{}://{host}{path}", self.scheme())
+        };
+        let url = if canonical_query.is_empty() {
+            base
+        } else {
+            format!("{base}?{canonical_query}")
         };
 
         let mut request = match method {
@@ -989,7 +1065,9 @@ impl TosClient {
                 request.headers.insert(k, v);
             }
         }
-        request.headers.insert("authorization", &authorization);
+        if !authorization.is_empty() {
+            request.headers.insert("authorization", &authorization);
+        }
 
         // Browser only: bypass the HTTP cache's stale entries. TOS sends no
         // `Vary: Origin`, so a response cached from a no-CORS context (address-bar
@@ -1000,14 +1078,23 @@ impl TosClient {
         #[cfg(target_arch = "wasm32")]
         request.headers.insert("cache-control", "no-cache");
 
-        crate::http_client::fetch_async_with_timeout(request, hard_timeout)
+        let response = crate::http_client::fetch_async_with_timeout(request, hard_timeout)
             .await
             .map_err(|err| {
                 anyhow::anyhow!(trf!(
                     "Request failed: {err}\nUrl: {url}",
                     "请求失败：{err}\nURL：{url}"
                 ))
-            })
+            })?;
+
+        // Authorization failed with the session-entered credentials: drop them so the next
+        // open prompts for fresh ones. CORS-management requests are exempt — credentials
+        // that read objects fine may legitimately lack the CORS-admin permission.
+        if response.status == 403 && !query.iter().any(|(k, _)| k == "cors") {
+            super::session_credentials::clear_if_matches(&credentials.access_key);
+        }
+
+        Ok(response)
     }
 }
 

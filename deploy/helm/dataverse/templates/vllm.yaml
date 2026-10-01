@@ -63,6 +63,12 @@ spec:
         # by default the curator image, which is already around and qualifies.
         - name: fetch-weights
           image: {{ .Values.vllm.weightFetch.image | default .Values.image.curator | required "vllm.weightFetch.enabled=true needs a download-container image: image.curator (the default source) is empty and vllm.weightFetch.image is not set" | quote }}
+          # The fetch script installs oniond through apt and writes the node-local model
+          # dir — both need root. Stated explicitly: the curator image (the default here)
+          # may declare a non-root USER, which otherwise crash-loops this init container
+          # on "Permission denied" at the apt step.
+          securityContext:
+            runAsUser: 0
           command: ["bash", "-c"]
           args:
             - |

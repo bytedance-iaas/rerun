@@ -72,9 +72,10 @@ rrdArtifactsPrefetch: "8"
 webViewerUrl: ""
 
 secrets:
-  # Name of dataverse's application-credentials Secret, carrying tos_access_key, tos_secret_key and
-  # optionally hf_token. Same field path as dataverse's values, so its value is reused; the default
-  # is what a release named `dataverse` produces.
+  # Name of dataverse's application-credentials Secret, optionally carrying tos_access_key,
+  # tos_secret_key and hf_token — a Secret without the AK/SK works too, the viewer then asks the
+  # user for credentials once per session. Same field path as dataverse's values, so its value is
+  # reused; the default is what a release named `dataverse` produces.
   existingSecret: dataverse-secrets
 
 ingress:
