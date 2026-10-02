@@ -48,6 +48,15 @@ const MORE_RECORDING_ID: &str = "more";
 /// The queue sentinel produced by clicking the "… N more" entry.
 const MORE_SENTINEL: usize = usize::MAX;
 
+/// Loose-files mode keeps auto-loading the next file while the bytes loaded so far stay
+/// under this; the rest load on click only (user clicks are never gated). Loaded files
+/// stay in memory, and MCAP conversion roughly doubles the transient footprint — the
+/// browser cap stays well below the ~2 GiB wasm ceiling, native can afford more.
+#[cfg(target_arch = "wasm32")]
+const LOOSE_FILES_AUTO_LOAD_BUDGET: u64 = 512 * 1024 * 1024;
+#[cfg(not(target_arch = "wasm32"))]
+const LOOSE_FILES_AUTO_LOAD_BUDGET: u64 = 2 * 1024 * 1024 * 1024;
+
 // ----------------------------------------------------------------------------
 // Storage abstraction.
 
@@ -136,6 +145,14 @@ pub trait DatasetStore: Send + Sync {
         rel_path: &str,
         range: Range<u64>,
     ) -> impl std::future::Future<Output = anyhow::Result<Vec<u8>>> + Send;
+
+    /// Whether this open already expects a directory of loose data files rather than a
+    /// LeRobot dataset — e.g. a curation-console "Visualize" link, whose registration
+    /// knows the format. The loose-files fallback is then the intended path and skips
+    /// its "not a LeRobot dataset" warning.
+    fn loose_files_expected(&self) -> bool {
+        false
+    }
 }
 
 /// Read access to the files of one remote `LeRobot` dataset (see the native declaration above).
@@ -170,6 +187,12 @@ pub trait DatasetStore {
 
     /// One ranged GET attempt of `[start, end)`.
     async fn get_range_once(&self, rel_path: &str, range: Range<u64>) -> anyhow::Result<Vec<u8>>;
+
+    /// Whether this open already expects a directory of loose data files rather than a
+    /// LeRobot dataset (see the native declaration above).
+    fn loose_files_expected(&self) -> bool {
+        false
+    }
 }
 
 /// GET `[range.start, range.end)` of a file, resuming until complete.
@@ -1640,9 +1663,29 @@ async fn run_stream_files<S: DatasetStore>(
         ))
     };
 
-    // Object-store backends (TOS): only LeRobot datasets are supported as directory opens —
-    // buckets can be huge, and browsing one as loose files is slow and unpredictable.
-    // A one-level probe (single request, no bucket crawl) tells the user what's there.
+    // Text files (README.md etc.) are technically importable but never what the user
+    // came for. The parquet importer is not part of the browser build, so don't list
+    // files the click could never load there.
+    let is_supported_loose_file = |file: &ListedFile| {
+        let extension = file
+            .rel_path
+            .rsplit('.')
+            .next()
+            .unwrap_or_default()
+            .to_lowercase();
+        if matches!(extension.as_str(), "md" | "txt") {
+            return false;
+        }
+        if cfg!(target_arch = "wasm32") && extension == "parquet" {
+            return false;
+        }
+        re_importer::is_supported_file_extension(&extension)
+    };
+
+    // Object-store backends (TOS): directory opens use a one-level probe (single request,
+    // no bucket crawl) — supported data files found right there are offered as loose files.
+    // We never list recursively: buckets can be huge, and crawling one is slow and
+    // unpredictable.
     if let Some(dir) = store.list_dir().await.map_err(listing_err)? {
         if dir.files.is_empty() && dir.subdirs.is_empty() {
             anyhow::bail!(tr(
@@ -1653,11 +1696,43 @@ async fn run_stream_files<S: DatasetStore>(
             ));
         }
 
+        let files: Vec<ListedFile> = dir
+            .files
+            .into_iter()
+            .filter(is_supported_loose_file)
+            .collect();
+
+        if !files.is_empty() {
+            if dir.truncated {
+                re_log::warn!(
+                    "{}",
+                    tr(
+                        "This location holds more entries than one listing page — only the \
+                         files of the first page are shown.",
+                        "该位置的条目超过了一页列表的容量 — 只显示第一页列到的文件。"
+                    )
+                );
+            }
+            if !dir.subdirs.is_empty() {
+                re_log::warn!(
+                    "{}",
+                    trf!(
+                        "This location also holds {} subdirectories (not browsed) — to open \
+                         one, use its full path directly.",
+                        "该位置还包含 {} 个子目录（未展开）— 如需打开，请直接使用其完整路径。",
+                        dir.subdirs.len()
+                    )
+                );
+            }
+            return stream_loose_files(store, files, dataset_url, tx, rrd_artifacts).await;
+        }
+
         let mut message = tr(
-            "This location is not a LeRobot dataset (no meta/info.json) — \
-             only LeRobot v2/v3 datasets can be opened.",
-            "该位置不是 LeRobot 数据集（缺少 meta/info.json）— \
-             只能打开 LeRobot v2/v3 数据集。",
+            "This location is not a LeRobot dataset (no meta/info.json), and it holds no \
+             supported data files either.\n\
+             Supported: LeRobot v2/v3 datasets, or files like .rrd, .mcap, images, meshes.",
+            "该位置不是 LeRobot 数据集（缺少 meta/info.json），也没有任何支持的数据文件。\n\
+             支持的内容：LeRobot v2/v3 数据集，或 .rrd、.mcap、图片、网格模型等文件。",
         )
         .to_owned();
         if !dir.subdirs.is_empty() {
@@ -1719,22 +1794,7 @@ async fn run_stream_files<S: DatasetStore>(
             {
                 return false;
             }
-            let extension = file
-                .rel_path
-                .rsplit('.')
-                .next()
-                .unwrap_or_default()
-                .to_lowercase();
-            // Text files (README.md etc.) are technically importable but never what the user
-            // came for. The parquet importer is not part of the browser build, so don't list
-            // files the click could never load there.
-            if matches!(extension.as_str(), "md" | "txt") {
-                return false;
-            }
-            if cfg!(target_arch = "wasm32") && extension == "parquet" {
-                return false;
-            }
-            re_importer::is_supported_file_extension(&extension)
+            is_supported_loose_file(file)
         })
         .collect();
 
@@ -1781,19 +1841,34 @@ async fn run_stream_files<S: DatasetStore>(
         ));
     }
 
+    stream_loose_files(store, files, dataset_url, tx, rrd_artifacts).await
+}
+
+/// Announce + stream a set of loose data files as individual click-to-load recordings.
+async fn stream_loose_files<S: DatasetStore>(
+    store: &S,
+    files: Vec<ListedFile>,
+    dataset_url: &str,
+    tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+) -> anyhow::Result<()> {
     // Falling back to loose-files mode must be loud: without this, opening a location that
     // merely *contains* importable files looks exactly like a successfully opened dataset,
-    // with no hint that it isn't one.
-    re_log::warn!(
-        "{}",
-        trf!(
-            "Not a LeRobot dataset (no meta/info.json) — showing the {} supported data file(s) \
-             found at this location instead. Click a file to load it.\nLocation: {dataset_url}",
-            "不是 LeRobot 数据集（缺少 meta/info.json）— 改为显示该位置下找到的 {} 个支持的数据文件。\
-             点击文件即可加载。\n位置：{dataset_url}",
-            files.len()
-        )
-    );
+    // with no hint that it isn't one. Except when the caller already expects loose files
+    // (a console "Visualize" link for an mcap registration): there this IS the intended
+    // path, and a "not a LeRobot dataset" warning would read as something having gone wrong.
+    if !store.loose_files_expected() {
+        re_log::warn!(
+            "{}",
+            trf!(
+                "Not a LeRobot dataset (no meta/info.json) — showing the {} supported data file(s) \
+                 found at this location instead. Click a file to load it.\nLocation: {dataset_url}",
+                "不是 LeRobot 数据集（缺少 meta/info.json）— 改为显示该位置下找到的 {} 个支持的数据文件。\
+                 点击文件即可加载。\n位置：{dataset_url}",
+                files.len()
+            )
+        );
+    }
 
     let indices: Vec<usize> = (0..files.len()).collect();
     let names: ahash::HashMap<usize, String> = files
@@ -1844,9 +1919,12 @@ async fn stream_items<S: DatasetStore>(
     let noun = remote.item_noun();
     let id_prefix = remote.recording_id_prefix();
 
-    // Episodes are small and stream in automatically; loose files can be gigabytes each
-    // (far beyond browser memory), so they only load when the user clicks them.
-    let auto_advance = !matches!(remote, RemoteDataset::Files { .. });
+    // Episodes are small and stream in automatically. Loose files can be gigabytes each,
+    // so they auto-advance only while the bytes loaded so far stay under a budget
+    // ([`LOOSE_FILES_AUTO_LOAD_BUDGET`]); beyond it they load on click only. User clicks
+    // are never budget-gated.
+    let mut loaded_bytes: u64 = 0;
+    let mut budget_announced = false;
 
     let total = indices.len();
     re_log::info!(
@@ -2067,14 +2145,49 @@ async fn stream_items<S: DatasetStore>(
             pending.insert(index);
         }
 
-        let has_loadable = {
+        // The next item that may load without user input: for episodes any non-parked
+        // pending one; for loose files additionally only while it fits the auto-load
+        // budget. `None` = idle until a user request lands.
+        let auto_candidate = {
             let parked = guard.state.parked.lock();
-            pending.iter().any(|index| !parked.contains(index))
+            match &remote {
+                RemoteDataset::Files { files } => {
+                    let candidate = pending
+                        .iter()
+                        .find(|&&index| {
+                            !parked.contains(&index)
+                                && files.get(index).is_some_and(|file| {
+                                    loaded_bytes.saturating_add(file.size)
+                                        <= LOOSE_FILES_AUTO_LOAD_BUDGET
+                                })
+                        })
+                        .copied();
+                    let any_loadable = pending.iter().any(|index| !parked.contains(index));
+                    if candidate.is_none() && any_loadable && !budget_announced {
+                        budget_announced = true;
+                        drop(parked);
+                        re_log::info!(
+                            "{}",
+                            trf!(
+                                "Auto-loading stopped at {} to keep memory in check — click the \
+                                 remaining files to load them.\nDataset: {dataset_url}",
+                                "为控制内存占用，自动加载在 {} 处停下 — 其余文件请点击加载。\n\
+                                 数据集：{dataset_url}",
+                                re_format::format_bytes(loaded_bytes as _)
+                            )
+                        );
+                    }
+                    candidate
+                }
+                _ => pending
+                    .iter()
+                    .find(|index| !parked.contains(index))
+                    .copied(),
+            }
         };
 
-        // Idle unless something can be loaded without user input (click-to-load mode never
-        // auto-loads, so it always idles here until a request lands).
-        if !(auto_advance && has_loadable) {
+        // Idle unless something can be loaded without user input.
+        if auto_candidate.is_none() {
             if !deferred.is_empty() {
                 // Start a retry round with everything that failed this round.
                 pending.extend(deferred.drain(..));
@@ -2130,18 +2243,12 @@ async fn stream_items<S: DatasetStore>(
                 continue;
             }
             Some(index) => index,
-            None if auto_advance => {
-                let parked = guard.state.parked.lock();
-                match pending
-                    .iter()
-                    .find(|index| !parked.contains(index))
-                    .copied()
-                {
-                    Some(index) => index,
-                    None => continue,
-                }
-            }
-            None => continue, // Nothing eligible right now; loop back to the idle wait.
+            // No explicit request: fall back to the auto-advance candidate (recomputed at
+            // the loop top, so a stale one after the idle wait just loops back around).
+            None => match auto_candidate.filter(|index| pending.contains(index)) {
+                Some(index) => index,
+                None => continue,
+            },
         };
         pending.remove(&next);
 
@@ -2185,7 +2292,12 @@ async fn stream_items<S: DatasetStore>(
         guard.state.pause.end_item_progress();
 
         match result {
-            Ok(true) => {}
+            Ok(true) => {
+                // Count every load (clicked or automatic) against the loose-files
+                // auto-advance budget: clicked files occupy memory all the same.
+                loaded_bytes =
+                    loaded_bytes.saturating_add(remote.item_total_bytes(next).unwrap_or(0));
+            }
             Ok(false) => return Ok(()), // Receiver hung up.
             Err(err) => {
                 if guard.state.pause.is_cancelled() {
@@ -3642,6 +3754,87 @@ mod fetch_range_tests {
             *store.requested.lock(),
             vec![0..CAP, CAP..2 * CAP, 2 * CAP..(2 * CAP + MIB)]
         );
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod loose_files_tests {
+    #![expect(clippy::unwrap_used)] // tests may panic
+
+    use super::*;
+
+    /// An object-store-style backend: only the one-level listing is available — any
+    /// recursive `list` call is a bug (that would be a bucket crawl).
+    struct DirStore {
+        files: Vec<(&'static str, u64)>,
+        subdirs: Vec<&'static str>,
+    }
+
+    impl DatasetStore for DirStore {
+        fn url(&self) -> String {
+            "tos://bucket/dir/".to_owned()
+        }
+
+        async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {
+            panic!("object-store directory opens must not crawl the bucket");
+        }
+
+        async fn list_dir(&self) -> anyhow::Result<Option<DirListing>> {
+            Ok(Some(DirListing {
+                files: self
+                    .files
+                    .iter()
+                    .map(|&(rel_path, size)| ListedFile {
+                        rel_path: rel_path.to_owned(),
+                        size,
+                        content_id: None,
+                    })
+                    .collect(),
+                subdirs: self.subdirs.iter().map(|&s| s.to_owned()).collect(),
+                truncated: false,
+            }))
+        }
+
+        async fn file_size(&self, _rel_path: &str) -> anyhow::Result<u64> {
+            unimplemented!("the test never fetches a file")
+        }
+
+        async fn get_range_once(
+            &self,
+            _rel_path: &str,
+            _range: Range<u64>,
+        ) -> anyhow::Result<Vec<u8>> {
+            unimplemented!("the test never fetches a file")
+        }
+    }
+
+    /// The receiver is dropped up front, which stops the stream right after the first
+    /// recording announcement and keeps the test finite: `Ok` means the location was
+    /// accepted and entered loose-files mode; a rejected location errors before any send.
+    async fn open_dir(store: &DirStore) -> anyhow::Result<()> {
+        let (tx, _) = re_log_channel::log_channel(LogSource::HttpStream { url: store.url() });
+        run_stream_files(store, &store.url(), &tx, None).await
+    }
+
+    #[tokio::test]
+    async fn a_directory_of_data_files_opens_in_loose_files_mode() {
+        let store = DirStore {
+            files: vec![("a.mcap", 10), ("b.rrd", 20), ("README.md", 1)],
+            subdirs: vec!["sub/"],
+        };
+        open_dir(&store).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_directory_without_supported_files_is_an_error() {
+        // The error text is bilingual; pin the language so the assertion is deterministic.
+        re_i18n::set_language(re_i18n::Language::English);
+        let store = DirStore {
+            files: vec![("README.md", 1)],
+            subdirs: vec!["sub/"],
+        };
+        let err = open_dir(&store).await.unwrap_err();
+        assert!(err.to_string().contains("no meta/info.json"));
     }
 }
 

@@ -342,6 +342,38 @@ pub trait UiExt {
         response
     }
 
+    /// A single-line secret input (API key, token, …) masked by default, with an eye button
+    /// to reveal the value — so a mistyped or mis-pasted secret can be checked at a glance.
+    ///
+    /// `revealed` holds the per-field show/hide state across frames (keep it next to the
+    /// edited string in your widget state). Returns the text edit's response.
+    fn password_edit(&mut self, text: &mut String, revealed: &mut bool) -> egui::Response {
+        let ui = self.ui_mut();
+        // A plain horizontal row (sizes its height to content) with [field ....][eye]. The
+        // field is sized to leave room for the eye so the row keeps the full-width look of
+        // the other credential inputs without the eye wrapping to a second line.
+        ui.horizontal(|ui| {
+            let row_height = ui.spacing().interact_size.y;
+            let eye_width = row_height + ui.spacing().item_spacing.x;
+            let field_width = (ui.available_width() - eye_width).max(48.0);
+            let response = ui.add_sized(
+                [field_width, row_height],
+                egui::TextEdit::singleline(text).password(!*revealed),
+            );
+
+            let (icon, hint) = if *revealed {
+                (&icons::VISIBLE, tr("Hide", "隐藏"))
+            } else {
+                (&icons::INVISIBLE, tr("Show", "显示"))
+            };
+            if ui.small_icon_button(icon, hint).clicked() {
+                *revealed = !*revealed;
+            }
+            response
+        })
+        .inner
+    }
+
     /// Create a separator similar to [`egui::Separator`] but with the full span behavior.
     ///
     /// The span is determined using [`crate::UiExt::full_span`]. Contrary to

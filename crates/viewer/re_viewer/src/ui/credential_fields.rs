@@ -15,6 +15,10 @@ pub struct CredentialFields {
     secret_key: String,
     session_token: String,
 
+    /// Per-field eye-toggle state: reveal the masked secret / session token.
+    reveal_secret_key: bool,
+    reveal_session_token: bool,
+
     /// Native only, long-term pairs only: persist to `~/.rerun/config.json` on save.
     /// STS credentials expire on their own schedule — remembering those would only
     /// store a pair that stops working, so the option is not offered.
@@ -85,6 +89,9 @@ impl CredentialFields {
 
         self.secret_key.clear();
         self.session_token.clear();
+        // Next time the dialog opens, start masked again.
+        self.reveal_secret_key = false;
+        self.reveal_session_token = false;
     }
 
     /// The input widgets. `id_salt` keeps the two dialogs' grids distinct;
@@ -134,18 +141,12 @@ impl CredentialFields {
                 ui.end_row();
 
                 ui.label("Secret key：");
-                egui::TextEdit::singleline(&mut self.secret_key)
-                    .password(true)
-                    .desired_width(f32::INFINITY)
-                    .show(ui);
+                ui.password_edit(&mut self.secret_key, &mut self.reveal_secret_key);
                 ui.end_row();
 
                 if self.use_sts {
                     ui.label("Session token：");
-                    egui::TextEdit::singleline(&mut self.session_token)
-                        .password(true)
-                        .desired_width(f32::INFINITY)
-                        .show(ui);
+                    ui.password_edit(&mut self.session_token, &mut self.reveal_session_token);
                     ui.end_row();
                 }
             });
