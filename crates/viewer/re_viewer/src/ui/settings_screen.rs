@@ -436,7 +436,12 @@ fn map_view_section_ui(ui: &mut Ui, mapbox_access_token: &mut String) {
             );
         });
 
-        ui.add(egui::TextEdit::singleline(mapbox_access_token).password(true));
+        // The reveal state has no home in the settings struct — park it in egui's per-widget
+        // temporary memory, keyed by this row's id.
+        let reveal_id = ui.id().with("mapbox_token_revealed");
+        let mut revealed = ui.data(|d| d.get_temp::<bool>(reveal_id).unwrap_or(false));
+        ui.password_edit(mapbox_access_token, &mut revealed);
+        ui.data_mut(|d| d.insert_temp(reveal_id, revealed));
     });
 }
 

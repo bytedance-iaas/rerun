@@ -111,6 +111,9 @@ pub struct OpenHfModal {
     use_custom_token: bool,
     token: String,
 
+    /// Eye-toggle state: reveal the masked token.
+    reveal_token: bool,
+
     /// Inverted so the derived `Default` (false) means "upload converted rrds" — on by default.
     artifact_upload_disabled: bool,
 
@@ -258,10 +261,7 @@ impl OpenHfModal {
                         .spacing([8.0, 6.0])
                         .show(ui, |ui| {
                             ui.label("Token：");
-                            egui::TextEdit::singleline(&mut self.token)
-                                .password(true)
-                                .desired_width(f32::INFINITY)
-                                .show(ui);
+                            ui.password_edit(&mut self.token, &mut self.reveal_token);
                             ui.end_row();
                         });
                 }

@@ -25,6 +25,10 @@ pub struct TosDatasetSource {
 struct TosStore {
     client: TosClient,
     location: TosLocation,
+
+    /// Console-signed opens come from a "Visualize" link whose registration already knows
+    /// the dataset's format — a non-LeRobot layout (mcap files) is expected, not a surprise.
+    console_signed: bool,
 }
 
 impl DatasetStore for TosStore {
@@ -106,6 +110,10 @@ impl DatasetStore for TosStore {
         let key = format!("{}{rel_path}", self.location.prefix);
         self.client.get_object_once(&key, Some(range)).await
     }
+
+    fn loose_files_expected(&self) -> bool {
+        self.console_signed
+    }
 }
 
 /// Open a `LeRobot` dataset (or a single data file) in TOS as a streaming log source.
@@ -121,6 +129,7 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
     // console-signed dataset also remembers its registration, for share links.
     let region = access.region();
     let curator_dataset_id = access.curator_dataset_id().map(ToOwned::to_owned);
+    let console_signed = curator_dataset_id.is_some();
     let remember = |url: &str| {
         crate::lerobot_remote::remember_dataset_region(url, &region);
         if let Some(dataset_id) = &curator_dataset_id {
@@ -136,7 +145,11 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
         let url = format!("{location}{file_name}");
         remember(&url);
         return crate::lerobot_remote::stream_remote_file(
-            TosStore { client, location },
+            TosStore {
+                client,
+                location,
+                console_signed,
+            },
             file_name,
             url,
             rrd_artifacts,
@@ -145,7 +158,11 @@ pub fn stream_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
 
     remember(&location.to_string());
     crate::lerobot_remote::stream_lerobot_dataset(
-        TosStore { client, location },
+        TosStore {
+            client,
+            location,
+            console_signed,
+        },
         rrd_artifacts,
         crate::lerobot_remote::StreamMode::Viewer,
     )
@@ -161,7 +178,12 @@ pub fn convert_lerobot_dataset(source: TosDatasetSource) -> LogReceiver {
     } = source;
     let client = TosClient::new(access, location.bucket.clone());
     crate::lerobot_remote::stream_lerobot_dataset(
-        TosStore { client, location },
+        TosStore {
+            client,
+            location,
+            // Conversion only handles LeRobot episodes; the flag is never consulted.
+            console_signed: false,
+        },
         rrd_artifacts,
         crate::lerobot_remote::StreamMode::ConvertOnly,
     )
