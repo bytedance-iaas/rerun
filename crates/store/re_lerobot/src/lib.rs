@@ -13,6 +13,7 @@
 pub mod common;
 pub mod datasetv2;
 pub mod datasetv3;
+pub mod lance;
 pub mod vfs;
 
 use std::fmt;
@@ -48,12 +49,14 @@ impl LeRobotDatasetVersion {
     }
 }
 
-/// Check whether the provided path contains a `LeRobot` dataset.
+/// Check whether the provided path contains a `LeRobot` dataset — classic (v1/v2/v3) or one of
+/// the Lance-format layouts ([`lance::find_lance_layout`]).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn is_lerobot_dataset(path: impl AsRef<Path>) -> bool {
     is_v1_lerobot_dataset(path.as_ref())
         || is_v2_lerobot_dataset(path.as_ref())
         || is_v3_lerobot_dataset(path.as_ref())
+        || lance::find_lance_layout(path.as_ref()).is_some()
 }
 
 /// Check whether the provided path contains a v3 `LeRobot` dataset.

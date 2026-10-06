@@ -29,6 +29,10 @@ impl Importer for LeRobotDatasetImporter {
         filepath: std::path::PathBuf,
         tx: Sender<ImportedData>,
     ) -> Result<(), ImporterError> {
+        if let Some(layout) = re_lerobot::lance::find_lance_layout(&filepath) {
+            return Self::load_lance_dataset(settings, layout, &filepath, tx);
+        }
+
         if !is_lerobot_dataset(&filepath) {
             return Err(ImporterError::Incompatible(filepath));
         }
@@ -68,6 +72,78 @@ impl Importer for LeRobotDatasetImporter {
 }
 
 impl LeRobotDatasetImporter {
+    /// Load a Lance-format dataset by presenting it as a virtual v2/v3 `LeRobot` file system
+    /// and running the regular conversion on top.
+    fn load_lance_dataset(
+        settings: &crate::ImporterSettings,
+        layout: re_lerobot::lance::LanceDatasetLayout,
+        filepath: &std::path::Path,
+        tx: Sender<ImportedData>,
+    ) -> Result<(), ImporterError> {
+        use re_lerobot::lance::LanceDatasetLayout;
+
+        let application_id = settings
+            .application_id
+            .clone()
+            .unwrap_or_else(|| ApplicationId::new_or_unknown(filepath.display().to_string()));
+        let loader_name = Self.name();
+        let filepath_for_log = filepath.to_path_buf();
+
+        // See the NOTEs in `load_v2_dataset` for why this must be a dedicated thread. Opening the
+        // Lance tables happens on the thread too: it reads actual table data, which can take a
+        // moment for remote-mounted paths.
+        thread::Builder::new()
+            .name(format!("load_and_stream_lance({filepath:?})"))
+            .spawn(move || {
+                re_log::info!("Loading Lance LeRobot dataset from {filepath_for_log:?} ({layout})",);
+
+                let result = match layout {
+                    LanceDatasetLayout::LeRobotMetaDir => {
+                        re_lance::meta_dir::LanceMetaDirFs::open_local(&filepath_for_log).and_then(
+                            |fs| {
+                                let dataset = datasetv3::LeRobotDatasetV3::load_from_fs_eager(fs)?;
+                                load_and_stream_versioned(
+                                    &dataset,
+                                    &application_id,
+                                    &tx,
+                                    &loader_name,
+                                );
+                                Ok(())
+                            },
+                        )
+                    }
+                    LanceDatasetLayout::EpisodeTables => {
+                        re_lance::episode_tables::LanceEpisodeTablesFs::open_local(
+                            &filepath_for_log,
+                        )
+                        .and_then(|fs| {
+                            let dataset = datasetv2::LeRobotDatasetV2::from_fs(fs)?;
+                            load_and_stream_versioned(&dataset, &application_id, &tx, &loader_name);
+                            Ok(())
+                        })
+                    }
+                };
+
+                if let Err(err) = result {
+                    re_log::error!(
+                        "{}",
+                        trf!(
+                            "Loading Lance LeRobot dataset failed: {err}\nPath: {filepath_for_log:?}",
+                            "加载 Lance 格式 LeRobot 数据集失败：{err}\n路径：{filepath_for_log:?}"
+                        )
+                    );
+                }
+            })
+            .with_context(|| {
+                trf!(
+                    "Failed to spawn IO thread to load Lance LeRobot dataset {filepath:?}",
+                    "启动 IO 线程加载 Lance 格式 LeRobot 数据集失败：{filepath:?}"
+                )
+            })?;
+
+        Ok(())
+    }
+
     fn load_v2_dataset(
         settings: &crate::ImporterSettings,
         filepath: impl AsRef<std::path::Path>,

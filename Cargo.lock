@@ -8992,20 +8992,27 @@ version = "0.36.0"
 dependencies = [
  "ahash",
  "anyhow",
+ "arrow",
+ "async-trait",
  "base64 0.23.0",
  "bytes",
+ "chrono",
  "ehttp",
  "futures-util",
  "hmac",
  "itertools 0.15.0",
+ "lance",
  "md-5 0.10.6",
+ "object_store",
  "parking_lot",
+ "parquet",
  "rayon",
  "re_async",
  "re_format",
  "re_grpc_client",
  "re_i18n",
  "re_importer",
+ "re_lance",
  "re_lerobot",
  "re_log",
  "re_log_channel",
@@ -9019,6 +9026,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "ureq",
  "url",
@@ -9399,6 +9407,7 @@ dependencies = [
  "re_error",
  "re_format",
  "re_i18n",
+ "re_lance",
  "re_lenses",
  "re_lerobot",
  "re_log",
@@ -9464,6 +9473,27 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "re_lance"
+version = "0.36.0"
+dependencies = [
+ "anyhow",
+ "arrow",
+ "bytes",
+ "futures",
+ "lance",
+ "lance-table",
+ "object_store",
+ "parking_lot",
+ "parquet",
+ "re_lerobot",
+ "re_log",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "url",
 ]
 
 [[package]]

@@ -496,9 +496,26 @@ fn load_episode_video(
             let frame_timestamps_nanos: arrow::buffer::ScalarBuffer<i64> =
                 frame_timestamps_nanos.into();
 
+            // The video may hold fewer frames than the episode has data rows (seen with
+            // converter off-by-ones); reference only the frames that exist, and trim the time
+            // column to match.
+            let num_frames = frame_timestamps_nanos.len().min(time_column.num_rows());
+            let time_column = if num_frames < time_column.num_rows() {
+                TimeColumn::new(
+                    None,
+                    *timeline,
+                    time_column.times_raw()[..num_frames]
+                        .iter()
+                        .copied()
+                        .collect(),
+                )
+            } else {
+                time_column
+            };
+
             let video_timestamps = frame_timestamps_nanos
                 .iter()
-                .take(time_column.num_rows())
+                .take(num_frames)
                 .copied()
                 .map(VideoTimestamp::from_nanos)
                 .collect::<Vec<_>>();

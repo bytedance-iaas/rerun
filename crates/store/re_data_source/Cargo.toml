@@ -57,6 +57,11 @@ web-time.workspace = true
 
 # native dependencies:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Lance-format LeRobot datasets (the `lance` crate does not compile to wasm).
+async-trait.workspace = true
+chrono.workspace = true
+object_store.workspace = true
+re_lance.workspace = true
 tokio.workspace = true
 # HTTP client that validates against the OS trust store (via the platform verifier), so requests
 # work behind a corporate TLS-intercepting proxy where the bundled webpki roots would reject them.
@@ -71,3 +76,9 @@ web-sys = { workspace = true, features = ["File"] }
 [dev-dependencies]
 re_log = { workspace = true, features = ["setup"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+arrow.workspace = true
+lance.workspace = true
+parquet = { workspace = true, features = ["arrow", "snap"] }
+tempfile.workspace = true

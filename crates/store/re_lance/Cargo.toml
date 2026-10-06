@@ -1,0 +1,42 @@
+[package]
+name = "re_lance"
+authors.workspace = true
+description = "Reading Lance-format LeRobot datasets by presenting them as a virtual LeRobot file system"
+edition.workspace = true
+homepage.workspace = true
+include.workspace = true
+license.workspace = true
+publish = true
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+# Native-only: the `lance` crate does not compile to wasm (tokio runtime features, `zstd-sys`,
+# datafusion). Consumers must gate their dependency on this crate accordingly.
+
+[dependencies]
+re_lerobot.workspace = true
+re_log.workspace = true
+
+anyhow.workspace = true
+arrow.workspace = true
+bytes.workspace = true
+futures.workspace = true
+lance.workspace = true
+lance-table.workspace = true
+object_store.workspace = true
+parking_lot.workspace = true
+parquet = { workspace = true, features = ["arrow", "snap", "zstd"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
