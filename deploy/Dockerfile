@@ -150,6 +150,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nasm \
     libudev-dev \
     protobuf-compiler \
+    libprotobuf-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ARG RUSTUP_DIST_SERVER="https://static.rust-lang.org"
@@ -179,7 +180,8 @@ COPY --from=build-gate /rerun/crates/viewer/re_web_viewer_server/web_viewer/inde
 # Release build:
 # - oss_server = the catalog server (MODE=server), with our tos:// + persistence patches;
 # - no perf_telemetry; lance comes in via the Lance-dataset support (re_importer -> re_lance),
-#   whose build needs the system protoc installed above;
+#   whose build needs the system protoc + well-known-type protos installed above
+#   (protobuf-compiler ships only the compiler; google/protobuf/*.proto live in libprotobuf-dev);
 # - LTO off + multiple codegen units + capped parallelism, because the workspace's
 #   size-optimized release profile (thin LTO, codegen-units=1) OOMs an 8 GB docker VM.
 #   Slightly larger binary, dramatically cheaper build; rendering speed is unaffected.
