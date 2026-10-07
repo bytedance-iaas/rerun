@@ -137,6 +137,19 @@ impl LeRobotDatasetV3 {
         Ok(dataset)
     }
 
+    /// Like [`Self::load_from_directory`], but over an arbitrary [`LeRobotFs`]: eagerly caches
+    /// all episode data and initializes the video reference counts.
+    ///
+    /// For file systems where every read is readily available — local directories, or the
+    /// virtual file systems over local Lance datasets.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_from_fs_eager(fs: Arc<dyn LeRobotFs>) -> Result<Self, LeRobotError> {
+        let dataset = Self::from_fs(fs)?;
+        dataset.load_all_episode_data_files()?;
+        dataset.init_video_ref_counts();
+        Ok(dataset)
+    }
+
     /// Initializes a dataset from a [`LeRobotFs`], reading only the metadata files.
     ///
     /// Unlike [`Self::load_from_directory`], neither episode data nor video reference counts are

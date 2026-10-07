@@ -153,6 +153,22 @@ pub trait DatasetStore: Send + Sync {
     fn loose_files_expected(&self) -> bool {
         false
     }
+
+    /// A version identifier of the whole dataset's contents, when the backend knows one that
+    /// changes on every dataset modification (e.g. the Lance manifest versions).
+    ///
+    /// When present, per-episode artifact fingerprints are computed from the source paths plus
+    /// this version alone — reproducible by clients that cannot read per-file listing metadata
+    /// (the wasm artifacts fallback).
+    fn dataset_version(&self) -> Option<String> {
+        None
+    }
+
+    /// What the browser needs to ask the catalog server for a Lance dataset-index rebuild;
+    /// `None` for backends without that self-service path.
+    fn server_index_params(&self) -> Option<crate::lance_index::ServerIndexParams> {
+        None
+    }
 }
 
 /// Read access to the files of one remote `LeRobot` dataset (see the native declaration above).
@@ -193,6 +209,81 @@ pub trait DatasetStore {
     fn loose_files_expected(&self) -> bool {
         false
     }
+
+    /// A dataset-contents version identifier (see the native declaration above).
+    fn dataset_version(&self) -> Option<String> {
+        None
+    }
+
+    /// Server-side index rebuild parameters (see the native declaration above).
+    fn server_index_params(&self) -> Option<crate::lance_index::ServerIndexParams> {
+        None
+    }
+}
+
+/// What a Lance probe of a remote location found.
+#[derive(Debug, PartialEq, Eq)]
+pub enum LanceProbe {
+    /// A recognized Lance-format `LeRobot` dataset.
+    Layout(re_lerobot::lance::LanceDatasetLayout),
+
+    /// Lance tables are present, but they are not one of the recognized `LeRobot` layouts —
+    /// Lance schemas vary per producer, and this one cannot be parsed. Callers should say so
+    /// clearly instead of falling back to confusing stray-file handling.
+    UnrecognizedTables,
+
+    /// No Lance tables at all.
+    NotLance,
+}
+
+/// Probe whether the remote root holds a Lance-format `LeRobot` dataset, and if so which layout.
+///
+/// Prefers a one-level root listing (one bounded request); when the root alone is not conclusive
+/// (tables may sit under `data/`, or the listing was truncated) it falls back to a full listing —
+/// Lance datasets have few files, so this stays cheap for actual datasets.
+///
+/// This only detects; routing the stream through a Lance reader is a separate step.
+pub async fn detect_lance_layout<S: DatasetStore>(store: &S) -> anyhow::Result<LanceProbe> {
+    if let Some(listing) = store.list_dir().await? {
+        if let Some(layout) =
+            re_lerobot::lance::layout_from_root_entries(listing.subdirs.iter().map(|s| s.as_str()))
+        {
+            return Ok(LanceProbe::Layout(layout));
+        }
+
+        let root_has_lance_tables = listing
+            .subdirs
+            .iter()
+            .any(|s| s.trim_end_matches('/').ends_with(".lance"));
+        let has_data_subdir = listing
+            .subdirs
+            .iter()
+            .any(|s| s.trim_end_matches('/') == "data");
+        if !has_data_subdir && !listing.truncated {
+            return Ok(if root_has_lance_tables {
+                LanceProbe::UnrecognizedTables
+            } else {
+                LanceProbe::NotLance
+            });
+        }
+        // The tables may be hidden under `data/` (or behind the truncation) — fall through.
+    }
+
+    let files = store.list().await?;
+    if let Some(layout) =
+        re_lerobot::lance::layout_from_file_paths(files.iter().map(|f| f.rel_path.as_str()))
+    {
+        return Ok(LanceProbe::Layout(layout));
+    }
+    Ok(
+        if re_lerobot::lance::file_paths_have_lance_tables(
+            files.iter().map(|f| f.rel_path.as_str()),
+        ) {
+            LanceProbe::UnrecognizedTables
+        } else {
+            LanceProbe::NotLance
+        },
+    )
 }
 
 /// GET `[range.start, range.end)` of a file, resuming until complete.
@@ -224,7 +315,7 @@ pub fn http_status_of(err: &anyhow::Error) -> Option<u16> {
         .map(|status| status.0)
 }
 
-async fn fetch_range<S: DatasetStore>(
+pub(crate) async fn fetch_range<S: DatasetStore>(
     store: &S,
     pause: &PauseState,
     rel_path: &str,
@@ -339,7 +430,7 @@ fn check_browser_file_size(size: u64, what: &str) -> anyhow::Result<()> {
 }
 
 /// Fetch a whole file (size looked up first so truncated responses resume).
-async fn fetch_full<S: DatasetStore>(
+pub(crate) async fn fetch_full<S: DatasetStore>(
     store: &S,
     pause: &PauseState,
     rel_path: &str,
@@ -431,7 +522,7 @@ struct ItemProgress {
 /// the dataset), and aborting the item currently being fetched (per-episode pause/close).
 /// Parking is waker-based so it works on wasm too.
 #[derive(Default)]
-struct PauseState {
+pub(crate) struct PauseState {
     paused: AtomicBool,
 
     /// The whole stream is cancelled — abort everything and exit.
@@ -1360,7 +1451,7 @@ pub fn stream_lerobot_dataset<S: DatasetStore + 'static>(
     let (tx, rx) = re_log_channel::log_channel(LogSource::HttpStream { url: url.clone() });
 
     crate::data_source::spawn_future(async move {
-        if let Err(err) = run_stream(&store, &tx, rrd_artifacts, mode).await {
+        if let Err(err) = run_stream(Arc::new(store), &tx, rrd_artifacts, mode).await {
             re_log::error!(
                 ?url,
                 "{}",
@@ -1382,10 +1473,14 @@ pub fn stream_lerobot_dataset<S: DatasetStore + 'static>(
 #[derive(serde::Deserialize)]
 struct MinimalInfo {
     codebase_version: String,
+
+    /// `"lance"` for `lerobot-lancedb` conversions; absent on classic datasets.
+    #[serde(default)]
+    storage_format: Option<String>,
 }
 
-async fn run_stream<S: DatasetStore>(
-    store: &S,
+async fn run_stream<S: DatasetStore + 'static>(
+    store: Arc<S>,
     tx: &LogSender,
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
     mode: StreamMode,
@@ -1397,7 +1492,7 @@ async fn run_stream<S: DatasetStore>(
     // minutes for large v2 datasets with one file per episode per camera). Locations without
     // it fall back to "repo of data files" mode.
     let pause = PauseState::default();
-    let info_bytes = match fetch_full(store, &pause, "meta/info.json").await {
+    let info_bytes = match fetch_full(store.as_ref(), &pause, "meta/info.json").await {
         Ok(bytes) => bytes,
         Err(err) => {
             // Only a definitive 404 means "this repo is not a LeRobot dataset". Anything
@@ -1411,6 +1506,32 @@ async fn run_stream<S: DatasetStore>(
                     "无法获取数据集的 meta/info.json：{err:#}\n数据集：{dataset_url}"
                 ));
             }
+
+            // A Lance episode-tables dataset has no meta/info.json at all — probe for its
+            // tables before concluding "loose files".
+            match detect_lance_layout(store.as_ref())
+                .await
+                .unwrap_or(LanceProbe::NotLance)
+            {
+                LanceProbe::Layout(layout) => {
+                    return run_stream_lance(store, layout, &dataset_url, tx, rrd_artifacts, mode)
+                        .await;
+                }
+                LanceProbe::UnrecognizedTables => {
+                    anyhow::bail!(trf!(
+                        "This looks like a Lance dataset, but not one of the supported layouts. \
+                         Lance schemas vary per producer; supported today: lerobot-lancedb \
+                         (frames/videos tables + a LeRobot meta/ directory) and lance-format \
+                         episode tables (frames/episodes/videos).\nDataset: {dataset_url}",
+                        "检测到 Lance 数据表，但不属于已支持的布局。Lance 数据集没有统一的 \
+                         schema 标准；当前支持两种：lerobot-lancedb（frames/videos 表 + LeRobot \
+                         meta/ 目录）和 lance-format 三表布局（frames/episodes/videos）。\
+                         \n数据集：{dataset_url}"
+                    ));
+                }
+                LanceProbe::NotLance => {}
+            }
+
             if mode == StreamMode::ConvertOnly {
                 anyhow::bail!(trf!(
                     "Not a LeRobot dataset (no meta/info.json) — \
@@ -1422,7 +1543,7 @@ async fn run_stream<S: DatasetStore>(
             re_log::debug!(
                 "No meta/info.json (HTTP 404); checking for loose data files…\nDataset: {dataset_url}"
             );
-            return run_stream_files(store, &dataset_url, tx, rrd_artifacts).await;
+            return run_stream_files(store.as_ref(), &dataset_url, tx, rrd_artifacts).await;
         }
     };
 
@@ -1433,6 +1554,18 @@ async fn run_stream<S: DatasetStore>(
         ))
     })?;
 
+    if info.storage_format.as_deref() == Some("lance") {
+        return run_stream_lance(
+            store,
+            re_lerobot::lance::LanceDatasetLayout::LeRobotMetaDir,
+            &dataset_url,
+            tx,
+            rrd_artifacts,
+            mode,
+        )
+        .await;
+    }
+
     let version = info.codebase_version.trim_start_matches('v');
     let major = version.split('.').next().unwrap_or_default();
 
@@ -1440,8 +1573,28 @@ async fn run_stream<S: DatasetStore>(
     memfs.insert("meta/info.json", Blob::Full(Bytes::from(info_bytes)));
 
     match major {
-        "2" => run_stream_v2(store, &memfs, &dataset_url, tx, rrd_artifacts, mode).await,
-        "3" => run_stream_v3(store, &memfs, &dataset_url, tx, rrd_artifacts, mode).await,
+        "2" => {
+            run_stream_v2(
+                store.as_ref(),
+                &memfs,
+                &dataset_url,
+                tx,
+                rrd_artifacts,
+                mode,
+            )
+            .await
+        }
+        "3" => {
+            run_stream_v3(
+                store.as_ref(),
+                &memfs,
+                &dataset_url,
+                tx,
+                rrd_artifacts,
+                mode,
+            )
+            .await
+        }
         "1" => anyhow::bail!(trf!(
             "This is a LeRobot v1 dataset ({}), which is not supported. \
              Supported versions: v2 and v3.",
@@ -1456,13 +1609,239 @@ async fn run_stream<S: DatasetStore>(
     }
 }
 
+/// Stream a Lance-format `LeRobot` dataset by wrapping the store in the
+/// [`crate::lance_remote::LanceVirtualStore`] decorator (which presents it as a classic v2/v3
+/// dataset) and running the regular v2/v3 flow on top.
+///
+/// The browser cannot decode Lance (the `lance` crate is native-only) — wasm gets a clear error.
+#[cfg(target_arch = "wasm32")]
+async fn run_stream_lance<S: DatasetStore + 'static>(
+    store: Arc<S>,
+    layout: re_lerobot::lance::LanceDatasetLayout,
+    dataset_url: &str,
+    tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
+) -> anyhow::Result<()> {
+    if let Some(artifacts) = &rrd_artifacts {
+        // 1) Full direct reading via the dataset index (manifest + curve exports + ranged
+        //    video reads) — asks the server to build a missing index. No conversion needed.
+        match crate::lance_wasm::LanceManifestStore::open(Arc::clone(&store), layout, artifacts)
+            .await
+        {
+            Ok(Some(manifest_store)) => {
+                let pause = PauseState::default();
+                let info_bytes = fetch_full(&manifest_store, &pause, "meta/info.json").await?;
+                let info: MinimalInfo = serde_json::from_slice(&info_bytes).map_err(|err| {
+                    anyhow::anyhow!("Failed to parse the indexed meta/info.json: {err}")
+                })?;
+                let major = info
+                    .codebase_version
+                    .trim_start_matches('v')
+                    .split('.')
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned();
+
+                let memfs = Arc::new(MemFs::default());
+                memfs.insert("meta/info.json", Blob::Full(Bytes::from(info_bytes)));
+
+                return match major.as_str() {
+                    "2" => {
+                        run_stream_v2(
+                            &manifest_store,
+                            &memfs,
+                            dataset_url,
+                            tx,
+                            rrd_artifacts,
+                            mode,
+                        )
+                        .await
+                    }
+                    "3" => {
+                        run_stream_v3(
+                            &manifest_store,
+                            &memfs,
+                            dataset_url,
+                            tx,
+                            rrd_artifacts,
+                            mode,
+                        )
+                        .await
+                    }
+                    _ => anyhow::bail!(
+                        "Unexpected virtual dataset version {:?} in the dataset index",
+                        info.codebase_version
+                    ),
+                };
+            }
+            Ok(None) => {
+                re_log::info!(
+                    "No dataset index available — falling back to converted artifacts\nDataset: {dataset_url}"
+                );
+            }
+            Err(err) => {
+                re_log::warn!("Could not use the dataset index: {err:#}\nDataset: {dataset_url}");
+            }
+        }
+
+        // 2) The `meta/` directory of the `LeRobotMetaDir` layout is readable without Lance,
+        //    and the artifact fingerprints only need it plus the Lance manifest versions
+        //    (from file names) — episodes a desktop viewer has converted play here.
+        if layout == re_lerobot::lance::LanceDatasetLayout::LeRobotMetaDir {
+            match crate::lance_wasm::LanceLiteStore::open(store).await {
+                Ok(lite) => {
+                    let pause = PauseState::default();
+                    let info_bytes = fetch_full(&lite, &pause, "meta/info.json").await?;
+                    let memfs = Arc::new(MemFs::default());
+                    memfs.insert("meta/info.json", Blob::Full(Bytes::from(info_bytes)));
+                    return run_stream_v3(&lite, &memfs, dataset_url, tx, rrd_artifacts, mode)
+                        .await;
+                }
+                Err(err) => {
+                    re_log::warn!(
+                        "Could not set up the artifacts-only view of the Lance dataset: {err:#}\nDataset: {dataset_url}"
+                    );
+                }
+            }
+        }
+    }
+
+    anyhow::bail!(trf!(
+        "This is a Lance-format LeRobot dataset, which the web viewer cannot read directly. \
+         Open it once in the desktop viewer (or run `rerun rrd-convert`) to convert it, \
+         then its episodes load here from the converted artifacts.\nDataset: {dataset_url}",
+        "这是 Lance 格式的 LeRobot 数据集，web viewer 无法直接读取。\
+         请先用桌面版 viewer 打开一次（或运行 `rerun rrd-convert`）完成转换，\
+         之后这里就能从转换产物中加载。\n数据集：{dataset_url}"
+    ))
+}
+
+/// See the wasm declaration above.
+#[cfg(not(target_arch = "wasm32"))]
+async fn run_stream_lance<S: DatasetStore + 'static>(
+    store: Arc<S>,
+    layout: re_lerobot::lance::LanceDatasetLayout,
+    dataset_url: &str,
+    tx: &LogSender,
+    rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
+    mode: StreamMode,
+) -> anyhow::Result<()> {
+    re_log::info!(
+        "{}",
+        trf!(
+            "Lance-format LeRobot dataset ({layout}); reading through the Lance tables\nDataset: {dataset_url}",
+            "Lance 格式 LeRobot 数据集（{layout}）；经由 Lance 表读取\n数据集：{dataset_url}"
+        )
+    );
+
+    let virtual_store = Arc::new(
+        crate::lance_remote::LanceVirtualStore::open(store, layout)
+            .await
+            .map_err(|err| {
+                anyhow::anyhow!(trf!(
+                    "Failed to open the Lance dataset — Lance schemas vary per producer and \
+                     this one may be an unsupported variant: {err:#}\nDataset: {dataset_url}",
+                    "打开 Lance 数据集失败 — Lance 数据集没有统一的 schema 标准，可能是\
+                     暂不支持的变体：{err:#}\n数据集：{dataset_url}"
+                ))
+            })?,
+    );
+
+    // Keep the browser-readable dataset index fresh (manifest + curve exports — no video
+    // bytes): with it, the web viewer reads this dataset directly, no conversion needed.
+    if let Some(artifacts) = rrd_artifacts
+        .clone()
+        .filter(|artifacts| artifacts.write_back)
+    {
+        let index_store = Arc::clone(&virtual_store);
+        let index_url = dataset_url.to_owned();
+        let publish_index = async move {
+            match crate::lance_remote::ensure_index_uploaded(&index_store, &artifacts).await {
+                Ok(true) => re_log::info!(
+                    "{}",
+                    trf!(
+                        "Dataset index for direct web reading uploaded\nDataset: {index_url}",
+                        "已上传供 web 直读的数据集索引\n数据集：{index_url}"
+                    )
+                ),
+                Ok(false) => {
+                    re_log::debug!("Dataset index already fresh\nDataset: {index_url}");
+                }
+                Err(err) => re_log::warn!(
+                    "Failed to publish the dataset index (the web viewer then needs converted \
+                     episodes): {err:#}\nDataset: {index_url}"
+                ),
+            }
+        };
+        if mode == StreamMode::ConvertOnly {
+            // rrd-convert exits when done — the upload must not be left behind on a task.
+            publish_index.await;
+        } else {
+            crate::data_source::spawn_future(publish_index);
+        }
+    }
+
+    // The decorator serves meta/info.json without `storage_format` (it presents a classic
+    // dataset), so route by its codebase version like any other remote dataset.
+    let pause = PauseState::default();
+    let info_bytes = fetch_full(&*virtual_store, &pause, "meta/info.json").await?;
+    let info: MinimalInfo = serde_json::from_slice(&info_bytes)
+        .map_err(|err| anyhow::anyhow!("Failed to parse the virtual meta/info.json: {err}"))?;
+    let major = info
+        .codebase_version
+        .trim_start_matches('v')
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+
+    let memfs = Arc::new(MemFs::default());
+    memfs.insert("meta/info.json", Blob::Full(Bytes::from(info_bytes)));
+
+    match major.as_str() {
+        "2" => {
+            run_stream_v2(
+                &*virtual_store,
+                &memfs,
+                dataset_url,
+                tx,
+                rrd_artifacts,
+                mode,
+            )
+            .await
+        }
+        "3" => {
+            run_stream_v3(
+                &*virtual_store,
+                &memfs,
+                dataset_url,
+                tx,
+                rrd_artifacts,
+                mode,
+            )
+            .await
+        }
+        _ => anyhow::bail!(
+            "Unexpected virtual dataset version {:?} for a Lance dataset",
+            info.codebase_version
+        ),
+    }
+}
+
 /// The per-flavor state the item loop needs.
 enum RemoteDataset {
     V2 {
         dataset: Box<LeRobotDatasetV2>,
+
+        /// [`DatasetStore::dataset_version`] — when set, it IS the fingerprint input.
+        dataset_version: Option<String>,
     },
     V3 {
         dataset: Box<LeRobotDatasetV3>,
+
+        /// [`DatasetStore::dataset_version`] — when set, it IS the fingerprint input.
+        dataset_version: Option<String>,
 
         /// File sizes by dataset-relative path (from the listing; needed for video range math).
         sizes: ahash::HashMap<String, u64>,
@@ -1474,9 +1853,7 @@ enum RemoteDataset {
     },
 
     /// A repo of loose data files (`.mcap`, `.rrd`, images, …), one recording per file.
-    Files {
-        files: Vec<ListedFile>,
-    },
+    Files { files: Vec<ListedFile> },
 }
 
 impl RemoteDataset {
@@ -1557,6 +1934,7 @@ async fn run_stream_v2<S: DatasetStore>(
         store,
         RemoteDataset::V2 {
             dataset: Box::new(dataset),
+            dataset_version: store.dataset_version(),
         },
         memfs,
         indices,
@@ -1631,6 +2009,7 @@ async fn run_stream_v3<S: DatasetStore>(
         store,
         RemoteDataset::V3 {
             dataset: Box::new(dataset),
+            dataset_version: store.dataset_version(),
             sizes,
             content_ids,
             video_indexes: Default::default(),
@@ -2602,7 +2981,7 @@ async fn load_one_item<S: DatasetStore>(
     let mut evict = Vec::new();
 
     let msgs = match remote {
-        RemoteDataset::V2 { dataset } => {
+        RemoteDataset::V2 { dataset, .. } => {
             // v2 stores one parquet + one mp4 per camera per episode: fetch them whole.
             let mut rels = vec![dataset.metadata.info.episode_data_path(episode)?];
             for (feature_key, feature) in &dataset.metadata.info.features {
@@ -2892,14 +3271,37 @@ fn episode_artifact_fingerprint(remote: &RemoteDataset, episode: EpisodeIndex) -
         crate::rrd_artifacts::fingerprint(&mut parts)
     };
 
+    // With a dataset-level version (Lance manifest versions), the fingerprint is the source
+    // paths plus that version, nothing else: every dataset modification bumps the version, and
+    // a client that cannot read the per-file listing metadata (the wasm artifacts fallback)
+    // reproduces the exact same fingerprint.
+    let salted = |rels: &[String], dataset_version: &Option<String>| {
+        let salt = dataset_version.as_ref()?;
+        let mut parts: Vec<FingerprintPart<'_>> = rels
+            .iter()
+            .map(|rel| FingerprintPart {
+                rel_path: rel,
+                size: 0,
+                content_id: Some(salt),
+            })
+            .collect();
+        Some(crate::rrd_artifacts::fingerprint(&mut parts))
+    };
+
     match remote {
-        RemoteDataset::V2 { dataset } => {
+        RemoteDataset::V2 {
+            dataset,
+            dataset_version,
+        } => {
             let info = &dataset.metadata.info;
             rels.push(info.episode_data_path(episode).ok()?);
             for (feature_key, feature) in &info.features {
                 if feature.dtype == DType::Video {
                     rels.push(info.video_path(feature_key, episode).ok()?);
                 }
+            }
+            if let Some(fingerprint) = salted(&rels, dataset_version) {
+                return Some(fingerprint);
             }
             let length = dataset
                 .metadata
@@ -2911,6 +3313,7 @@ fn episode_artifact_fingerprint(remote: &RemoteDataset, episode: EpisodeIndex) -
 
         RemoteDataset::V3 {
             dataset,
+            dataset_version,
             sizes,
             content_ids,
             ..
@@ -2922,6 +3325,9 @@ fn episode_artifact_fingerprint(remote: &RemoteDataset, episode: EpisodeIndex) -
                 if feature.dtype == DType::Video {
                     rels.push(info.video_path(feature_key, &episode_data).ok()?);
                 }
+            }
+            if let Some(fingerprint) = salted(&rels, dataset_version) {
+                return Some(fingerprint);
             }
             Some(parts_for(
                 &rels,
@@ -3835,6 +4241,191 @@ mod loose_files_tests {
         };
         let err = open_dir(&store).await.unwrap_err();
         assert!(err.to_string().contains("no meta/info.json"));
+    }
+}
+
+#[cfg(test)]
+mod lance_detect_tests {
+    use super::*;
+    use re_lerobot::lance::LanceDatasetLayout;
+
+    /// A `DatasetStore` serving a fixed listing; records whether the full listing was needed.
+    struct ListingStore {
+        subdirs: Option<Vec<&'static str>>,
+        truncated: bool,
+        files: Vec<&'static str>,
+        listed_all: AtomicBool,
+    }
+
+    impl ListingStore {
+        fn new(
+            subdirs: Option<Vec<&'static str>>,
+            truncated: bool,
+            files: Vec<&'static str>,
+        ) -> Self {
+            Self {
+                subdirs,
+                truncated,
+                files,
+                listed_all: AtomicBool::new(false),
+            }
+        }
+    }
+
+    impl DatasetStore for ListingStore {
+        fn url(&self) -> String {
+            "mock://dataset".to_owned()
+        }
+
+        async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {
+            self.listed_all.store(true, Ordering::Relaxed);
+            Ok(self
+                .files
+                .iter()
+                .map(|path| ListedFile {
+                    rel_path: (*path).to_owned(),
+                    size: 1,
+                    content_id: None,
+                })
+                .collect())
+        }
+
+        async fn list_dir(&self) -> anyhow::Result<Option<DirListing>> {
+            Ok(self.subdirs.as_ref().map(|subdirs| DirListing {
+                files: Vec::new(),
+                subdirs: subdirs.iter().map(|s| (*s).to_owned()).collect(),
+                truncated: self.truncated,
+            }))
+        }
+
+        async fn file_size(&self, _rel_path: &str) -> anyhow::Result<u64> {
+            Ok(1)
+        }
+
+        async fn get_range_once(
+            &self,
+            _rel_path: &str,
+            _range: Range<u64>,
+        ) -> anyhow::Result<Vec<u8>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn root_listing_detects_lerobot_meta_dir_layout() {
+        // so101-style: tables at the root, next to `meta/` — one root listing must suffice.
+        let store = ListingStore::new(
+            Some(vec![
+                "meta/",
+                "frames.lance/",
+                "videos.lance/",
+                "meta.lance/",
+            ]),
+            false,
+            vec![],
+        );
+        assert_eq!(
+            detect_lance_layout(&store).await.unwrap(),
+            LanceProbe::Layout(LanceDatasetLayout::LeRobotMetaDir)
+        );
+        assert!(!store.listed_all.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn data_subdir_falls_back_to_full_listing() {
+        // pusht-style: the root only shows `data/`, the tables are one level down.
+        let store = ListingStore::new(
+            Some(vec!["data/"]),
+            false,
+            vec![
+                "README.md",
+                "data/frames.lance/_versions/1.manifest",
+                "data/episodes.lance/data/abc.lance",
+                "data/videos.lance/data/abc.lance",
+            ],
+        );
+        assert_eq!(
+            detect_lance_layout(&store).await.unwrap(),
+            LanceProbe::Layout(LanceDatasetLayout::EpisodeTables)
+        );
+        assert!(store.listed_all.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn classic_v3_root_is_not_lance_and_needs_no_full_listing() {
+        let store = ListingStore::new(
+            Some(vec!["meta/", "data/", "videos/"]),
+            false,
+            vec![
+                "meta/info.json",
+                "data/chunk-000/file-000.parquet",
+                "videos/front/chunk-000/file-000.mp4",
+            ],
+        );
+        // `data/` is present, so the probe must look inside before concluding.
+        assert_eq!(
+            detect_lance_layout(&store).await.unwrap(),
+            LanceProbe::NotLance
+        );
+    }
+
+    #[tokio::test]
+    async fn backends_without_root_listing_use_the_full_listing() {
+        let store = ListingStore::new(
+            None,
+            false,
+            vec![
+                "meta/info.json",
+                "frames.lance/data/abc.lance",
+                "videos.lance/data/abc.lance",
+            ],
+        );
+        assert_eq!(
+            detect_lance_layout(&store).await.unwrap(),
+            LanceProbe::Layout(LanceDatasetLayout::LeRobotMetaDir)
+        );
+    }
+
+    #[tokio::test]
+    async fn truncated_inconclusive_root_listing_falls_back() {
+        let store = ListingStore::new(
+            Some(vec!["aaa/", "bbb/"]),
+            true,
+            vec![
+                "frames.lance/data/abc.lance",
+                "episodes.lance/data/abc.lance",
+                "videos.lance/data/abc.lance",
+            ],
+        );
+        assert_eq!(
+            detect_lance_layout(&store).await.unwrap(),
+            LanceProbe::Layout(LanceDatasetLayout::EpisodeTables)
+        );
+    }
+
+    #[tokio::test]
+    async fn lance_tables_of_an_unknown_layout_are_called_out() {
+        // Tables exist, but neither recognized layout matches — the caller must be able to
+        // say "unsupported Lance variant" instead of falling into stray-files mode.
+        let store = ListingStore::new(
+            Some(vec!["something.lance/", "other.lance/"]),
+            false,
+            vec![
+                "something.lance/_versions/1.manifest",
+                "other.lance/data/abc.lance",
+            ],
+        );
+        assert_eq!(
+            detect_lance_layout(&store).await.unwrap(),
+            LanceProbe::UnrecognizedTables
+        );
+
+        // Same through the full-listing fallback (no root listing available).
+        let store = ListingStore::new(None, false, vec!["weird.lance/_versions/1.manifest"]);
+        assert_eq!(
+            detect_lance_layout(&store).await.unwrap(),
+            LanceProbe::UnrecognizedTables
+        );
     }
 }
 

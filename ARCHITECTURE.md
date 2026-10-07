@@ -211,6 +211,7 @@ Update instructions:
 | re_hdf5              | HDF5 file loading into Rerun chunks                               |
 | re_mp4_reader        | Mp4 video file loading into Rerun chunks                          |
 | re_lerobot           | LeRobot dataset loading into Rerun chunks                         |
+| re_lance             | Lance-format LeRobot datasets as a virtual LeRobot file system    |
 | re_data_source       | Handles loading of Rerun data from different sources              |
 | re_grpc_client       | Client for the legacy StoreHub API                                |
 | re_grpc_server       | Server for the legacy StoreHub API                                |

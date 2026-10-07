@@ -60,6 +60,7 @@ re_lerobot.workspace = true
 
 [target.'cfg(not(any(target_arch = "wasm32")))'.dependencies]
 parquet = { workspace = true, features = ["arrow", "snap", "zstd"] }
+re_lance.workspace = true
 re_parquet.workspace = true
 ureq.workspace = true
 

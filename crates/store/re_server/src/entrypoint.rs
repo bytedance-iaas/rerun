@@ -743,6 +743,30 @@ impl Args {
                     }
                 }),
             )
+            // Self-service Lance dataset index for the web viewer. The browser cannot
+            // decode Lance, so it asks this server to read the dataset's (small) tables
+            // and publish the browser-readable index — manifest + curve exports, no video
+            // bytes — into the artifacts store; the viewer then reads the dataset
+            // directly, no conversion needed. Same trust model as /api/ensure-cors:
+            // tokenless, the caller's credentials may ride in the body (zero-credential
+            // deployments), best-effort. Disable with RERUN_AUTO_INDEX=off.
+            .with_http_route(
+                "/api/ensure-manifest",
+                axum::routing::post({
+                    // Failures cool down per dataset; success needs no cache — a fresh
+                    // index costs one small GET to verify.
+                    let cooldown: std::sync::Arc<
+                        parking_lot::Mutex<std::collections::HashMap<String, std::time::Instant>>,
+                    > = std::sync::Arc::default();
+                    move |query: axum::extract::Query<
+                        std::collections::HashMap<String, String>,
+                    >,
+                          body: axum::body::Bytes| {
+                        let cooldown = std::sync::Arc::clone(&cooldown);
+                        async move { ensure_manifest_handler(&query, &body, &cooldown).await }
+                    }
+                }),
+            )
             .with_artificial_latency(std::time::Duration::from_millis(latency_ms as _))
             .with_bandwidth_limit(bandwidth_limit)
             .with_cors_allowed_origins(cors_allow_origin);
@@ -993,5 +1017,212 @@ mod tests {
         assert!(token.for_host("1.2.3.4").is_ok());
         assert!(token.for_host("10.0.0.1").is_ok());
         assert!(token.for_host("evil.example.com").is_err());
+    }
+}
+
+/// `/api/ensure-manifest`: self-service Lance dataset index for the web viewer.
+///
+/// The browser cannot decode Lance, so it asks this server to read the dataset's (small)
+/// tables and publish the browser-readable index — manifest + curve exports, no video bytes —
+/// into the artifacts store; the viewer then reads the dataset directly, no conversion needed.
+/// Same trust model as `/api/ensure-cors`: tokenless, the caller's credentials may ride in
+/// the body (zero-credential deployments), best-effort. Disable with `RERUN_AUTO_INDEX=off`.
+async fn ensure_manifest_handler(
+    query: &std::collections::HashMap<String, String>,
+    body: &[u8],
+    cooldown: &parking_lot::Mutex<std::collections::HashMap<String, std::time::Instant>>,
+) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+    use axum::http::StatusCode;
+    let json = |status: StatusCode, value: serde_json::Value| (status, axum::Json(value));
+
+    if matches!(
+        std::env::var("RERUN_AUTO_INDEX").as_deref(),
+        Ok("0" | "false" | "off" | "no")
+    ) {
+        return json(StatusCode::OK, serde_json::json!({"status": "disabled"}));
+    }
+
+    let Some(location) = query
+        .get("dataset")
+        .and_then(|url| re_data_source::tos::TosLocation::parse(url))
+    else {
+        return json(
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error": "missing or invalid ?dataset= (want tos://bucket/prefix/)"}),
+        );
+    };
+    let valid_bucket = (3..=63).contains(&location.bucket.len())
+        && location
+            .bucket
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.')
+        && !location.bucket.starts_with(['-', '.'])
+        && !location.bucket.ends_with(['-', '.']);
+    if !valid_bucket {
+        return json(
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error": format!("not a bucket name: {:?}", location.bucket)}),
+        );
+    }
+
+    let Some(region) = query.get("region").map(|r| r.trim().to_owned()) else {
+        return json(
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error": "missing ?region="}),
+        );
+    };
+    let valid_region = (1..=32).contains(&region.len())
+        && region
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    if !valid_region {
+        return json(
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error": format!("not a region name: {region:?}")}),
+        );
+    }
+
+    let dataset_url = location.to_string();
+    if let Some(at) = cooldown.lock().get(&dataset_url)
+        && at.elapsed().as_secs() < 30
+    {
+        return json(
+            StatusCode::TOO_MANY_REQUESTS,
+            serde_json::json!({"error": "a recent attempt failed; retry later"}),
+        );
+    }
+
+    let deployment_endpoint = std::env::var("TOS_ENDPOINT").unwrap_or_default();
+
+    #[derive(serde::Deserialize, Default)]
+    struct BodyCredentials {
+        #[serde(default)]
+        access_key: String,
+        #[serde(default)]
+        secret_key: String,
+        #[serde(default)]
+        session_token: String,
+    }
+    let body_credentials: BodyCredentials = serde_json::from_slice(body).unwrap_or_default();
+    let env_access = std::env::var("TOS_ACCESS_KEY").unwrap_or_default();
+    let env_secret = std::env::var("TOS_SECRET_KEY").unwrap_or_default();
+    let env_token = std::env::var("TOS_SESSION_TOKEN").unwrap_or_default();
+
+    // Dataset reads prefer the caller's credentials (they opened the dataset with them); the
+    // artifacts upload prefers the deployment's own (the artifacts bucket is the deployment's).
+    let (dataset_ak, dataset_sk, dataset_token) =
+        if !body_credentials.access_key.is_empty() && !body_credentials.secret_key.is_empty() {
+            (
+                body_credentials.access_key.clone(),
+                body_credentials.secret_key.clone(),
+                body_credentials.session_token.clone(),
+            )
+        } else {
+            (env_access.clone(), env_secret.clone(), env_token.clone())
+        };
+    let (artifacts_ak, artifacts_sk, artifacts_token) =
+        if !env_access.is_empty() && !env_secret.is_empty() {
+            (env_access, env_secret, env_token)
+        } else {
+            (
+                body_credentials.access_key,
+                body_credentials.secret_key,
+                body_credentials.session_token,
+            )
+        };
+
+    let artifacts_url = std::env::var("TOS_RRD_ARTIFACTS_URL").unwrap_or_default();
+    let Some(artifacts_location) =
+        re_data_source::rrd_artifacts::parse_artifacts_url(&artifacts_url)
+    else {
+        return json(
+            StatusCode::OK,
+            serde_json::json!({
+                "status": "skipped",
+                "reason": "no artifacts store configured in the deployment",
+            }),
+        );
+    };
+    // The *artifacts* upload always needs credentials; the *dataset* read may legitimately
+    // have none — public-read buckets (e.g. the HF cache mirror) are read anonymously.
+    if deployment_endpoint.is_empty() || artifacts_ak.is_empty() || artifacts_sk.is_empty() {
+        return json(
+            StatusCode::OK,
+            serde_json::json!({
+                "status": "skipped",
+                "reason": "no credentials in the deployment or the request",
+            }),
+        );
+    }
+
+    let artifacts_region = std::env::var("TOS_RRD_ARTIFACTS_REGION").unwrap_or_default();
+    let artifacts_endpoint = if artifacts_region.trim().is_empty() {
+        deployment_endpoint.clone()
+    } else {
+        re_data_source::tos::endpoint_for_region(&artifacts_region, &deployment_endpoint)
+    };
+
+    let source = re_data_source::tos::TosDatasetSource {
+        location,
+        access: re_data_source::tos::TosAccess::Keys(re_data_source::tos::TosCredentials {
+            endpoint: re_data_source::tos::endpoint_for_region(&region, &deployment_endpoint),
+            access_key: dataset_ak,
+            secret_key: dataset_sk,
+            session_token: dataset_token,
+        }),
+        rrd_artifacts: None,
+    };
+    let artifacts = re_data_source::rrd_artifacts::RrdArtifactsConfig {
+        location: artifacts_location,
+        credentials: re_data_source::tos::TosCredentials {
+            endpoint: artifacts_endpoint,
+            access_key: artifacts_ak,
+            secret_key: artifacts_sk,
+            session_token: artifacts_token,
+        },
+        write_back: true,
+        prefetch_items: 0,
+    };
+
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(110),
+        re_data_source::tos::ensure_lance_index(&source, &artifacts),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(Some(rebuilt))) => {
+            if rebuilt {
+                info!("auto-index: published Lance dataset index\nDataset: {dataset_url}");
+            }
+            json(
+                StatusCode::OK,
+                serde_json::json!({"status": "ok", "rebuilt": rebuilt}),
+            )
+        }
+        Ok(Ok(None)) => json(
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error": "not a Lance-format LeRobot dataset"}),
+        ),
+        Ok(Err(err)) => {
+            cooldown
+                .lock()
+                .insert(dataset_url.clone(), std::time::Instant::now());
+            warn!("auto-index failed: {err:#}\nDataset: {dataset_url}");
+            json(
+                StatusCode::BAD_GATEWAY,
+                serde_json::json!({"error": format!("{err:#}")}),
+            )
+        }
+        Err(_) => {
+            cooldown
+                .lock()
+                .insert(dataset_url.clone(), std::time::Instant::now());
+            warn!("auto-index timed out\nDataset: {dataset_url}");
+            json(
+                StatusCode::GATEWAY_TIMEOUT,
+                serde_json::json!({"error": "timed out building the index"}),
+            )
+        }
     }
 }
