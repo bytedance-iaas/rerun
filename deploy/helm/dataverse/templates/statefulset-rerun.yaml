@@ -95,6 +95,14 @@ spec:
               value: {{ include "dataverse.tos.region" . | quote }}
             # Which network the presigned URLs are signed for (catalog.presignNetwork). This affects
             # only the URLs handed to clients, not how the server itself reaches TOS.
+            # The Lance dataset-index self-service (/api/ensure-manifest) publishes into the
+            # artifacts store — the catalog needs its location (same values as the web container).
+            - name: TOS_RRD_ARTIFACTS_URL
+              value: {{ .Values.tos.rrdArtifactsUrl | quote }}
+            {{- with .Values.tos.rrdArtifactsRegion }}
+            - name: TOS_RRD_ARTIFACTS_REGION
+              value: {{ . | quote }}
+            {{- end }}
             - name: RERUN_PRESIGN_ENDPOINT
               value: {{ include "dataverse.presignEndpoint" . | quote }}
             {{- with .Values.catalog.hfEndpoint }}

@@ -255,14 +255,31 @@ async fn ensure_index_via_server(params: &ServerIndexParams) -> bool {
         .await
     {
         Ok(response) if response.ok => {
-            re_log::info!(
-                "{}",
-                trf!(
-                    "The server built the dataset index — reading directly",
-                    "服务端已生成数据集索引 — 开始直读"
-                )
-            );
-            true
+            // 200 also covers benign refusals ({"status": "skipped"/"disabled"}) — only an
+            // actual build counts, or the manifest refetch is a wasted round-trip.
+            let built = serde_json::from_slice::<serde_json::Value>(&response.bytes)
+                .ok()
+                .and_then(|body| {
+                    body.get("status")
+                        .and_then(|status| status.as_str())
+                        .map(|status| status == "ok")
+                })
+                .unwrap_or(false);
+            if built {
+                re_log::info!(
+                    "{}",
+                    trf!(
+                        "The server built the dataset index — reading directly",
+                        "服务端已生成数据集索引 — 开始直读"
+                    )
+                );
+            } else {
+                re_log::debug_once!(
+                    "Index self-service declined: {}",
+                    String::from_utf8_lossy(&response.bytes[..response.bytes.len().min(200)])
+                );
+            }
+            built
         }
         Ok(response) if response.status == 404 || response.status == 501 => {
             re_log::debug_once!(
