@@ -629,6 +629,114 @@ impl<S: DatasetStore + 'static> DatasetStore for LanceVirtualStore<S> {
     }
 }
 
+// ----------------------------------------------------------------------------
+// The browser-readable dataset index (see `crate::lance_index`).
+
+impl<S: DatasetStore + 'static> LanceVirtualStore<S> {
+    /// Build the dataset index: the manifest plus the export files' contents.
+    pub async fn build_index(
+        &self,
+    ) -> anyhow::Result<(crate::lance_index::LanceIndex, Vec<(String, Bytes)>)> {
+        use crate::lance_index::{IndexFile, IndexSource, LANCE_INDEX_FORMAT_REV, LanceIndex};
+
+        let mut paths: Vec<&String> = self.files.keys().collect();
+        paths.sort();
+
+        let mut files = Vec::with_capacity(paths.len());
+        let mut exports = Vec::new();
+        for path in paths {
+            let entry = match &self.files[path] {
+                VirtualFile::Static(bytes) if path.starts_with("meta/") => IndexFile {
+                    path: path.clone(),
+                    size: bytes.len() as u64,
+                    source: IndexSource::Embedded {
+                        text: std::str::from_utf8(bytes)
+                            .with_context(|| format!("synthesized metadata is not UTF-8: {path}"))?
+                            .to_owned(),
+                    },
+                },
+                VirtualFile::Static(bytes) => {
+                    exports.push((path.clone(), bytes.clone()));
+                    IndexFile {
+                        path: path.clone(),
+                        size: bytes.len() as u64,
+                        source: IndexSource::Export,
+                    }
+                }
+                &VirtualFile::EpisodeParquet { offset, len } => {
+                    let bytes = self.episode_parquet(path, offset, len).await?;
+                    let size = bytes.len() as u64;
+                    exports.push((path.clone(), bytes));
+                    IndexFile {
+                        path: path.clone(),
+                        size,
+                        source: IndexSource::Export,
+                    }
+                }
+                VirtualFile::Video { blob, size } => {
+                    if let Some(uri) = blob.external_uri() {
+                        anyhow::bail!(
+                            "Video blob lives outside the dataset and cannot be indexed\nUri: {uri}"
+                        );
+                    }
+                    let (source_path, offset) = blob.source();
+                    IndexFile {
+                        path: path.clone(),
+                        size: *size,
+                        source: IndexSource::Range {
+                            source_path,
+                            offset,
+                        },
+                    }
+                }
+            };
+            files.push(entry);
+        }
+
+        Ok((
+            LanceIndex {
+                format_rev: LANCE_INDEX_FORMAT_REV,
+                dataset_version: self.content_version.clone(),
+                files,
+            },
+            exports,
+        ))
+    }
+}
+
+/// Make sure a fresh dataset index exists in the artifacts store; returns whether it was
+/// (re)built. Exports are uploaded before the manifest, so a manifest is only ever visible
+/// with its exports in place.
+pub async fn ensure_index_uploaded<S: DatasetStore + 'static>(
+    store: &LanceVirtualStore<S>,
+    artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
+) -> anyhow::Result<bool> {
+    let client = crate::tos::TosClient::new(
+        artifacts.credentials.clone(),
+        artifacts.location.bucket.clone(),
+    );
+    let dir = crate::lance_index::index_dir(&artifacts.location.prefix, &store.url());
+    let key = crate::lance_index::manifest_key(&dir);
+
+    if let Ok(bytes) = client.get_object(&key, None).await
+        && crate::lance_index::LanceIndex::parse_if_fresh(&bytes, &store.content_version)
+            .unwrap_or(None)
+            .is_some()
+    {
+        return Ok(false);
+    }
+
+    let (manifest, exports) = store.build_index().await?;
+    for (path, bytes) in exports {
+        let export_key = crate::lance_index::export_key(&dir, &path);
+        client.put_object(&export_key, bytes.to_vec(), &[]).await?;
+    }
+    client
+        .put_object(&key, serde_json::to_vec(&manifest)?, &[])
+        .await?;
+    Ok(true)
+}
+
 /// `[range.start, range.end)` of `bytes`, clamped to its length.
 fn slice_range(bytes: &Bytes, range: Range<u64>) -> Vec<u8> {
     let len = bytes.len() as u64;

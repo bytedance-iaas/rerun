@@ -17,6 +17,8 @@ pub mod session_credentials;
 
 pub use client::{TosAccess, TosClient, TosCredentials, endpoint_for_region, region_from_endpoint};
 pub use curator::CuratorDatasetAccess;
+#[cfg(not(target_arch = "wasm32"))]
+pub use lerobot_stream::ensure_lance_index;
 pub use lerobot_stream::{TosDatasetSource, convert_lerobot_dataset, stream_lerobot_dataset};
 
 /// A `tos://bucket/prefix/` dataset location.

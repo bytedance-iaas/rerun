@@ -121,6 +121,29 @@ pub fn find_lance_layout(path: impl AsRef<Path>) -> Option<LanceDatasetLayout> {
     }
 }
 
+/// Whether a full listing of dataset-relative paths contains Lance tables at all.
+///
+/// Recognized layout or not — this lets callers tell "an unsupported Lance variant" apart
+/// from "not a Lance dataset", for a clear error instead of a confusing fallback.
+pub fn file_paths_have_lance_tables<'a>(rel_paths: impl IntoIterator<Item = &'a str>) -> bool {
+    rel_paths.into_iter().any(|path| path.contains(".lance/"))
+}
+
+/// Local variant of [`file_paths_have_lance_tables`].
+#[cfg(not(target_arch = "wasm32"))]
+pub fn has_lance_tables(path: impl AsRef<Path>) -> bool {
+    fn dir_has_lance_table(dir: &Path) -> bool {
+        std::fs::read_dir(dir).is_ok_and(|entries| {
+            entries.flatten().any(|entry| {
+                entry.path().is_dir() && entry.file_name().to_string_lossy().ends_with(".lance")
+            })
+        })
+    }
+
+    let path = path.as_ref();
+    dir_has_lance_table(path) || dir_has_lance_table(&path.join("data"))
+}
+
 // ----------------------------------------------------------------------------
 // Pure helpers shared by the native readers and the wasm artifacts fallback.
 

@@ -10,6 +10,7 @@ mod data_source;
 pub(crate) mod fetch_file_from_http;
 pub mod hf;
 pub mod http_client;
+pub mod lance_index;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod lance_remote;
 #[cfg(target_arch = "wasm32")]

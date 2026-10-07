@@ -32,6 +32,23 @@ impl Importer for LeRobotDatasetImporter {
         if let Some(layout) = re_lerobot::lance::find_lance_layout(&filepath) {
             return Self::load_lance_dataset(settings, layout, &filepath, tx);
         }
+        if re_lerobot::lance::has_lance_tables(&filepath) {
+            // Lance tables, but not a recognized layout: Lance schemas vary per producer.
+            re_log::error!(
+                "{}",
+                trf!(
+                    "This looks like a Lance dataset, but not one of the supported layouts. \
+                     Lance schemas vary per producer; supported today: lerobot-lancedb \
+                     (frames/videos tables + a LeRobot meta/ directory) and lance-format \
+                     episode tables (frames/episodes/videos).\nPath: {filepath:?}",
+                    "检测到 Lance 数据表，但不属于已支持的布局。Lance 数据集没有统一的 \
+                     schema 标准；当前支持两种：lerobot-lancedb（frames/videos 表 + LeRobot \
+                     meta/ 目录）和 lance-format 三表布局（frames/episodes/videos）。\
+                     \n路径：{filepath:?}"
+                )
+            );
+            return Ok(());
+        }
 
         if !is_lerobot_dataset(&filepath) {
             return Err(ImporterError::Incompatible(filepath));
@@ -128,8 +145,11 @@ impl LeRobotDatasetImporter {
                     re_log::error!(
                         "{}",
                         trf!(
-                            "Loading Lance LeRobot dataset failed: {err}\nPath: {filepath_for_log:?}",
-                            "加载 Lance 格式 LeRobot 数据集失败：{err}\n路径：{filepath_for_log:?}"
+                            "Loading the Lance dataset failed — Lance schemas vary per producer \
+                             and this one may be an unsupported variant: {err}\
+                             \nPath: {filepath_for_log:?}",
+                            "加载 Lance 数据集失败 — Lance 数据集没有统一的 schema 标准，\
+                             可能是暂不支持的变体：{err}\n路径：{filepath_for_log:?}"
                         )
                     );
                 }

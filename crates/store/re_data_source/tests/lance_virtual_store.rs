@@ -299,11 +299,9 @@ fn virtual_store_presents_meta_dir_layout_as_classic_v3() {
     );
 }
 
-/// Layout B: reuse the fixture shape of `re_lance`'s own round-trip test, through the store.
-#[test]
-fn virtual_store_presents_episode_tables_layout_as_classic_v2() {
-    let dir = tempfile::tempdir().unwrap();
-    let tables = dir.path().join("data");
+/// A layout-B dataset (`lance-format` style): frames/episodes tables under `data/`.
+fn episode_tables_fixture(root: &Path) {
+    let tables = root.join("data");
 
     let frames = RecordBatch::try_from_iter([
         (
@@ -340,6 +338,13 @@ fn virtual_store_presents_episode_tables_layout_as_classic_v2() {
     )
     .unwrap();
     write_lance_table(&tables.join("episodes.lance"), episodes);
+}
+
+/// Layout B: reuse the fixture shape of `re_lance`'s own round-trip test, through the store.
+#[test]
+fn virtual_store_presents_episode_tables_layout_as_classic_v2() {
+    let dir = tempfile::tempdir().unwrap();
+    episode_tables_fixture(dir.path());
 
     let runtime = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a test owns its process
     let store = runtime
@@ -370,4 +375,77 @@ fn virtual_store_presents_episode_tables_layout_as_classic_v2() {
         read_virtual(&runtime, &store, "videos/chunk-000/cam/episode_000001.mp4"),
         b"fake-mp4-segment-1"
     );
+}
+
+// ---- The dataset index (Phase 4: browser direct reading). ----------------------------------
+
+/// The index must describe the virtual dataset byte-exactly: embedded metadata matches the
+/// virtual files, exports match the synthesized parquet, and every video Range entry must
+/// yield the same bytes when read from the raw dataset file as the virtual video serves.
+#[test]
+fn dataset_index_is_byte_exact_for_both_layouts() {
+    use re_data_source::lance_index::{IndexSource, dataset_salt};
+    use re_lerobot::lance::LanceDatasetLayout;
+
+    let runtime = tokio::runtime::Runtime::new().unwrap(); // NOLINT: a test owns its process
+
+    for layout in [
+        LanceDatasetLayout::LeRobotMetaDir,
+        LanceDatasetLayout::EpisodeTables,
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        match layout {
+            LanceDatasetLayout::LeRobotMetaDir => meta_dir_fixture(dir.path()),
+            LanceDatasetLayout::EpisodeTables => episode_tables_fixture(dir.path()),
+        }
+
+        let inner = || LocalDirStore {
+            root: dir.path().to_path_buf(),
+        };
+        let store = runtime
+            .block_on(LanceVirtualStore::open(Arc::new(inner()), layout))
+            .unwrap();
+        let (manifest, exports) = runtime.block_on(store.build_index()).unwrap();
+
+        // The browser recomputes the salt from the listing's manifest file names — it must
+        // match what the native reader stamped into the index.
+        let listing = runtime.block_on(inner().list()).unwrap();
+        assert_eq!(
+            Some(manifest.dataset_version.clone()),
+            dataset_salt(&listing, layout),
+            "{layout}: salt mismatch between native and listing-derived"
+        );
+
+        let raw = inner();
+        let mut videos_checked = 0;
+        for file in &manifest.files {
+            // Whatever the index claims must byte-match what the virtual store serves.
+            let virtual_bytes = read_virtual(&runtime, &store, &file.path);
+            assert_eq!(virtual_bytes.len() as u64, file.size, "{}", file.path);
+
+            match &file.source {
+                IndexSource::Embedded { text } => {
+                    assert_eq!(text.as_bytes(), &virtual_bytes[..], "{}", file.path);
+                }
+                IndexSource::Export => {
+                    let export = exports
+                        .iter()
+                        .find(|(path, _)| path == &file.path)
+                        .unwrap_or_else(|| panic!("missing export bytes for {}", file.path));
+                    assert_eq!(&export.1[..], &virtual_bytes[..], "{}", file.path);
+                }
+                IndexSource::Range {
+                    source_path,
+                    offset,
+                } => {
+                    let raw_bytes = runtime
+                        .block_on(raw.get_range_once(source_path, *offset..*offset + file.size))
+                        .unwrap();
+                    assert_eq!(raw_bytes, virtual_bytes, "{}", file.path);
+                    videos_checked += 1;
+                }
+            }
+        }
+        assert!(videos_checked > 0, "{layout}: no video Range entries");
+    }
 }

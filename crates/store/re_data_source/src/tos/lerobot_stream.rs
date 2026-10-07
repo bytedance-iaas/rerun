@@ -21,6 +21,34 @@ pub struct TosDatasetSource {
     pub rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 }
 
+/// Build (or refresh) the browser-readable Lance *dataset index* for a TOS dataset — the
+/// server half of the web viewer's `/api/ensure-manifest` self-service.
+///
+/// `Ok(None)`: the location is not a Lance-format `LeRobot` dataset.
+/// `Ok(Some(rebuilt))`: index checked; `rebuilt` says whether it had to be (re)written.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn ensure_lance_index(
+    source: &TosDatasetSource,
+    artifacts: &crate::rrd_artifacts::RrdArtifactsConfig,
+) -> anyhow::Result<Option<bool>> {
+    let store = std::sync::Arc::new(TosStore {
+        client: TosClient::new(source.access.clone(), source.location.bucket.clone()),
+        location: source.location.clone(),
+        console_signed: false,
+    });
+
+    let crate::lerobot_remote::LanceProbe::Layout(layout) =
+        crate::lerobot_remote::detect_lance_layout(&*store).await?
+    else {
+        return Ok(None);
+    };
+
+    let virtual_store = crate::lance_remote::LanceVirtualStore::open(store, layout).await?;
+    Ok(Some(
+        crate::lance_remote::ensure_index_uploaded(&virtual_store, artifacts).await?,
+    ))
+}
+
 /// [`DatasetStore`] over a TOS/S3-compatible bucket prefix.
 struct TosStore {
     client: TosClient,
@@ -34,6 +62,18 @@ struct TosStore {
 impl DatasetStore for TosStore {
     fn url(&self) -> String {
         self.location.to_string()
+    }
+
+    fn server_index_params(&self) -> Option<crate::lance_index::ServerIndexParams> {
+        let credentials = match self.client.access() {
+            TosAccess::Keys(credentials) => Some(credentials.clone()),
+            TosAccess::CuratorDataset(_) => None,
+        };
+        Some(crate::lance_index::ServerIndexParams {
+            dataset_url: self.url(),
+            region: self.client.access().region(),
+            credentials,
+        })
     }
 
     async fn list(&self) -> anyhow::Result<Vec<ListedFile>> {

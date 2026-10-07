@@ -13,6 +13,7 @@
 | 增强 | 内容 |
 |---|---|
 | TOS 和 HuggingFace 数据集直读 | viewer 直接打开火山引擎 TOS 或 HuggingFace 上的 LeRobot 数据集,在线转换为 rrd,无需下载到本地 |
+| Lance 数据集免转换直读 | Lance 格式的 LeRobot 数据集(lerobot-lancedb / lance-format 两种布局)打开即看:服务端秒级生成轻量索引,视频按字节范围直读,无需全量转换;无法解析的 schema 变体会给出明确报错 |
 | rrd 自动缓存 | 转换产物自动写回 TOS 缓存桶,同一数据集第二次打开直接加载现成 rrd,无须再次转换 |
 | 桶 CORS 自助配置 | web viewer 打开新桶时自动补配桶的跨域放行规则(只追加不覆盖),运行时换桶、新建桶都无需预先配置 |
 | SDK 与桌面 viewer 随部署分发 | Python SDK 的 wheel 和 Linux 桌面 viewer 与镜像同源构建,由部署在 /downloads/ 提供下载,版本与在跑的服务天然一致 |
@@ -35,7 +36,7 @@
 浏览器中使用的可视化界面,本体是编译成 wasm 的 rerun viewer,由 nginx 容器托管。
 
 - 访问方式:浏览器打开网关分配的 `https://xxx.volceapi.com` 域名,Basic auth 认证。
-- 输入 `tos://桶/路径/数据集名/` 直接打开 TOS 上的 LeRobot 数据集(v2 / v3 均支持),也可打开 HuggingFace 上的公开数据集。
+- 输入 `tos://桶/路径/数据集名/` 直接打开 TOS 上的 LeRobot 数据集(v2 / v3,以及 Lance 格式),也可打开 HuggingFace 上的公开数据集。
 - LeRobot → rrd 的转换在用户浏览器内完成,数据直接从 TOS 读取;转换产物写回 rrd 缓存桶,二次打开直接加载。
 - 数据集打开后提供 **「质检」(Diagnose)按钮**,跳转质检台并自动带上数据集名(见 5.2)。
 - 数据集超出浏览器内存限制时,viewer 会提示改用 native viewer(见 3.4)。

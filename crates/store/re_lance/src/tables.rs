@@ -46,7 +46,7 @@ impl Table {
             .and_then(|mut segments| segments.next_back())
             .unwrap_or_default()
             .to_owned();
-        // TODO(lance>9): `with_object_store` is deprecated in favor of `ObjectStoreProvider`;
+        // TODO(qian): `with_object_store` is deprecated in favor of `ObjectStoreProvider`;
         // migrate when bumping lance.
         #[expect(deprecated)]
         let dataset = lance::dataset::builder::DatasetBuilder::from_uri(table_url.as_str())
@@ -182,6 +182,23 @@ pub struct BlobHandle {
 impl BlobHandle {
     pub fn size(&self) -> u64 {
         self.inner.size()
+    }
+
+    /// Where the blob's bytes physically live: the store-relative path of the file holding
+    /// them, and the byte offset of the blob within it.
+    ///
+    /// For dedicated blob files (blob v2) the offset is 0 and the path is the `.blob` file;
+    /// for inline blobs (blob v1) the path is the table's data file and the offset points
+    /// into it. Either way, `[offset, offset + size)` of that file IS the blob — which is how
+    /// the browser reads videos without decoding Lance (via the dataset index).
+    pub fn source(&self) -> (String, u64) {
+        (self.inner.data_path().to_string(), self.inner.position())
+    }
+
+    /// Set when the blob lives outside the dataset (an external-uri blob) — [`Self::source`]
+    /// is then not dataset-relative and cannot be served by ranged dataset reads.
+    pub fn external_uri(&self) -> Option<&str> {
+        self.inner.uri()
     }
 
     /// Read `[range.start, range.end)` of the blob.

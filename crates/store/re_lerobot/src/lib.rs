@@ -56,7 +56,9 @@ pub fn is_lerobot_dataset(path: impl AsRef<Path>) -> bool {
     is_v1_lerobot_dataset(path.as_ref())
         || is_v2_lerobot_dataset(path.as_ref())
         || is_v3_lerobot_dataset(path.as_ref())
-        || lance::find_lance_layout(path.as_ref()).is_some()
+        // Any Lance tables count — recognized layouts load, unrecognized ones get a clear
+        // error from the LeRobot importer instead of a stray-files import.
+        || lance::has_lance_tables(path.as_ref())
 }
 
 /// Check whether the provided path contains a v3 `LeRobot` dataset.

@@ -224,6 +224,12 @@ impl TosClient {
     }
 
     /// The bucket's current CORS configuration XML; `None` if it has none.
+    /// How this client authenticates — the Lance dataset-index machinery reads the region
+    /// and signing credentials off it to ask the server for an index rebuild.
+    pub fn access(&self) -> &TosAccess {
+        &self.access
+    }
+
     pub async fn get_bucket_cors(&self) -> anyhow::Result<Option<String>> {
         let response = self
             .signed_request(
