@@ -1143,12 +1143,9 @@ async fn ensure_manifest_handler(
             }),
         );
     };
-    if deployment_endpoint.is_empty()
-        || dataset_ak.is_empty()
-        || dataset_sk.is_empty()
-        || artifacts_ak.is_empty()
-        || artifacts_sk.is_empty()
-    {
+    // The *artifacts* upload always needs credentials; the *dataset* read may legitimately
+    // have none — public-read buckets (e.g. the HF cache mirror) are read anonymously.
+    if deployment_endpoint.is_empty() || artifacts_ak.is_empty() || artifacts_sk.is_empty() {
         return json(
             StatusCode::OK,
             serde_json::json!({
