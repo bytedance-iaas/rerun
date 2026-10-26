@@ -8,11 +8,12 @@
 //! requests — no credentials involved at all.
 //!
 //! The bucket serves no CORS headers, so a browser cannot read it directly. The web
-//! viewer therefore goes through the same-origin [`PROXY_BASE`] path instead — served
-//! by the catalog server in deployments (the gateway routes `/api` there, same channel
-//! as `/api/ensure-cors`) and by `re_web_viewer_server` for local runs. The proxy is
-//! locked to this one upstream and the `dataset/` prefix (see [`proxy_upstream_url`]),
-//! so it cannot be abused as an open relay.
+//! viewer therefore goes through the same-origin [`PROXY_PATH`] next to its own page
+//! instead (`/rerun/api/hf-cache` for a viewer at `/rerun/`, see [`crate::deployment`]) —
+//! served by the catalog server in deployments (the viewer's nginx forwards its `api/`
+//! there, same channel as `api/ensure-cors`) and by `re_web_viewer_server` for local
+//! runs. The proxy is locked to this one upstream and the `dataset/` prefix (see
+//! [`proxy_upstream_url`]), so it cannot be abused as an open relay.
 
 use super::{TosCredentials, TosDatasetSource, TosLocation};
 
@@ -27,8 +28,9 @@ pub const DATASET_PREFIX: &str = "dataset/";
 /// while our client parses the S3 XML.
 pub const ENDPOINT: &str = "https://ai-infra.tos-s3-cn-beijing.volces.com";
 
-/// The same-origin path the web viewer reaches the cache through (see module docs).
-pub const PROXY_BASE: &str = "/api/hf-cache";
+/// The path the web viewer reaches the cache through, relative to the viewer's own mount
+/// (see module docs).
+pub const PROXY_PATH: &str = "api/hf-cache";
 
 /// The `tos://` location of a cache dataset by name.
 pub fn location(dataset_name: &str) -> TosLocation {
@@ -62,8 +64,10 @@ pub fn source(
     location: TosLocation,
     rrd_artifacts: Option<crate::rrd_artifacts::RrdArtifactsConfig>,
 ) -> TosDatasetSource {
+    // On the web an origin-relative path (`/…/api/hf-cache`): the TOS client treats an
+    // endpoint that starts with `/` as a same-origin proxy rather than a bucket host.
     let endpoint = if cfg!(target_arch = "wasm32") {
-        PROXY_BASE.to_owned()
+        crate::deployment::path(PROXY_PATH)
     } else {
         ENDPOINT.to_owned()
     };

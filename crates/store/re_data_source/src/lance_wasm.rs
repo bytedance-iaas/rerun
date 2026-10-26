@@ -5,7 +5,8 @@
 //!    ([`crate::lance_index`]): videos come straight off the dataset bucket as byte ranges
 //!    (Lance blobs are raw MP4 bytes), curves from small exported parquet files, metadata
 //!    embedded in the manifest. When the index is missing or stale, the catalog server is
-//!    asked to (re)build it (`/api/ensure-manifest`, same-origin like ensure-cors).
+//!    asked to (re)build it (`api/ensure-manifest` next to the viewer page, same-origin like
+//!    ensure-cors).
 //! 2. [`LanceLiteStore`] — artifacts-only playback for the `LeRobotMetaDir` layout: `meta/`
 //!    is readable without Lance, and the artifact fingerprints need only it plus the Lance
 //!    manifest versions (derivable from the `_versions/` file names) — episodes a desktop
@@ -228,7 +229,8 @@ async fn fetch_fresh_manifest(
 /// static server) has no endpoint.
 async fn ensure_index_via_server(params: &ServerIndexParams) -> bool {
     let url = format!(
-        "/api/ensure-manifest?dataset={}&region={}",
+        "{}?dataset={}&region={}",
+        crate::deployment::path("api/ensure-manifest"),
         crate::tos::client::uri_encode(&params.dataset_url, true),
         crate::tos::client::uri_encode(&params.region, true),
     );

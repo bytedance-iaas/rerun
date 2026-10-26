@@ -7,6 +7,7 @@
 //! Also handles different file types: rrd, images, text files, 3D models, point clouds…
 
 mod data_source;
+pub mod deployment;
 pub(crate) mod fetch_file_from_http;
 pub mod hf;
 pub mod http_client;

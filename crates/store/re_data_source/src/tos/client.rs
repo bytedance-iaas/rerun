@@ -1028,7 +1028,7 @@ impl TosClient {
             )
         };
 
-        // Endpoints that are a bare path (e.g. `/api/hf-cache`) address a same-origin
+        // Endpoints that are a bare path (e.g. `/rerun/api/hf-cache`) address a same-origin
         // proxy: the URL is the path joined onto it, with no bucket host of its own.
         // Only anonymous public-bucket reads use this form (nothing to sign against it).
         let base = if credentials.endpoint.starts_with('/') {

@@ -395,9 +395,11 @@
           persist: get_query_bool(query, "persist", true),
           fallback_token: query.get("token"),
           theme: query.get("theme"),
+          // Next to this page, not at the origin root: the viewer may be served under a
+          // sub-path (e.g. /rerun/) of a domain it shares with other services.
           login: {
-            signed_in_url: location.origin + "/signed-in",
-            signed_out_url: location.origin + "/signed-out",
+            signed_in_url: new URL("signed-in", document.baseURI).href,
+            signed_out_url: new URL("signed-out", document.baseURI).href,
           },
         };
 

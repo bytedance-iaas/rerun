@@ -37,8 +37,11 @@ pub struct ViewerConfig {
     /// How many artifacts to prefetch at once; `0` (or absent) = automatic.
     pub rrd_artifacts_prefetch: usize,
 
-    /// Where the "Diagnose" buttons send the user: the Daft curation console.
-    /// Absent = same-domain `/curation` on the web, no buttons natively.
+    /// Where the "Diagnose" buttons send the user, and where datasets opened from the console
+    /// get their reads signed: the curation console (an origin-relative path or a full URL).
+    /// Absent or empty = derived on the web from where the viewer is mounted (`/rerun/` → the
+    /// origin root, the origin root → `/curation`, see `re_viewer_context::daft_link`); no
+    /// buttons natively.
     pub daft_url: String,
 
     /// The deployment's web viewer address, used as the base of "Web viewer" share links
@@ -136,36 +139,43 @@ impl ViewerConfig {
     }
 }
 
-/// The curation console's REST base (`/curation/api/v1`), when the console is on the web
-/// viewer's own origin; see [`ViewerConfig::curator_access`].
+/// The curation console's REST base (`/api/v1` for a console at the origin root), when the
+/// console is on the web viewer's own origin; see [`ViewerConfig::curator_access`].
 fn curator_api_base() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
         let base = re_viewer_context::daft_link::base_url()?;
-        let same_origin = if base.starts_with('/') && !base.starts_with("//") {
-            true
-        } else {
-            let page = re_web::browser::current_page_url().ok()?;
-            let origin = |url: &str| {
-                url::Url::parse(url)
-                    .ok()
-                    .map(|url| url.origin().ascii_serialization())
-            };
-            origin(&base).is_some() && origin(&base) == origin(&page)
-        };
-        if same_origin {
-            Some(format!("{base}/api/v1"))
-        } else {
+        let page = re_web::browser::current_page_url().unwrap_or_default();
+        let api_base = curator_api_base_for(&base, &page);
+        if api_base.is_none() {
             re_log::warn_once!(
                 "The curation console ({base}, `daft_url` in config.json) is on another origin, \
                  so it cannot sign reads for this viewer — datasets from its \"Visualize\" links \
                  open with this deployment's own settings instead."
             );
-            None
         }
+        api_base
     }
     #[cfg(not(target_arch = "wasm32"))]
     None
+}
+
+/// The REST base of the console at `base` (a `daft_link::base_url`, ending with `/`) as seen
+/// from the viewer page at `page_url` — `None` when the console is on another origin. An
+/// origin-relative `base` (`/`, `/curation/`) is same-origin by construction.
+#[cfg(any(target_arch = "wasm32", test))]
+fn curator_api_base_for(base: &str, page_url: &str) -> Option<String> {
+    let same_origin = if base.starts_with('/') && !base.starts_with("//") {
+        true
+    } else {
+        let origin = |url: &str| {
+            url::Url::parse(url)
+                .ok()
+                .map(|url| url.origin().ascii_serialization())
+        };
+        origin(base).is_some() && origin(base) == origin(page_url)
+    };
+    same_origin.then(|| format!("{}/api/v1", base.trim_end_matches('/')))
 }
 
 static CONFIG: Mutex<Option<ViewerConfig>> = Mutex::new(None);
@@ -327,6 +337,35 @@ mod tests {
             ..Default::default()
         };
         assert!(config.rrd_artifacts(false).is_none());
+    }
+
+    /// The sign endpoint follows the console: at the origin root for a viewer under `/rerun/`,
+    /// under `/curation/` for the original layout, and nowhere for a console on another origin.
+    #[test]
+    fn curator_api_base_follows_the_console() {
+        let page = "https://gw.example.com/rerun/?url=tos%3A%2F%2Fb%2Fp%2F";
+        assert_eq!(curator_api_base_for("/", page).as_deref(), Some("/api/v1"));
+        assert_eq!(
+            curator_api_base_for("/curation/", page).as_deref(),
+            Some("/curation/api/v1")
+        );
+        assert_eq!(
+            curator_api_base_for("https://gw.example.com/", page).as_deref(),
+            Some("https://gw.example.com/api/v1")
+        );
+        assert_eq!(
+            curator_api_base_for("https://other.example.com/", page),
+            None
+        );
+        // A protocol-relative URL is not a path on this origin.
+        assert_eq!(curator_api_base_for("//other.example.com/", page), None);
+
+        // The default console of a viewer under /rerun/ is the origin root.
+        let base = re_viewer_context::daft_link::default_base_for("/rerun/");
+        assert_eq!(
+            curator_api_base_for(&base, page).as_deref(),
+            Some("/api/v1")
+        );
     }
 
     #[test]

@@ -40,7 +40,8 @@ pub struct CuratorDatasetAccess {
     /// The registration's id in the console, e.g. `ds-kqzmrtbwe`.
     pub dataset_id: String,
 
-    /// The console's REST base on the viewer's own origin, e.g. `/curation/api/v1`.
+    /// The console's REST base on the viewer's own origin, e.g. `/api/v1` (console at the
+    /// origin root) or `/curation/api/v1`.
     pub api_base: String,
 
     /// Lifetime asked for each URL, in seconds.
