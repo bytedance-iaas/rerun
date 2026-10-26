@@ -222,6 +222,21 @@ chart 不接受明文密钥输入,也不会自己渲染 Secret:helm 的 release 
 区域不是 cn-beijing(改 `tos.region` 一处;rrd 缓存桶若不在该地域,再配上 `tos.rrdArtifactsRegion`)、或要用其他开关(不部署质检台、presign 走内网等),
 参数全集和默认值见 [`deploy/helm/dataverse/values.yaml`](../../deploy/helm/dataverse/values.yaml) 的注释。
 
+**和别的服务共用一个域名**(例如域名根路径 `/` 归 DataVerse 平台):在 values 里加
+
+```yaml
+web:
+  basePath: /rerun        # ReRun 整体挂在这个路径下;默认空 = 挂在域名根路径
+  # daftUrl: /curation    # 质检台地址;默认空 = viewer 按自己的挂载路径推导(/rerun/ 的上一级,即域名根路径)
+```
+
+之后 viewer 在 `https://<域名>/rerun/`,SDK 下载在 `/rerun/downloads/sdk/`,用户指南网页版在 `/rerun/docs/`;
+网关上 ReRun 只占一条 HTTP 路由 `/rerun`(Prefix,原样转发、不改写路径),
+catalog 的 `/api`、`/catalog`、`/version` 改由 web 容器的 nginx 在 `/rerun/` 下转发,域名根路径及其余路径都让出来;
+catalog 的 gRPC 路由不变(仍是 `/rerun.cloud.v1alpha1.RerunCloudService`,客户端照旧连 `rerun+https://<域名>:443`)。
+需要支持 `BASE_PATH` 的 rerun 镜像(与本 chart 0.3.0 同期或更新),旧镜像仍挂在根路径,`/rerun` 路由会找不到页面。
+下文 4.2、4.6、第 5 节里的 `/`、`/downloads/` 都相应换成 `/rerun/`、`/rerun/downloads/`。
+
 ### 2.4 改为新建独立 APIG 网关(可选)
 
 集群里还没有 APIG 网关,或想给本部署一个**独立**网关(独立前置 CLB、独立公网域名,按量计费),

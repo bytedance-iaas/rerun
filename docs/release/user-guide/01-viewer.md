@@ -36,13 +36,13 @@ Web viewer 的最大限制来自 Wasm:它在浏览器里以 WebAssembly 运行,�
 
 ### 2.1 web viewer:用域名打开
 
-Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的网关域名>/`。
-本文示例用 `https://s4r06sminb5etcslnt4ta.apigateway-cn-beijing.volceapi.com/`,请替换成你自己的。
+Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的网关域名>/rerun/`(只输到 `/rerun` 也会自动跳过去;域名根路径 `/` 是 DataVerse 平台)。
+本文示例用 `https://s4r06sminb5etcslnt4ta.apigateway-cn-beijing.volceapi.com/rerun/`,请替换成你自己的。
 
 在浏览器地址栏输入这个地址,回车,浏览器会弹出登录框,填入管理员给你的用户名和密码即可进入。
 
 - 登录框是浏览器原生的账号密码弹窗,不是网页里的表单。
-- 同一个账号在质检台(`/curation` 路径)通用,登录一次两处都通。
+- 同一个账号在同一域名下的质检台(DataVerse 平台)通用。
 - 一定要用 `https://` 域名访问,不要用 IP;视频回放依赖 HTTPS 安全环境,用 IP 会导致视频区域黑屏。
 
 进入后,如果这套部署没有预先配置火山凭证(出于安全考虑这是推荐做法),会先弹出一个「火山凭证」对话框 —— 这是正常现象,填法见 2.4 节,也可以先关掉它。
@@ -56,8 +56,8 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 - 左上角的 **`+`** 按钮:打开数据集的入口(见第 3 节)。
 - **火山引擎增强功能** 一排卡片:本服务的快捷入口,点卡片右上角的链接直达 ——
   - **数据质检**:跳转质检台(见第 6 节;这里进去是空白表单,想带着当前数据集跳转用数据集行上的「质检」按钮);
-  - **下载 SDK**:打开 SDK 下载页(即 2.2 节的 `/downloads/sdk/`);
-  - **用户指南**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/docs/01-viewer.html` 和 `…/docs/02-catalog.html`(注意要带页面文件名,只开 `/docs/` 目录会报 403)。
+  - **下载 SDK**:打开 SDK 下载页(即 2.2 节的 `/rerun/downloads/sdk/`);
+  - **用户指南**:本手册的两篇文档(viewer 篇和 catalog 篇),点开直接在 viewer 里阅读 —— 文档内置在 viewer 中,不依赖任何网络;要把文档转发给别人时,可用部署自带的网页版 `https://<网关域名>/rerun/docs/01-viewer.html` 和 `…/rerun/docs/02-catalog.html`(注意要带页面文件名,只开 `/rerun/docs/` 目录会报 403)。
 - **最近打开的数据集**:最近打开过的数据集列表,点一下会弹出已预填好地址的打开对话框,直接点「打开」即可重新打开。
   每条右侧的灰色标签注明它来自哪个入口(TOS / 火山 HF 缓存 / Hugging Face)。
   远程数据集不会常驻,重启服务后列表会清空,但随时可以按第 3 节的方式再打开。
@@ -77,12 +77,12 @@ Web viewer 的地址就是管理员给你的服务地址,形如 `https://<你的
 本地 native viewer 随 Python SDK 一起分发,装好 SDK 后 `rerun` 命令即可用,无需另外下载。
 
 下载入口就在欢迎页上:点 **火山引擎增强功能** 一排里的 **下载 SDK** 卡片(见 2.1 节),即可打开 SDK 下载页。
-(下载页的地址是 `https://<你的网关域名>/downloads/sdk/`,用登录账号访问 —— 下面 pip 安装命令里用的就是它。)
+(下载页的地址是 `https://<你的网关域名>/rerun/downloads/sdk/`,用登录账号访问 —— 下面 pip 安装命令里用的就是它。)
 页面上能看到可下载的 wheel 文件,目前提供四种:Linux x86_64、Linux arm64、macOS(Apple Silicon)、Windows x86_64。
 按你的机器选对应的那个 wheel,在 Python(3.10 及以上)环境里安装(URL 末尾换成你选的 wheel 文件名):
 
 ```sh
-pip install "https://<用户名>:<密码>@<网关域名>/downloads/sdk/<wheel 文件名>"
+pip install "https://<用户名>:<密码>@<网关域名>/rerun/downloads/sdk/<wheel 文件名>"
 ```
 
 另外要预装 **FFmpeg(5.1 及以上版本)**,并保证 `ffmpeg` 命令在 PATH 里能找到:数据集里 H.264/H.265 等常见编码的视频,本地 viewer 是调用系统里的 ffmpeg 解码的,缺了它视频画面出不来(曲线等其他数据不受影响;AV1 编码的视频用 viewer 内置解码器,不需要 ffmpeg)。
