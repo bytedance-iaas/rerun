@@ -19,8 +19,10 @@ services:
       - "9091:80"
     env_file: .env
     environment:
-      # nginx's same-origin /api proxy targets the catalog container (see nginx.conf).
+      # nginx's same-origin api/ proxy targets the catalog container (see nginx.conf).
       CATALOG_UPSTREAM: server
+      # Serve under a sub-path instead of the origin root (then open http://localhost:9091/rerun/).
+      # BASE_PATH: /rerun
     secrets:
       - tos_access_key
       - tos_secret_key

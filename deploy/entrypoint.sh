@@ -71,11 +71,21 @@ AUTH
         exit 1
         ;;
     esac
+    # Optional: where the viewer's Diagnose buttons and console-signed reads go (config.json's
+    # daft_url) — an origin-relative path (/curation) or a full URL. Empty = the viewer derives
+    # it from where it is mounted: under a base path the console is the parent path
+    # (/rerun/ -> /), at the origin root it is the /curation sibling.
+    DAFT_URL="${DAFT_URL:-}"
+    case "$DAFT_URL" in
+    *[\"\\]* | *[![:print:]]*)
+        echo "entrypoint: DAFT_URL must be a plain URL or path, got '$DAFT_URL'" >&2
+        exit 1
+        ;;
+    esac
 
     # tos_access_key/tos_secret_key/hf_token are the server-side defaults for the browser dialogs
     # (used unless the user opts into "Use non-default AK/SK"). All three may be empty: without an
-    # AK/SK the viewer asks each user for credentials once per session instead. No daft_url: the
-    # viewer derives the curation console as the same-origin /curation sibling path on its own.
+    # AK/SK the viewer asks each user for credentials once per session instead.
     # hf_endpoint is optional: empty = the official https://huggingface.co.
     cat > /run/config.json <<EOF
 {
@@ -89,14 +99,17 @@ AUTH
   "tos_rrd_artifacts_region": "${TOS_RRD_ARTIFACTS_REGION:-}",
   "rrd_artifacts_prefetch": ${RRD_ARTIFACTS_PREFETCH},
   "web_viewer_url": "${WEB_VIEWER_URL:-}",
+  "daft_url": "${DAFT_URL}",
   "curator_sign_ttl": ${CURATOR_SIGN_TTL}
 }
 EOF
     chmod 644 /run/config.json
 
-    # The /api reverse proxy's upstream (see nginx.conf): catalog in the same pod on
-    # k8s (default), the `server` service under docker compose (set by compose).
-    echo "proxy_pass http://${CATALOG_UPSTREAM:-127.0.0.1}:51234;" > /run/nginx-api-upstream.conf
+    # The site itself, rendered from the template (see nginx.conf): BASE_PATH is the URL base
+    # path the whole site lives under (empty = the origin root), CATALOG_UPSTREAM the catalog
+    # server's host — in the same pod on k8s (default), the `server` service under compose.
+    /render-nginx-conf.sh /etc/nginx/rerun-site.conf.template > /run/nginx-site.conf
+    echo "web: serving under '${BASE_PATH:-}' (empty = the origin root)"
     # Adopt the cache volume: a volume created by an earlier image keeps that
     # image's ownership, which blocks WebDAV PUTs from this nginx's www-data.
     chown www-data:www-data /rrd-cache

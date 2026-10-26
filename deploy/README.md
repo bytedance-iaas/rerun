@@ -16,9 +16,10 @@ The same image builds and runs both **locally** (throttled defaults survive an 8
 |---|---|
 | `Dockerfile` | Multi-stage: wasm viewer build + native viewer build (serialized to avoid OOM) + one runtime with nginx and the Xvnc/noVNC stack. Build context is the repo root. |
 | `docker-compose.yml` | Three services from the same image: `viewer` (web, `:9091`), `native-session` (native, `:9092`), `server` (catalog, `:9094`). |
-| `entrypoint.sh` | `MODE` dispatch: web renders `/config.json` and runs nginx; native starts Xvnc + websockify + the viewer; server runs the catalog. |
-| `nginx.conf` | Static serving + `/config.json` + WebDAV `PUT` on `/rrd-cache/` (phase-2 write-back) + `301 /rerun → /` (the gateway routes `/curation` to the curation console, everything else here). |
-| `helm/dataverse/` | The whole cloud stack as one Helm chart bundling two components: **ReRun** (web + catalog StatefulSet with a persistent volume) and the **curation console** (its own StatefulSet, reading and writing TOS through the SDK, served under `/curation`; the viewer's Diagnose buttons deep-link into it, `?dataset=<name>`), plus the APIG gateway they share — path-routed Ingress (`/` = viewer, `/curation` = console) and a dedicated gRPC route for the catalog. `helm install dataverse deploy/helm/dataverse -f <your-values>.yaml`. |
+| `entrypoint.sh` | `MODE` dispatch: web renders `config.json` and the nginx site, then runs nginx; native starts Xvnc + websockify + the viewer; server runs the catalog. |
+| `nginx.conf` | Template of the web site, served under the URL base path `BASE_PATH` (empty = the origin root; see [URL layout](#url-layout-and-base-path)): static viewer + `config.json` + `downloads/` + WebDAV `PUT` on `rrd-cache/` (phase-2 write-back) + the catalog's plain-HTTP endpoints (`api/`, `catalog/`, `version`) proxied to the catalog server. |
+| `render-nginx-conf.sh` | Fills in `nginx.conf` (`BASE_PATH`, `CATALOG_UPSTREAM`) — run by `entrypoint.sh` at start, and usable offline to check a config. |
+| `helm/dataverse/` | The whole cloud stack as one Helm chart bundling two components: **ReRun** (web + catalog StatefulSet with a persistent volume) and the **curation console** (its own StatefulSet, reading and writing TOS through the SDK, served under `/curation`; the viewer's Diagnose buttons deep-link into it, `?dataset=<name>`), plus the APIG gateway they share — path-routed Ingress (`/` = viewer, `/curation` = console; with `web.basePath=/rerun` the whole ReRun site is the one route `/rerun`) and a dedicated gRPC route for the catalog. `helm install dataverse deploy/helm/dataverse -f <your-values>.yaml`. |
 | `helm/rerun-native-session/` | On-demand native-viewer session (one pod per user), started/torn down per session. |
 | `publish_charts.sh` | Packages **both** charts (`helm/dataverse/` and `helm/rerun-native-session/`) and pushes them to the Volcengine OCI registry. Registry coordinates and the robot account come from the environment (`HELM_REGISTRY_HOST`, `HELM_REGISTRY_NAMESPACE`, `HELM_REGISTRY_USERNAME`, `HELM_REGISTRY_PASSWORD`); `DRY_RUN=1` packages and lints without logging in, `CHARTS="<name>"` restricts it to one chart. |
 | `novnc-paste-bridge.js` | Appended into noVNC's `ui.js` at build time so Cmd+V / Ctrl+V pastes into the native session in one step. |
@@ -133,10 +134,54 @@ Building inside mainland China, point every download at a mirror:
   --build-arg CARGO_MIRROR=sparse+https://rsproxy.cn/index/
 ```
 
+## URL layout and base path
+
+The web container serves everything under one URL base path, set by `BASE_PATH` (empty = the origin root, the default).
+Behind a gateway domain shared with other services, set it (the Helm value is `web.basePath`) and the gateway needs a single HTTP route for ReRun, forwarded unchanged — no rewrite:
+
+| Gateway route | Match | Backend |
+|---|---|---|
+| `<BASE_PATH>` (e.g. `/rerun`) | Prefix | the web container (`rerun-cloud-web:80`) |
+| `/rerun.cloud.v1alpha1.RerunCloudService` | Prefix | the catalog's gRPC port (`rerun-cloud-headless:51235`, backend protocol gRPC) — stays at the origin root, since rerun's catalog clients address a server by origin only (`rerun+https://<domain>:443`) |
+
+Under the base path, nginx serves:
+
+| Path | What |
+|---|---|
+| `<BASE_PATH>` | `301` to `<BASE_PATH>/`, query string kept — the page must run from the directory, its relative URLs resolve against it |
+| `<BASE_PATH>/` | the viewer (`index.html`, `re_viewer.js`, the wasm, `signed-in` / `signed-out`), `docs/` (the user guide's web copy) |
+| `<BASE_PATH>/config.json` | the browser's deployment defaults (rendered by `entrypoint.sh`) |
+| `<BASE_PATH>/downloads/sdk/` | the SDK wheels |
+| `<BASE_PATH>/rrd-cache/` | WebDAV write-back cache |
+| `<BASE_PATH>/api/`, `<BASE_PATH>/catalog/`, `<BASE_PATH>/version` | the catalog server's plain-HTTP endpoints, proxied with the base path stripped (`/rerun/api/x` → catalog `/api/x`); no Basic auth (see [Credential model](#credential-model)) |
+| `/healthz` (and `<BASE_PATH>/healthz`) | unauthenticated health check |
+
+With a base path set, any other path answers `404` (`/` itself redirects to `<BASE_PATH>/`).
+
+The viewer builds every request to its own deployment from the directory of its page, never from the origin root, so the same build works at `/` (docker compose, local) and under `/rerun/`.
+
+Environment of the web container (besides the credentials and TOS settings):
+
+| Env | Default | Meaning |
+|---|---|---|
+| `BASE_PATH` | empty | URL base path, e.g. `/rerun` (a trailing slash is dropped; plain path characters only) |
+| `CATALOG_UPSTREAM` | `127.0.0.1` | host of the catalog server (`server` under docker compose) |
+| `DAFT_URL` | empty | the curation console (DataVerse) the Diagnose buttons and console-signed reads go to — `config.json`'s `daft_url`, an origin-relative path or a full URL. Empty = derived from the viewer's own mount: under a base path the console is the parent path (`/rerun/` → `/`: Diagnose opens `/?dataset=…`, reads are signed at `POST /api/v1/datasets/<id>/sign`); at the origin root it is the `/curation` sibling (`/curation/?dataset=…`) |
+| `WEB_VIEWER_URL` | empty | the web viewer's public address for the native viewer's share links — include the base path (`https://<domain>/rerun/`) |
+
+Check a rendered config without deploying, inside the image:
+
+```sh
+docker run --rm --entrypoint sh rerun-viewer-unified -c \
+  'BASE_PATH=/rerun /render-nginx-conf.sh /etc/nginx/rerun-site.conf.template > /run/nginx-site.conf && : > /run/nginx-auth.conf && nginx -t'
+```
+
+Locally, `BASE_PATH: /rerun` in `docker-compose.yml`'s `viewer` environment serves the viewer at <http://localhost:9091/rerun/>.
+
 ## Bucket CORS — automatic
 
 The web viewer talks to TOS **directly from the browser**, and browsers enforce CORS: the bucket only answers pages served from an allowed origin.
-This is self-service: before the first request to a bucket, the web viewer asks the same-origin `/api/ensure-cors` endpoint (routed to the catalog server, which is not subject to browser CORS) to install the viewer's CORS rule on that bucket — appending to whatever rules the bucket already has, never overwriting.
+This is self-service: before the first request to a bucket, the web viewer asks the same-origin `api/ensure-cors` endpoint next to its own page (`<BASE_PATH>/api/ensure-cors`, which nginx forwards to the catalog server, not subject to browser CORS) to install the viewer's CORS rule on that bucket — appending to whatever rules the bucket already has, never overwriting.
 Implementation and the exact rule: `crates/store/re_data_source/src/tos/cors.rs`.
 The rule's origins are the region's APIG wildcard (`https://*.apigateway-<region>.volceapi.com`) plus the local-docker origins, so gateway re-creates need no CORS follow-up.
 Requires TOS credentials with bucket-management permission; opt out with `catalog.autoCors.enabled=false` in the helm values.
@@ -154,13 +199,13 @@ Check the catalog logs for `auto-CORS` lines to see why the self-service path di
 
 Two more optional secrets gate access to the browser-facing modes (see the auth commit / `helm/dataverse/README.md`):
 
-- `web_htpasswd` (htpasswd format) — enables nginx Basic auth for the whole web mode, including `/config.json`. Without it the site (and the default credentials) is readable by anyone who can reach it — fine locally, not on a public address. `/healthz` stays open for probes.
+- `web_htpasswd` (htpasswd format) — enables nginx Basic auth for the whole web mode, including `config.json`. Without it the site (and the default credentials) is readable by anyone who can reach it — fine locally, not on a public address. `/healthz` stays open for probes, and so do the catalog endpoints nginx forwards (`api/`, `catalog/`, `version` — the same exposure as when the gateway routed them to the catalog directly: `catalog/` checks its own bearer tokens, `api/` is tokenless by design).
 - `session_password` / `SESSION_PASSWORD` env — enables the VNC password prompt on native sessions.
 
 With Basic auth on, `/config.json` is only readable by authenticated users; the endgame (server-side URL pre-signing, so browsers never hold AK/SK at all) is under way, see below.
 
 Datasets opened from the curation console's "Visualize" link (`tos://bucket/prefix/name/?region=…&curator_dataset=ds-…`) do not use the deployment keys at all.
-Before every object read or listing page, the web viewer asks the console for a short-lived presigned URL (`POST /curation/api/v1/datasets/<id>/sign`, same origin, on the browser's Basic-auth login) and fetches that URL from TOS directly.
+Before every object read or listing page, the web viewer asks the console for a short-lived presigned URL (`POST <console>/api/v1/datasets/<id>/sign` — `/api/v1/…` for a viewer at `/rerun/`, `/curation/api/v1/…` for one at the root, see `DAFT_URL` below; same origin, on the browser's Basic-auth login) and fetches that URL from TOS directly.
 The console signs with the access key bound to its dataset registration, only reads, and only under the dataset's prefix, so the browser never holds that AK/SK (Curator design doc 15, decision D55).
 Share links, the welcome screen's recents and session restore keep the `curator_dataset` id, so re-opening asks the console again.
 The native viewer ignores the id and keeps using its own keys.
