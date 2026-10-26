@@ -5,9 +5,15 @@ the catalog on the same public domain.
 
 Two Ingress objects, not one, because the backend-protocol annotation applies to a whole Ingress:
 the plain-HTTP routes below must not be forwarded as gRPC.
+
+With web.basePath set (e.g. /rerun) the whole ReRun site is that ONE HTTP route: the web container's
+nginx serves the viewer under it and forwards the catalog's plain-HTTP endpoints itself, so the
+domain root and every other path stay free for whatever else shares the host. Empty keeps the
+original layout (viewer at /, the catalog's HTTP paths routed to it directly).
 */}}
 {{- include "dataverse.apig.validate" . -}}
 {{- if .Values.apig.enabled }}
+{{- $basePath := include "dataverse.web.basePath" . }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -24,6 +30,17 @@ spec:
     - host: {{ include "dataverse.apig.host" . | quote }}
       http:
         paths:
+          {{- if $basePath }}
+          # The whole ReRun site under one prefix, forwarded unchanged (no rewrite): the viewer and
+          # its files, plus <basePath>/api, /catalog and /version, which nginx hands to the catalog.
+          - path: {{ $basePath }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dataverse.rerunName" . }}-web
+                port:
+                  number: 80
+          {{- else }}
           # The catalog's plain-HTTP endpoints, on the same domain (HTTP/1.1 through the gateway):
           #   /api       same-origin calls from the browser (ensure-cors, the HF cache proxy)
           #   /catalog   presign / sources, which is what direct reads during training use
@@ -49,11 +66,12 @@ spec:
                 name: {{ include "dataverse.rerunName" . }}-headless
                 port:
                   number: 51234
+          {{- end }}
           {{- if .Values.curator.enabled }}
-          # One domain, split by path: /curation is the curation console, everything else is the
-          # web viewer. The gateway does not strip the prefix — the console registers all of its
-          # routes under that path itself (CURATOR_BASE_PATH). The path is fixed because the viewer
-          # derives it as a same-origin sibling for its Diagnose buttons.
+          # One domain, split by path: /curation is the curation console. The gateway does not strip
+          # the prefix — the console registers all of its routes under that path itself
+          # (CURATOR_BASE_PATH). The viewer finds it there on its own at the root layout, and through
+          # DAFT_URL (set by the chart) under a basePath.
           - path: /curation
             pathType: Prefix
             backend:
@@ -62,6 +80,8 @@ spec:
                 port:
                   number: 8080
           {{- end }}
+          {{- if not $basePath }}
+          # Everything else: the web viewer.
           - path: /
             pathType: Prefix
             backend:
@@ -69,10 +89,13 @@ spec:
                 name: {{ include "dataverse.rerunName" . }}-web
                 port:
                   number: 80
+          {{- end }}
 ---
 # The catalog's gRPC entry point, on the same host. A gRPC method path carries the fully qualified
 # service name as its prefix (/rerun.cloud.v1alpha1.RerunCloudService/…), so it cannot collide with
-# the viewer or the console.
+# the viewer or the console. It stays at the origin root even with web.basePath set: rerun's
+# catalog clients (SDK and viewer) address a server by origin only, `rerun+https://<domain>:443`,
+# with no room for a path prefix.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

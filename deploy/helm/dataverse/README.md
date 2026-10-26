@@ -97,6 +97,8 @@ for one network does not work on the other; the signature covers the host.
 | `image.rerun` / `image.curator` | **required** | Full tagged references; the chart tracks no image version |
 | `secrets.existingSecret` | **required** | One Secret for every credential; the chart renders no Secret of its own |
 | `tos.region` | `cn-beijing` | Both TOS endpoints are derived from it |
+| `web.basePath` | empty | URL base path of the whole ReRun site, e.g. `/rerun` — see [Sharing the domain](#sharing-the-domain-webbasepath) |
+| `web.daftUrl` | empty | Where the viewer's Diagnose buttons and console-signed reads go; empty = derived from the viewer's mount |
 | `web.basicAuth.enabled` | `true` | htpasswd table shared with the console |
 | `catalog.tokenAuth.enabled` | `true` | Signed catalog tokens; needs `server_token_secret` in the Secret |
 | `catalog.presignNetwork` | `public` | Where the reading clients are |
@@ -119,6 +121,9 @@ single domain:
 /rerun.cloud.v1alpha1.RerunCloudService   catalog, gRPC (a second Ingress: the backend-protocol
                                           annotation applies to a whole Ingress)
 ```
+
+That is the default layout (`web.basePath` empty). With a base path, ReRun gives up the root, see
+below.
 
 Authentication deliberately does **not** happen at the gateway — a gateway-level JWT would make the
 pages unopenable in a browser — so the backends do it, and the chart refuses to render a public
@@ -233,6 +238,36 @@ with the region following `tos.region` — because the deployment target is the 
 which is the only place the mirror is reachable; set the bucket to `""` to drop the feature.
 The mirror is read with an unsigned client, so it needs no rights on the deployment's AK/SK.
 
+## Sharing the domain (`web.basePath`)
+
+When the domain belongs to something else — the DataVerse platform owns `/` and every other root
+path — set `web.basePath`, e.g. `/rerun`. The whole ReRun site then lives under it and the web
+Ingress carries one HTTP path:
+
+```text
+/rerun                                    Prefix -> rerun-cloud-web:80, forwarded unchanged (no rewrite)
+                                          the viewer at /rerun/, plus /rerun/config.json, /rerun/downloads/,
+                                          /rerun/docs/, /rerun/rrd-cache/, and the catalog's plain-HTTP
+                                          endpoints /rerun/api/, /rerun/catalog/, /rerun/version, which
+                                          the web container's nginx forwards to the catalog
+/rerun.cloud.v1alpha1.RerunCloudService   catalog, gRPC — unchanged, at the origin root: rerun's catalog
+                                          clients address a server by origin only (rerun+https://<domain>:443)
+/curation                                 only with curator.enabled (the bundled console)
+```
+
+Nothing else: no `/`, `/api`, `/catalog` or `/version`. The web container gets `BASE_PATH`, and the
+viewer derives everything else from where its page is served — including the console it links to:
+the parent path, i.e. the origin root `/` for `/rerun/` (Diagnose opens `/?dataset=…`, console-signed
+reads go to `POST /api/v1/datasets/<id>/sign`). Override that with `web.daftUrl`; with
+`curator.enabled` the chart sets it to `/curation` itself.
+
+Users open `https://<domain>/rerun` (redirected to `/rerun/`); the SDK wheels move to
+`https://<domain>/rerun/downloads/sdk/`, the catalog's `/catalog/sources` to
+`https://<domain>/rerun/catalog/sources`. Catalog clients keep `rerun+https://<domain>:443`.
+
+⚠️ The base path needs a ReRun image that renders its nginx site from `BASE_PATH` (this chart's
+version or later). An older image keeps serving at `/`, which the `/rerun` route cannot reach.
+
 ## Upgrades and configuration changes
 
 `helm upgrade dataverse deploy/helm/dataverse -n rerun -f …` is all it takes. A site-configuration
@@ -270,6 +305,17 @@ region-wide gateway wildcard).
 010002 for every host, working ones included. Test the assigned domain instead.
 
 **Selector labels are immutable.** Changing them means deleting and recreating the StatefulSets.
+
+**`curator.enabled=false` deletes whatever now carries the console's names.** Helm removes every
+object the previous revision rendered and the new one does not — by kind and name, without checking
+which release owns it today. If the console has moved to a release of its own that reuses the names
+(StatefulSet and Service `<release>-curation`, ConfigMap `<release>-curation-site`), this upgrade
+deletes them out from under it. Mark them first, and drop the mark afterwards:
+
+```bash
+kubectl -n <namespace> annotate statefulset/<release>-curation service/<release>-curation \
+    configmap/<release>-curation-site helm.sh/resource-policy=keep
+```
 
 ## Assumptions
 

@@ -63,6 +63,18 @@ spec:
             {{- end }}
             - name: RRD_ARTIFACTS_PREFETCH
               value: {{ .Values.web.rrdArtifactsPrefetch | quote }}
+            {{- with (include "dataverse.web.basePath" .) }}
+            # The URL base path nginx serves the whole site under (web.basePath). The gateway
+            # forwards exactly this prefix here, unchanged.
+            - name: BASE_PATH
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with (include "dataverse.web.daftUrl" .) }}
+            # The curation console the viewer links to and asks for signed reads (config.json's
+            # daft_url). Unset = derived by the viewer from its own mount.
+            - name: DAFT_URL
+              value: {{ . | quote }}
+            {{- end }}
           ports:
             - containerPort: 80
           readinessProbe:

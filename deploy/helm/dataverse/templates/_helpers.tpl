@@ -144,6 +144,34 @@ above — the signature covers the host, so a URL signed for one network does no
 {{- end }}
 {{- end -}}
 
+{{/* ── Web viewer URL layout ──────────────────────────────────────────────────────────────── */}}
+
+{{/*
+web.basePath normalized: no trailing slash, empty = the origin root (`/` alone means the root too).
+Checked with the same rule as the container's own renderer (deploy/render-nginx-conf.sh) — plain
+path segments only — so a bad value fails here instead of crash-looping the web container.
+*/}}
+{{- define "dataverse.web.basePath" -}}
+{{- $path := regexReplaceAll "/+$" (trim (.Values.web.basePath | default "")) "" -}}
+{{- if and $path (or (not (regexMatch "^(/[A-Za-z0-9._~-]+)+$" $path)) (regexMatch "(^|/)\\.\\.?(/|$)" $path)) -}}
+{{- fail (printf "web.basePath must be empty or a plain URL path such as /rerun (segments of letters, digits and ._~- only), got %q." .Values.web.basePath) -}}
+{{- end -}}
+{{- $path -}}
+{{- end -}}
+
+{{/*
+The web container's DAFT_URL (the viewer's curation-console address): web.daftUrl when set. Else
+empty — the viewer derives it from its own mount — except for the bundled console (curator.enabled)
+behind a basePath: that console is at /curation, while the derived default would be the root.
+*/}}
+{{- define "dataverse.web.daftUrl" -}}
+{{- if .Values.web.daftUrl -}}
+{{- .Values.web.daftUrl -}}
+{{- else if and .Values.curator.enabled (include "dataverse.web.basePath" .) -}}
+/curation
+{{- end -}}
+{{- end -}}
+
 {{/* ── Secrets ─────────────────────────────────────────────────────────────────────────────── */}}
 
 {{/*

@@ -121,6 +121,28 @@ secrets:
 
 # The web viewer container: nginx serving the wasm viewer plus the browser's /config.json.
 web:
+  # The URL base path the whole ReRun site lives under on the gateway domain — the viewer, its
+  # config.json / downloads/ / docs/, and the catalog's plain-HTTP endpoints (api/, catalog/,
+  # version), which the web container's nginx forwards to the catalog. E.g. `/rerun`: the viewer
+  # is then https://<domain>/rerun/ and the web Ingress carries ONE HTTP route, `/rerun` (Prefix,
+  # forwarded unchanged — no rewrite), leaving the rest of the domain, its root included, to
+  # whatever else shares the host (the DataVerse platform). The catalog's gRPC route is separate
+  # and stays at /rerun.cloud.v1alpha1.RerunCloudService (a gRPC client cannot take a path
+  # prefix).
+  # Empty (the default) = the original layout: the viewer at `/`, with /api, /catalog and
+  # /version routed by the gateway straight to the catalog.
+  # ⚠️ Needs a ReRun image that knows BASE_PATH (deploy/render-nginx-conf.sh). An older image
+  #    ignores it and keeps serving at `/`, which the `/rerun` route then cannot reach.
+  basePath: ""
+
+  # Where the viewer's Diagnose buttons send datasets, and where it gets reads of
+  # console-registered datasets signed: the curation console (DataVerse), as an origin-relative
+  # path (`/curation`) or a full URL. Empty = derived by the viewer from where it is mounted:
+  # under a base path the console is the parent path (`/rerun/` -> the origin root `/`), at the
+  # root it is the `/curation` sibling. With curator.enabled and a basePath the chart fills in
+  # `/curation` itself (that console lives there, not at the root).
+  daftUrl: ""
+
   # HTTP Basic auth, from the web_htpasswd account table in the Secret above. Off means the pages
   # are unauthenticated — private-network or local debugging only, and the chart refuses to render
   # that combination together with a public APIG entry point.
