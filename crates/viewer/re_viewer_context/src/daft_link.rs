@@ -1,8 +1,16 @@
-//! Where the Diagnose buttons point: the Daft robot-data-curation console.
+//! Where the Diagnose buttons point: the curation console, on the viewer's own domain.
 //!
-//! Web viewer only. The console lives behind the same gateway domain as the web viewer
-//! (`/` = viewer, `/curation` = console), so the web viewer can always derive the target;
-//! a deployment can override it via `daft_url` in `config.json`.
+//! Web viewer only. The console lives on the same gateway domain as the web viewer, so the
+//! web viewer derives the target from where it is mounted itself ([`default_base_for`]):
+//!
+//! - viewer in a sub-path, e.g. `/rerun/` — the console is the parent path, here the origin
+//!   root `/` (the platform owns the domain root and the viewer lives under `/rerun/`);
+//! - viewer at the origin root — the console is the `/curation/` sibling (the original
+//!   one-domain layout: `/` = viewer, `/curation` = console).
+//!
+//! A deployment overrides it with `daft_url` in `config.json` (the web container's `DAFT_URL`
+//! env var): an origin-relative path such as `/curation`, or a full URL. An empty `daft_url`
+//! means "not set" — the derived default applies; `/` is a real value, the origin root.
 //!
 //! The native viewer deliberately has no part in this: the console's public domain is
 //! assigned platform-side and is not discoverable from anywhere the native viewer runs
@@ -16,47 +24,68 @@
 #[cfg(target_arch = "wasm32")]
 use parking_lot::Mutex;
 
+/// The configured console address, normalized by [`normalize_base`]; `None` = not configured.
 #[cfg(target_arch = "wasm32")]
-static BASE_URL: Mutex<Option<String>> = Mutex::new(None);
+static CONFIGURED_BASE_URL: Mutex<Option<String>> = Mutex::new(None);
 
-/// Record the configured console address (empty = not configured). Web only; native
-/// callers may call it, it just has no observable effect there.
+/// Record the configured console address (`daft_url`; empty = not configured). Web only;
+/// native callers may call it, it just has no observable effect there.
 pub fn set_base_url(url: &str) {
     #[cfg(target_arch = "wasm32")]
     {
-        let url = url.trim().trim_end_matches('/');
-        *BASE_URL.lock() = if url.is_empty() {
-            None
-        } else {
-            Some(url.to_owned())
-        };
+        *CONFIGURED_BASE_URL.lock() = normalize_base(url);
     }
     #[cfg(not(target_arch = "wasm32"))]
     let _ = url;
 }
 
-/// The console address: on the web the configured one, else the same-domain `/curation`
-/// sibling path. `None` natively — no address, no buttons.
+/// The console address, always ending with `/`: on the web the configured one, else the one
+/// derived from the viewer's own mount ([`default_base_for`]). `None` natively — no address,
+/// no buttons.
 pub fn base_url() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        BASE_URL
-            .lock()
-            .clone()
-            .or_else(|| Some("/curation".to_owned()))
+        let configured = CONFIGURED_BASE_URL.lock().clone();
+        configured.or_else(|| Some(default_base_for(&re_data_source::deployment::mount_path())))
     }
     #[cfg(not(target_arch = "wasm32"))]
     None
 }
 
-/// The deployment's SDK download page: the same-domain `/downloads/sdk/` sibling path
-/// (nginx serves the wheels there, see deploy/nginx.conf). `None` natively — a locally
-/// installed viewer has no serving deployment to link into, and it came from that page
-/// to begin with.
+/// A configured console address in canonical form — ending with exactly one `/` — or `None`
+/// for an empty value, which means "not configured" (never "the origin root": that is `/`).
+pub fn normalize_base(url: &str) -> Option<String> {
+    let url = url.trim();
+    if url.is_empty() {
+        None
+    } else {
+        Some(format!("{}/", url.trim_end_matches('/')))
+    }
+}
+
+/// The console address when none is configured, from the viewer page's mount path.
+///
+/// `viewer_mount` is `re_data_source::deployment::mount_path`, e.g. `/rerun/`. The console is
+/// the parent of a sub-path mount (`/rerun/` → `/`, `/a/rerun/` → `/a/`), or `/curation/` for a
+/// viewer at the origin root.
+pub fn default_base_for(viewer_mount: &str) -> String {
+    let mount = viewer_mount.trim_end_matches('/');
+    match mount.rfind('/') {
+        Some(slash) => format!("{}/", &mount[..slash]),
+        // Mounted at the origin root: the original layout's `/curation` sibling.
+        None => "/curation/".to_owned(),
+    }
+}
+
+/// The deployment's SDK download page, `downloads/sdk/` next to the viewer page.
+///
+/// E.g. `/rerun/downloads/sdk/`; nginx serves the wheels there (see deploy/nginx.conf). `None`
+/// natively — a locally installed viewer has no serving deployment to link into, and it came
+/// from that page to begin with.
 pub fn downloads_url() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        Some("/downloads/sdk/".to_owned())
+        Some(re_data_source::deployment::path("downloads/sdk/"))
     }
     #[cfg(not(target_arch = "wasm32"))]
     None
@@ -78,17 +107,23 @@ pub fn dataset_name_from_tos_url(tos_url: &str) -> Option<&str> {
     }
 }
 
-/// The full deep link for a TOS dataset, e.g.
-/// `/curation?dataset=tos%3A%2F%2Fbucket%2Fprefix%2Fdemo%2F` —
+/// The console's deep link for a TOS dataset.
+///
+/// E.g. `/?dataset=tos%3A%2F%2Fbucket%2Fprefix%2Fdemo%2F` (console at the origin root) —
 /// `None` when there is no console address (always, natively) or the URL has no
 /// dataset segment.
 ///
 /// The payload is the complete `tos://` path plus, when known, the bucket's region
 /// (`&region=cn-beijing`) — the console's two connection inputs are exactly URL +
 /// region, and prefilling both means the hand-off is one click. The console treats
-/// a missing region as "deployment default", so `None` degrades gracefully.
+/// a missing region as "deployment default", so `None` degrades gracefully; it answers
+/// `{base}/?dataset=…` with a redirect to its new-task page.
 pub fn diagnose_url(tos_url: &str, region: Option<&str>) -> Option<String> {
-    let base = base_url()?;
+    diagnose_url_for(&base_url()?, tos_url, region)
+}
+
+/// [`diagnose_url`] against the console address `base` (ending with `/`, see [`base_url`]).
+pub fn diagnose_url_for(base: &str, tos_url: &str, region: Option<&str>) -> Option<String> {
     // Only link datasets that actually have a dataset segment.
     dataset_name_from_tos_url(tos_url)?;
     let mut url = format!("{base}?dataset={}", encode_query_value(tos_url));
@@ -139,6 +174,67 @@ mod tests {
     fn query_values_are_percent_encoded() {
         assert_eq!(encode_query_value("demo_v2"), "demo_v2");
         assert_eq!(encode_query_value("a b&c"), "a%20b%26c");
+    }
+
+    /// The default console sits at the parent of a sub-path mount, and keeps the original
+    /// `/curation` sibling for a viewer at the origin root.
+    #[test]
+    fn default_console_follows_the_viewer_mount() {
+        assert_eq!(default_base_for("/rerun/"), "/");
+        assert_eq!(default_base_for("/rerun"), "/");
+        assert_eq!(default_base_for("/a/rerun/"), "/a/");
+        assert_eq!(default_base_for("/"), "/curation/");
+        assert_eq!(default_base_for(""), "/curation/");
+    }
+
+    /// Empty means "not configured" (so the mount-derived default applies) — never the origin
+    /// root, which is spelled `/`. Everything else gets exactly one trailing slash.
+    #[test]
+    fn configured_console_is_normalized() {
+        assert_eq!(normalize_base(""), None);
+        assert_eq!(normalize_base("  "), None);
+        assert_eq!(normalize_base("/").as_deref(), Some("/"));
+        assert_eq!(normalize_base("//").as_deref(), Some("/"));
+        assert_eq!(normalize_base("/curation").as_deref(), Some("/curation/"));
+        assert_eq!(
+            normalize_base(" /curation/ ").as_deref(),
+            Some("/curation/")
+        );
+        assert_eq!(
+            normalize_base("https://example.com").as_deref(),
+            Some("https://example.com/")
+        );
+        assert_eq!(
+            normalize_base("https://example.com/curation/").as_deref(),
+            Some("https://example.com/curation/")
+        );
+    }
+
+    #[test]
+    fn deep_links_hang_off_the_console_root() {
+        let tos = "tos://bucket/datasets/demo/";
+        let encoded = "tos%3A%2F%2Fbucket%2Fdatasets%2Fdemo%2F";
+
+        // Viewer at /rerun/, nothing configured: the console is the origin root.
+        let base = default_base_for("/rerun/");
+        assert_eq!(
+            diagnose_url_for(&base, tos, Some("cn-beijing")).as_deref(),
+            Some(format!("/?dataset={encoded}&region=cn-beijing").as_str())
+        );
+        // Viewer at the root, nothing configured: the /curation sibling.
+        let base = default_base_for("/");
+        assert_eq!(
+            diagnose_url_for(&base, tos, None).as_deref(),
+            Some(format!("/curation/?dataset={encoded}").as_str())
+        );
+        // A configured daft_url wins, absolute or not.
+        let base = normalize_base("https://console.example.com").unwrap();
+        assert_eq!(
+            diagnose_url_for(&base, tos, Some("")).as_deref(),
+            Some(format!("https://console.example.com/?dataset={encoded}").as_str())
+        );
+        // No dataset segment, no link.
+        assert_eq!(diagnose_url_for("/", "tos://bucket/", None), None);
     }
 
     /// Natively there is never a console address — that is what hides the buttons.

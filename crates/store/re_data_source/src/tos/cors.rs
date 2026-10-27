@@ -9,8 +9,9 @@
 //!   and append our rule if missing. **Never overwrites**: other teams' rules on a shared
 //!   bucket are kept verbatim; we only ever add one `<CORSRule>` of our own.
 //! - [`ensure_cors_via_server_once`] — browser side (wasm): before the first TOS request
-//!   to a bucket, ask the same-origin `/api/ensure-cors` endpoint (routed to the catalog
-//!   server by the gateway) to run the server half. Same-origin, so no CORS applies.
+//!   to a bucket, ask the same-origin `api/ensure-cors` endpoint next to the viewer page
+//!   (forwarded to the catalog server by the viewer's nginx, see [`crate::deployment`]) to
+//!   run the server half. Same-origin, so no CORS applies.
 //!
 //! Security note: a CORS rule only lifts the *browser's* cross-origin block — it grants no
 //! data access by itself (reads still need credentials or a pre-signed URL). That is why
@@ -127,7 +128,7 @@ fn config_after_ensure(
 }
 
 /// Browser side: before the first request to `bucket` (living in `region`), ask the
-/// same-origin `/api/ensure-cors` endpoint to install our CORS rule on it. Once per
+/// same-origin `api/ensure-cors` endpoint to install our CORS rule on it. Once per
 /// bucket+region per page load; concurrent callers of the same bucket skip instead of
 /// piling up (the server call is idempotent, and in practice the dataset listing is the
 /// single first request anyway).
@@ -160,7 +161,8 @@ pub async fn ensure_cors_via_server_once(
     }
 
     let url = format!(
-        "/api/ensure-cors?bucket={}&region={}",
+        "{}?bucket={}&region={}",
+        crate::deployment::path("api/ensure-cors"),
         super::client::uri_encode(bucket, true),
         super::client::uri_encode(region, true)
     );

@@ -17,7 +17,7 @@ Catalog server 的三件事:
 SDK 由部署本身提供下载,不走公共 PyPI。
 这样装到的 SDK 版本永远和正在运行的 catalog server 一致,不会因为版本不匹配出问题。
 
-下载入口在 web viewer 的欢迎页上:点 **火山引擎增强功能** 一排里的 **下载 SDK** 卡片即可打开下载页(也可以直接访问 `https://<你的网关域名>/downloads/sdk/`,用登录账号),能看到可下载的 wheel 文件:
+下载入口在 web viewer 的欢迎页上:点 **火山引擎增强功能** 一排里的 **下载 SDK** 卡片即可打开下载页(也可以直接访问 `https://<你的网关域名>/rerun/downloads/sdk/`,用登录账号),能看到可下载的 wheel 文件:
 
 ![SDK 下载目录](images/downloads-sdk-annotated.png)
 
@@ -33,7 +33,7 @@ SDK 由部署本身提供下载,不走公共 PyPI。
 在你的 Python(3.10 及以上)环境里安装(URL 末尾换成你选的 wheel 文件名):
 
 ```sh
-pip install "https://<用户名>:<密码>@<网关域名>/downloads/sdk/<wheel 文件名>"
+pip install "https://<用户名>:<密码>@<网关域名>/rerun/downloads/sdk/<wheel 文件名>"
 ```
 
 - 把 `<用户名>:<密码>` 换成你的登录账号,`<wheel 文件名>` 换成页面上列出的实际文件名。
@@ -210,7 +210,7 @@ for batch in loader:
 
 ## 7. 小结:一次典型流程
 
-1. 从 `/downloads/sdk/` 装 SDK,向管理员要一枚 token。
+1. 从 `/rerun/downloads/sdk/` 装 SDK,向管理员要一枚 token。
 2. `CatalogClient("rerun+https://<域名>:443", token=…)` 连上。
 3. `create_dataset` + `register` 把 TOS 数据集登记进目录。
 4. 训练脚本用 `RerunIterableDataset` 按名字取数,数据从 TOS 直连训练机。

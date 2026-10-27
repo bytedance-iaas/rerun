@@ -385,9 +385,14 @@ COPY --from=src /ca-bundle.pem /tmp/corp-ca.pem
 RUN cat /tmp/corp-ca.pem >> /etc/ssl/certs/ca-certificates.crt
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
-# Web viewer artifacts + nginx config.
+# Web viewer artifacts + nginx config. nginx.conf is a template: the entrypoint renders it at
+# start (render-nginx-conf.sh: the URL base path from BASE_PATH, the catalog host from
+# CATALOG_UPSTREAM) into /run/nginx-site.conf, which this one-line conf.d stub includes.
 COPY --from=builder-web /rerun/crates/viewer/re_web_viewer_server/web_viewer/ /usr/share/nginx/html/
-COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY deploy/nginx.conf /etc/nginx/rerun-site.conf.template
+COPY deploy/render-nginx-conf.sh /render-nginx-conf.sh
+RUN chmod +x /render-nginx-conf.sh && \
+    echo 'include /run/nginx-site.conf;' > /etc/nginx/conf.d/default.conf
 # Precompress the big static assets once at build time (the wasm is tens of MiB; gzip
 # cuts it to roughly a third). nginx's gzip_static serves the .gz next to the original,
 # so no per-request CPU and no reliance on the gateway's compression behavior.
@@ -397,12 +402,12 @@ RUN rm -f /etc/nginx/sites-enabled/default && mkdir -p /rrd-cache && chown www-d
 
 # Native viewer binary.
 COPY --from=builder-native /rerun/target/release/rerun /usr/local/bin/rerun
-# Download area served by nginx at /downloads/ (see nginx.conf): the Python SDK wheels
+# Download area served by nginx at downloads/ under the site's base path (see nginx.conf): the Python SDK wheels
 # (sdk/), all platforms downloaded from TOS in the sdk-wheels stage (built by GitHub
 # Actions, see that stage's comment). The viewer ships inside the wheel, so there is no
 # separate viewer/ download.
 COPY --from=sdk-wheels /downloads/ /usr/share/nginx/downloads/
-# The user guide, served at /docs/ (the viewer's "User guide" card links here).
+# The user guide's web copy, served at docs/ next to the viewer (e.g. /rerun/docs/01-viewer.html).
 COPY --from=docs /out /usr/share/nginx/html/docs
 
 COPY deploy/entrypoint.sh /entrypoint.sh

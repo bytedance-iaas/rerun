@@ -1,3 +1,4 @@
+{{- $base := include "dataverse.web.basePath" . -}}
 dataverse is deployed as {{ include "dataverse.fullname" . }} in namespace {{ .Release.Namespace }}.
 
 ReRun:    {{ include "dataverse.rerunName" . }}-0 (2/2: web + catalog), disk server-data-{{ include "dataverse.rerunName" . }}-0 ({{ .Values.catalog.storage.size }}, {{ .Values.catalog.storage.className }})
@@ -37,11 +38,11 @@ vLLM:     {{ include "dataverse.fullname" . }}-vllm (1 GPU x {{ .Values.vllm.gpu
 
    That one domain carries every entry point:
 
-     /            web viewer{{ if .Values.web.basicAuth.enabled }} (Basic auth){{ end }}
+     {{ printf "%-12s" (printf "%s/" $base) }} web viewer{{ if .Values.web.basicAuth.enabled }} (Basic auth){{ end }}{{ if $base }} — everything ReRun serves over HTTP lives under it{{ end }}
      {{ if .Values.curator.enabled }}{{ printf "%-12s" "/curation" }} curation console{{ if .Values.web.basicAuth.enabled }} (same account table as the viewer){{ end }}{{ else }}(no curation console — curator.enabled=false){{ end }}
      gRPC         catalog server, from Python:
                     CatalogClient("rerun+https://<domain>:443"{{ if .Values.catalog.tokenAuth.enabled }}, token=<token>{{ end }})
-     /downloads/  SDK wheel downloads (Linux + macOS; the viewer ships inside the wheel)
+     {{ printf "%-12s" (printf "%s/downloads/" $base) }} SDK wheel downloads (Linux + macOS; the viewer ships inside the wheel)
 {{- else }}
 
 2. No public entry point (apig.enabled=false). Reach the viewer locally:
@@ -60,5 +61,5 @@ keep your own copy of it — the `rerun` binary ships inside the SDK wheel this 
 
 In-cluster access, which never leaves the private network:
 
-  web:     http://{{ include "dataverse.rerunName" . }}-web.{{ .Release.Namespace }}.svc.cluster.local
+  web:     http://{{ include "dataverse.rerunName" . }}-web.{{ .Release.Namespace }}.svc.cluster.local{{ $base }}/
   catalog: rerun+http://{{ include "dataverse.rerunName" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:51234
